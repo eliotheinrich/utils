@@ -1,0 +1,7 @@
+add_library(samplers
+	InterfaceSampler.hpp
+	EntropySampler.hpp
+	QuantumStateSampler.hpp
+)
+
+set_target_properties(samplers PROPERTIES LINKER_LANGUAGE CXX)
