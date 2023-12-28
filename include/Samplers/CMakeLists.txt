@@ -5,3 +5,4 @@ add_library(samplers
 )
 
 set_target_properties(samplers PROPERTIES LINKER_LANGUAGE CXX)
+target_include_directories(samplers PRIVATE ${QUANTUMSTATE_DIR})

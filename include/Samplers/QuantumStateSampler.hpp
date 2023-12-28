@@ -1,9 +1,7 @@
 #pragma once
 
 #include <Frame.h>
-
-using namespace dataframe;
-using namespace dataframe::utils;
+#include "QuantumStates.h"
 
 class QuantumStateSampler {
   private:	
@@ -30,22 +28,22 @@ class QuantumStateSampler {
   public:
     QuantumStateSampler()=default;
 
-    QuantumStateSampler(Params& params) {
-      system_size = get<int>(params, "system_size");
+    QuantumStateSampler(dataframe::Params& params) {
+      system_size = dataframe::utils::get<int>(params, "system_size");
 
-      num_bins = get<int>(params, "num_bins", 100);
-      min_prob = get<double>(params, "min_prob", 0.0);
-      max_prob = get<double>(params, "max_prob", 1.0);
-      sample_probabilities = get<int>(params, "sample_probabilities", true);
+      num_bins = dataframe::utils::get<int>(params, "num_bins", 100);
+      min_prob = dataframe::utils::get<double>(params, "min_prob", 0.0);
+      max_prob = dataframe::utils::get<double>(params, "max_prob", 1.0);
+      sample_probabilities = dataframe::utils::get<int>(params, "sample_probabilities", true);
 
       if (max_prob <= min_prob) {
         throw std::invalid_argument("max_prob must be greater than min_prob.");
       }
 
-      sample_bitstring_distribution = get<int>(params, "sample_bitstring_distribution", true);
+      sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", true);
     }
 
-    void add_probability_samples(data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_probability_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       std::vector<double> probabilities = state->probabilities();
       size_t s = probabilities.size();
 
@@ -72,12 +70,12 @@ class QuantumStateSampler {
       samples.emplace("probabilities", probability_probs);
     }
 
-    void add_bitstring_distribution(data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_bitstring_distribution(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       std::vector<double> probabilities = state->probabilities();
       samples.emplace("bitstring_distribution", probabilities);
     }
 
-    void add_samples(data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       if (sample_probabilities) {
         add_probability_samples(samples, state);
       }

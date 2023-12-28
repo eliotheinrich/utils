@@ -240,7 +240,7 @@ class Graph {
       }
     }
 
-    Graph partition(const std::vector<uint32_t> &set) const {
+    Graph partition(const std::vector<uint32_t> &nodes) const {
       std::set<uint32_t> nodess;
       std::copy(nodes.begin(), nodes.end(), std::inserter(nodess, nodess.end()));
       Graph new_graph;
@@ -413,7 +413,7 @@ class Graph {
     }
 
     std::vector<uint32_t> compute_neighbor_degree_counts() const {
-      therad_local std::minstd_rand rng(std::rand());
+      thread_local std::minstd_rand rng(std::rand());
       std::vector<uint32_t> counts(num_vertices, 0);
       for (uint32_t i = 0; i < num_vertices; i++) {
         if (degree(i) > 0) {

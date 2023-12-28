@@ -3,7 +3,7 @@
 #include "Tableau.hpp"
 #include <deque>
 #include <algorithm>
-#include <EntropySampler.hpp>
+#include <Samplers.h>
 
 enum CliffordType { CHP, GraphSim };
 

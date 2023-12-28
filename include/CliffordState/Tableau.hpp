@@ -6,7 +6,7 @@
 #include <variant>
 #include <algorithm>
 
-#include "QuantumState.h"
+#include "QuantumStates.h"
 
 #include <unsupported/Eigen/KroneckerProduct>
 #include <Eigen/Dense>
@@ -323,91 +323,10 @@ class PauliString {
         }
 
         // Returns the circuit which maps this PauliString onto ZII... if z or XII.. otherwise
-        tableau_utils::Circuit reduce(bool z) const {
-          Tableau tableau = Tableau(num_qubits, std::vector<PauliString>{*this});
-
-          tableau_utils::Circuit circuit;
-
-          if (z) {
-            tableau.h_gate(0);
-            circuit.push_back(tableau_utils::hgate{0});
-          }
-
-          for (uint32_t i = 0; i < num_qubits; i++) {
-            if (tableau.z(0, i)) {
-              if (tableau.x(0, i)) {
-                tableau.s_gate(i);
-                circuit.push_back(tableau_utils::sgate{i});
-              } else {
-                tableau.h_gate(i);
-                circuit.push_back(tableau_utils::hgate{i});
-              }
-            }
-          }
-
-          // Step two
-          std::vector<uint32_t> nonzero_idx;
-          for (uint32_t i = 0; i < num_qubits; i++) {
-            if (tableau.x(0, i)) {
-              nonzero_idx.push_back(i);
-            }
-          }
-          while (nonzero_idx.size() > 1) {
-            for (uint32_t j = 0; j < nonzero_idx.size()/2; j++) {
-              uint32_t q1 = nonzero_idx[2*j];
-              uint32_t q2 = nonzero_idx[2*j+1];
-              tableau.cx_gate(q1, q2);
-              circuit.push_back(tableau_utils::cxgate{q1, q2});
-            }
-
-            remove_even_indices(nonzero_idx);
-          }
-
-          // Step three
-          uint32_t ql = nonzero_idx[0];
-          if (ql != 0) {
-            for (uint32_t i = 0; i < num_qubits; i++) {
-              if (tableau.x(0, i)) {
-                tableau.cx_gate(0, ql);
-                tableau.cx_gate(ql, 0);
-                tableau.cx_gate(0, ql);
-
-                circuit.push_back(tableau_utils::cxgate{0, ql});
-                circuit.push_back(tableau_utils::cxgate{ql, 0});
-                circuit.push_back(tableau_utils::cxgate{0, ql});
-
-                break;
-              }
-            }
-          }
-
-          if (tableau.r(0)) {
-            tableau.y_gate(0);
-            circuit.push_back(tableau_utils::sgate{0});
-            circuit.push_back(tableau_utils::sgate{0});
-            circuit.push_back(tableau_utils::hgate{0});
-            circuit.push_back(tableau_utils::sgate{0});
-            circuit.push_back(tableau_utils::sgate{0});
-            circuit.push_back(tableau_utils::hgate{0});
-          }
-
-          if (z) {
-            // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
-            circuit.push_back(tableau_utils::hgate{0});
-          }
-
-          return circuit;
-        }
+        tableau_utils::Circuit reduce(bool z) const;
 
         // Returns the circuit which maps this PauliString onto p
-        tableau_utils::Circuit transform(PauliString const &p) const {
-          tableau_utils::Circuit c1 = reduce();
-          tableau_utils::Circuit c2 = conjugate_circuit(p.reduce());
-
-          c1.insert(c1.end(), c2.begin(), c2.end());
-
-          return c1;
-        }
+        tableau_utils::Circuit transform(PauliString const &p) const;
 
         // It is slightly faster (~20-30%) to query both the x and z bits at a given site
         // at the same time, storing them in the first two bits of the return value.

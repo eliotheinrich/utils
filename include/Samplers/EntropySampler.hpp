@@ -7,9 +7,6 @@
 #include <algorithm>
 #include <numeric>
 
-using namespace dataframe;
-using namespace dataframe::utils;
-
 class EntropyState {
   protected:
     uint32_t system_size;
@@ -48,49 +45,49 @@ class EntropyState {
 
 class EntropySampler {
   public:
-    EntropySampler(Params &params) {  
-      renyi_indices = parse_renyi_indices(get<std::string>(params, "renyi_indices", "2"));
+    EntropySampler(dataframe::Params &params) {  
+      renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "renyi_indices", "2"));
 
-      system_size = get<int>(params, "system_size");
+      system_size = dataframe::utils::get<int>(params, "system_size");
 
-      spacing = get<int>(params, "spacing", 1);
+      spacing = dataframe::utils::get<int>(params, "spacing", 1);
 
-      sample_entropy = get<int>(params, "sample_entropy", false);
-      partition_size = get<int>(params, "partition_size", system_size/2);
+      sample_entropy = dataframe::utils::get<int>(params, "sample_entropy", false);
+      partition_size = dataframe::utils::get<int>(params, "partition_size", system_size/2);
 
-      sample_all_partition_sizes = get<int>(params, "sample_all_partition_sizes", false);
-      spatially_average = get<int>(params, "spatial_avg", true);
+      sample_all_partition_sizes = dataframe::utils::get<int>(params, "sample_all_partition_sizes", false);
+      spatially_average = dataframe::utils::get<int>(params, "spatial_avg", true);
 
-      sample_mutual_information = get<int>(params, "sample_mutual_information", false);
+      sample_mutual_information = dataframe::utils::get<int>(params, "sample_mutual_information", false);
       if (sample_mutual_information) {
         assert(partition_size > 0);
-        num_bins = get<int>(params, "num_mi_bins", 100);
-        min_eta = get<double>(params, "min_eta", 0.01);
-        max_eta = get<double>(params, "max_eta", 1.0);
+        num_bins = dataframe::utils::get<int>(params, "num_mi_bins", 100);
+        min_eta = dataframe::utils::get<double>(params, "min_eta", 0.01);
+        max_eta = dataframe::utils::get<double>(params, "max_eta", 1.0);
       }
 
-      sample_fixed_mutual_information = get<int>(params, "sample_fixed_mutual_information", false);
+      sample_fixed_mutual_information = dataframe::utils::get<int>(params, "sample_fixed_mutual_information", false);
       if (sample_fixed_mutual_information) {
-        x1 = get<int>(params, "x1");
-        x2 = get<int>(params, "x2");
-        x3 = get<int>(params, "x3");
-        x4 = get<int>(params, "x4");
+        x1 = dataframe::utils::get<int>(params, "x1");
+        x2 = dataframe::utils::get<int>(params, "x2");
+        x3 = dataframe::utils::get<int>(params, "x3");
+        x4 = dataframe::utils::get<int>(params, "x4");
       }
 
-      sample_variable_mutual_information = get<int>(params, "sample_variable_mutual_information", false);
+      sample_variable_mutual_information = dataframe::utils::get<int>(params, "sample_variable_mutual_information", false);
       // Spatial average is generally applied when boundary conditions are periodic, so spatially_average
       // as a default for setting pbc used by variable mutual information samples
-      pbc = get<int>(params, "pbc", spatially_average);
+      pbc = dataframe::utils::get<int>(params, "pbc", spatially_average);
     }
 
-    void add_entropy_samples(data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
-      Sample s = spatially_average ? spatially_averaged_entropy(partition_size, index, state) : state->cum_entropy(partition_size, index);
+    void add_entropy_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+      dataframe::Sample s = spatially_average ? spatially_averaged_entropy(partition_size, index, state) : state->cum_entropy(partition_size, index);
       samples.emplace("entropy" + std::to_string(index) + "_" + std::to_string(partition_size), s);
     }
 
-    void add_mutual_information_samples(data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<double> entropy_table = compute_entropy_table(index, state);
-      std::vector<Sample> mutual_information_samples(num_bins, Sample());
+      std::vector<dataframe::Sample> mutual_information_samples(num_bins, dataframe::Sample());
       for (uint32_t x1 = 0; x1 < system_size; x1++) {
         for (uint32_t x3 = 0; x3 < system_size; x3++) {
           uint32_t x2 = (x1 + partition_size) % system_size;
@@ -117,7 +114,7 @@ class EntropySampler {
       samples.emplace("mutual_information" + std::to_string(index), mutual_information_samples);
     }
 
-    void add_fixed_mutual_information_samples(data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_fixed_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<uint32_t> interval1 = to_interval(x1, x2);
       std::vector<uint32_t> interval2 = to_interval(x3, x4);
       std::vector<uint32_t> interval3 = to_combined_interval(x1, x2, x3, x4);
@@ -127,7 +124,7 @@ class EntropySampler {
 
       //uint32_t num_partitions = std::max(system_size/spacing, 1u);
 
-      //Sample sample;
+      //dataframe::Sample sample;
       //std::vector<uint32_t> offset_sites(sites.size());
       //for (uint32_t i = 0; i < num_partitions; i++) {
       //  std::transform(sites.begin(), sites.end(), offset_sites.begin(), 
@@ -140,10 +137,10 @@ class EntropySampler {
       //return sample;
     }
 
-    void add_variable_mutual_information_samples(data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
-      std::vector<Sample> mutual_information_samples(system_size/2);
+    void add_variable_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+      std::vector<dataframe::Sample> mutual_information_samples(system_size/2);
       for (uint32_t i = 0; i < system_size/2; i++) {
-        Sample sample;
+        dataframe::Sample sample;
         std::vector<uint32_t> sites(2*i);
         if (pbc) {
           for (uint32_t j = 0; j < i; j++) {
@@ -165,17 +162,17 @@ class EntropySampler {
       samples.emplace("variable_mutual_information", mutual_information_samples);
     }
 
-    void add_entropy_all_partition_sizes(data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
-      std::vector<Sample> entropy_samples(system_size);
+    void add_entropy_all_partition_sizes(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+      std::vector<dataframe::Sample> entropy_samples(system_size);
       for (uint32_t i = 0; i < system_size; i++) {
-        Sample s = spatially_average ? spatially_averaged_entropy(i, index, state) : state->cum_entropy(i, index);
+        dataframe::Sample s = spatially_average ? spatially_averaged_entropy(i, index, state) : state->cum_entropy(i, index);
         entropy_samples[i] = s;
       }
 
       samples.emplace("entropy" + std::to_string(index), entropy_samples);
     }
 
-    void add_samples(data_t &samples, std::shared_ptr<EntropyState> state) {
+    void add_samples(dataframe::data_t &samples, std::shared_ptr<EntropyState> state) {
       for (auto const &i : renyi_indices) {
         if (sample_entropy) {
           add_entropy_samples(samples, i, state);
@@ -292,10 +289,10 @@ class EntropySampler {
       return table;
     }
 
-    Sample spatially_averaged_entropy(const std::vector<uint32_t> &sites, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    dataframe::Sample spatially_averaged_entropy(const std::vector<uint32_t> &sites, uint32_t index, std::shared_ptr<EntropyState> state) const {
       uint32_t num_partitions = std::max((system_size - partition_size)/spacing, 1u);
 
-      Sample sample;
+      dataframe::Sample sample;
       std::vector<uint32_t> offset_sites(sites.size());
       for (uint32_t i = 0; i < num_partitions; i++) {
         std::transform(sites.begin(), sites.end(), offset_sites.begin(), 
@@ -308,13 +305,13 @@ class EntropySampler {
       return sample;
     }
 
-    Sample spatially_averaged_entropy(uint32_t partition_size, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    dataframe::Sample spatially_averaged_entropy(uint32_t partition_size, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<uint32_t> sites(partition_size);
       std::iota(sites.begin(), sites.end(), 0);
 
       uint32_t num_partitions = std::max((system_size - partition_size)/spacing, 1u);
 
-      Sample sample;
+      dataframe::Sample sample;
       std::vector<uint32_t> offset_sites(partition_size);
       for (uint32_t i = 0; i < num_partitions; i++) {
         std::transform(sites.begin(), sites.end(), offset_sites.begin(), 
@@ -327,7 +324,7 @@ class EntropySampler {
       return sample;
     }
 
-    Sample spatially_averaged_entropy(uint32_t index, std::shared_ptr<EntropyState> state) const {
+    dataframe::Sample spatially_averaged_entropy(uint32_t index, std::shared_ptr<EntropyState> state) const {
       return spatially_averaged_entropy(partition_size, index, state);
     }
 
@@ -340,7 +337,7 @@ class EntropySampler {
 
       while (std::getline(ss, token, ',')) {
         try {
-          uint32_t number = std::stoi(strip(token));
+          uint32_t number = std::stoi(dataframe::utils::strip(token));
           indices.push_back(number);
         } catch (const std::exception &e) {}
       }

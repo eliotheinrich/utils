@@ -1,18 +1,7 @@
-#pragma once
-
-#include <vector>
-#include <random>
-#include <optional>
-#include <utility>
-#include <Eigen/Dense>
+#include "CircuitUtils.h"
 #include <unsupported/Eigen/MatrixFunctions>
+#include <unordered_set>
 
-namespace quantumcircuit_utils {
-  template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-  template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-}
-
-namespace {
 
 bool qargs_unique(const std::vector<uint32_t>& qargs) {
   std::unordered_set<uint32_t> unique;
@@ -150,6 +139,4 @@ Eigen::MatrixXcd normalize_unitary(Eigen::MatrixXcd &unitary) {
   Eigen::MatrixXcd Q = QR.householderQ();
 
   return Q;
-}
-
 }

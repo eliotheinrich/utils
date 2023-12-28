@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.27)
 
 project(utils LANGUAGES CXX)
 
+message("Entering utils CMakeLists")
+
 # ---------------------------------- #
 # -- Manually installed libraries -- #
 # ---------------------------------- #
@@ -29,6 +31,22 @@ set_target_properties(itensor PROPERTIES IMPORTED_LOCATION ${ITENSOR_DIR}/lib/li
 include(FetchContent)
 
 set(EXTERNALS "")
+
+FetchContent_Declare(
+    glaze
+    GIT_REPOSITORY https://github.com/stephenberry/glaze
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+)
+list(APPEND EXTERNALS glaze)
+
+FetchContent_Declare(
+    nlohmann
+    GIT_REPOSITORY https://github.com/nlohmann/json
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+list(APPEND EXTERNALS nlohmann)
 
 if (DEFINED DATAFRAME_SOURCE)
     set(dataframe_SOURCE_DIR ${DATAFRAME_SOURCE})
@@ -58,18 +76,25 @@ list(APPEND EXTERNALS eigen)
 FetchContent_MakeAvailable(${EXTERNALS})
 
 include_directories(
+    ${nlohmann_SOURCE_DIR}/include
+    ${glaze_SOURCE_DIR}/include
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PFFFT_DIR}
 )
 
 add_library(graph
-    src/Graph.cpp
+    include/Graph.hpp
 )
 
-set(SAMPLERS_DIR ${CMAKE_SOURCE_DIR}/include/Samplers)
-add_subdirectory(${SAMPLERS_DIR})
+set_target_properties(graph PROPERTIES LINKER_LANGUAGE CXX)
+
+message("From utils CMakeLists: CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
 
 set(CLIFFORD_DIR ${CMAKE_SOURCE_DIR}/include/CliffordState)
 set(QUANTUMCIRCUIT_DIR ${CMAKE_SOURCE_DIR}/include/QuantumCircuit)
+set(SAMPLERS_DIR ${CMAKE_SOURCE_DIR}/include/Samplers)
 
+add_subdirectory(${CLIFFORD_DIR})
+add_subdirectory(${QUANTUMCIRCUIT_DIR})
+add_subdirectory(${SAMPLERS_DIR})
