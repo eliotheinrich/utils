@@ -6,7 +6,7 @@
 #include <variant>
 #include <algorithm>
 
-#include "QuantumStates.h"
+#include "QuantumState.h"
 
 #include <unsupported/Eigen/KroneckerProduct>
 #include <Eigen/Dense>

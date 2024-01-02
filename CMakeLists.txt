@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.27)
 
 project(utils LANGUAGES CXX)
 
-message("Entering utils CMakeLists")
+set(CMAKE_CXX_STANDARD 20)
 
 # ---------------------------------- #
 # -- Manually installed libraries -- #
@@ -12,13 +12,10 @@ set(PFFFT_DIR $ENV{PFFFT_DIR})
 find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
-#set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
-
 set(BLAS_DIR $ENV{BLAS_PATH})
 set(LAPACK_DIR $ENV{LAPACK_PATH})
 set(LAPACKBLAS gfortran lapack openblas)
 set(LAPACKBLAS_DIR ${LAPACK_DIR} ${BLAS_DIR})
-link_directories(${LAPACKBLAS_DIR})
 
 set(ITENSOR_DIR $ENV{ITENSOR_DIR})
 add_library(itensor STATIC IMPORTED)
@@ -80,7 +77,7 @@ include_directories(
     ${glaze_SOURCE_DIR}/include
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
-    ${PFFFT_DIR}
+    ${PROJECT_SOURCE_DIR}/include
 )
 
 add_library(graph
@@ -89,12 +86,10 @@ add_library(graph
 
 set_target_properties(graph PROPERTIES LINKER_LANGUAGE CXX)
 
-message("From utils CMakeLists: CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
-
-set(CLIFFORD_DIR ${CMAKE_SOURCE_DIR}/include/CliffordState)
-set(QUANTUMCIRCUIT_DIR ${CMAKE_SOURCE_DIR}/include/QuantumCircuit)
-set(SAMPLERS_DIR ${CMAKE_SOURCE_DIR}/include/Samplers)
+set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/include/CliffordState)
+set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/include/QuantumState)
+set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/include/Samplers)
 
 add_subdirectory(${CLIFFORD_DIR})
-add_subdirectory(${QUANTUMCIRCUIT_DIR})
 add_subdirectory(${SAMPLERS_DIR})
+add_subdirectory(${QUANTUMSTATE_DIR})

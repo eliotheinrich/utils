@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Frame.h>
-#include "QuantumStates.h"
+#include "QuantumState.h"
 
 class QuantumStateSampler {
   private:	

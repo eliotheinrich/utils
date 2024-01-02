@@ -1,15 +1,14 @@
 #pragma once
 
 #include "QuantumCircuit.h"
-#include <EntropySampler.hpp>
+#include "EntropyState.hpp"
 
 #include <map>
 #include <bitset>
+#include <iostream>
 
 #include <Eigen/Dense>
-#include <itensor/all.h>
 
-#include <iostream>
 
 #define QS_ATOL 1e-8
 
@@ -71,6 +70,7 @@ namespace quantumstate_utils {
 	}
 }
 
+class EntropyState;
 
 class QuantumState : public EntropyState {
 	protected:
@@ -89,7 +89,9 @@ class QuantumState : public EntropyState {
 		uint32_t basis;
 
 		virtual ~QuantumState() = default;
+
 		QuantumState() = default;
+
 		QuantumState(uint32_t num_qubits, int s=-1) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {
 			if (s == -1) {
 				seed(std::rand());
@@ -101,6 +103,7 @@ class QuantumState : public EntropyState {
 		void seed(int s) {
 			rng.seed(s);
 		}
+
 		virtual std::string to_string() const=0;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits)=0;
@@ -176,10 +179,15 @@ class DensityMatrix : public QuantumState {
 		Eigen::MatrixXcd data;
 
     DensityMatrix()=default;
+
 		DensityMatrix(uint32_t num_qubits);
+
 		DensityMatrix(const Statevector& state);
+
 		DensityMatrix(const QuantumCircuit& circuit);
+
 		DensityMatrix(const DensityMatrix& rho);
+
 		DensityMatrix(const Eigen::MatrixXcd& data);
 
 		virtual std::string to_string() const override;
@@ -189,14 +197,19 @@ class DensityMatrix : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) override;
+
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) override;
+
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate, const std::vector<uint32_t>& qbits) override;
+
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate) override;
+
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
 
 		virtual bool measure(uint32_t q) override;
+
 		virtual std::vector<bool> measure_all() override;
 
 		Eigen::VectorXd diagonal() const;
@@ -210,11 +223,17 @@ class Statevector : public QuantumState {
 		Eigen::VectorXcd data;
 
     Statevector()=default;
+
 		Statevector(uint32_t num_qubits);
+
 		Statevector(uint32_t num_qubits, uint32_t qregister);
+
 		Statevector(const QuantumCircuit &circuit);
+
 		Statevector(const Statevector& other);
+
 		Statevector(const Eigen::VectorXcd& vec);
+
 		Statevector(const MatrixProductState& state);
 
 		virtual std::string to_string() const override;
@@ -222,24 +241,35 @@ class Statevector : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
+
 		virtual void evolve(const Eigen::MatrixXcd &gate) override;
+
 		virtual void evolve_diagonal(const Eigen::VectorXcd &gate, const std::vector<uint32_t> &qubits) override;
+
 		virtual void evolve_diagonal(const Eigen::VectorXcd &gate) override;
+
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
+
     void evolve(const QuantumCircuit& circuit, const std::vector<bool>& outcomes);
 
 		double measure_probability(uint32_t q, bool outcome) const;
+
 		virtual bool measure(uint32_t q) override;
+
     bool measure(uint32_t q, bool outcome);
 
 		double norm() const;
+
 		void normalize();
+
 		void fix_gauge();
 
 		double probabilities(uint32_t z, const std::vector<uint32_t>& qubits) const;
+
 		virtual std::vector<double> probabilities() const override;
+
 		std::map<uint32_t, double> probabilities_map() const;
 
 		std::complex<double> inner(const Statevector& other) const;
@@ -252,6 +282,7 @@ class UnitaryState : public QuantumState {
 		Eigen::MatrixXcd unitary;
 
     UnitaryState()=default;
+
 		UnitaryState(uint32_t num_qubits);
 
 		std::string to_string() const;
@@ -259,7 +290,9 @@ class UnitaryState : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits);
+
 		virtual void evolve(const Eigen::MatrixXcd &gate) override;
+
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
@@ -281,53 +314,47 @@ class UnitaryState : public QuantumState {
 		}
 };
 
+//itensor::ITensor tensor_slice(const itensor::ITensor& tensor, const itensor::Index& index, int i);
+//itensor::ITensor matrix_to_tensor(const Eigen::Matrix2cd& matrix, const itensor::Index i1, const itensor::Index i2);
+//itensor::ITensor matrix_to_tensor(const Eigen::Matrix4cd& matrix, const itensor::Index i1, const itensor::Index i2, const itensor::Index i3, const itensor::Index i4);
+//itensor::Index pad(itensor::ITensor& tensor, const itensor::Index& idx, uint32_t new_dim);
 
-itensor::ITensor tensor_slice(const itensor::ITensor& tensor, const itensor::Index& index, int i);
-itensor::ITensor matrix_to_tensor(const Eigen::Matrix2cd& matrix, const itensor::Index i1, const itensor::Index i2);
-itensor::ITensor matrix_to_tensor(const Eigen::Matrix4cd& matrix, const itensor::Index i1, const itensor::Index i2, const itensor::Index i3, const itensor::Index i4);
-itensor::Index pad(itensor::ITensor& tensor, const itensor::Index& idx, uint32_t new_dim);
+class MatrixProductStateImpl;
 
 class MatrixProductState : public QuantumState {
 	private:
-		std::vector<itensor::ITensor> tensors;
-		std::vector<itensor::ITensor> singular_values;
-		std::vector<itensor::Index> external_indices;
-		std::vector<itensor::Index> internal_indices;
-
-		double sv_threshold;
-
-		static Eigen::Matrix2cd zero_projector();
-		static Eigen::Matrix2cd one_projector();
+    std::unique_ptr<MatrixProductStateImpl> impl;
 
 	public:
-		uint32_t bond_dimension;
-
     MatrixProductState()=default;
+
 		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-4);
 
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
-		double entropy(uint32_t q);
 
 		void print_mps() const;
 
-		itensor::ITensor coefficient_tensor() const;
 		std::complex<double> coefficients(uint32_t z) const;
+
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
+
 		Eigen::VectorXcd coefficients() const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
+
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) override;
+
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
 
 		double measure_probability(uint32_t q, bool outcome) const;
+
 		virtual std::vector<double> probabilities() const override {
 			Statevector statevector(*this);
 			return statevector.probabilities();
 		}
 		virtual bool measure(uint32_t q) override;
-		void measure_propagate(uint32_t q, const Eigen::Matrix2cd& proj);
 };
