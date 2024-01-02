@@ -84,7 +84,12 @@ add_library(graph
     include/Graph.hpp
 )
 
-set_target_properties(graph PROPERTIES LINKER_LANGUAGE CXX)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set_target_properties(graph PROPERTIES 
+    LINKER_LANGUAGE CXX 
+    POSITION_INDEPENDENT_CODE ON
+)
 
 set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/include/CliffordState)
 set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/include/QuantumState)
