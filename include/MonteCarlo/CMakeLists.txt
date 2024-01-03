@@ -1,5 +1,5 @@
 add_library(montecarlo
-	MonteCarlo.cpp
+	MonteCarlo.hpp
 )
 
 set_target_properties(montecarlo PROPERTIES 
