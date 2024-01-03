@@ -1,6 +1,8 @@
 #include "CircuitUtils.h"
+
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unordered_set>
+#include <assert.h>
 
 
 bool qargs_unique(const std::vector<uint32_t>& qargs) {

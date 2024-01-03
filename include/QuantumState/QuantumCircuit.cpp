@@ -1,4 +1,5 @@
 #include "QuantumCircuit.h"
+#include <assert.h>
 
 std::string QuantumCircuit::to_string() const {
 	std::string s = "";

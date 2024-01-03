@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <numeric>
+#include <assert.h>
 
 class EntropySampler {
   public:

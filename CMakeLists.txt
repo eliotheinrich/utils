@@ -29,22 +29,6 @@ include(FetchContent)
 
 set(EXTERNALS "")
 
-FetchContent_Declare(
-    glaze
-    GIT_REPOSITORY https://github.com/stephenberry/glaze
-    GIT_TAG main
-    GIT_SHALLOW TRUE
-)
-list(APPEND EXTERNALS glaze)
-
-FetchContent_Declare(
-    nlohmann
-    GIT_REPOSITORY https://github.com/nlohmann/json
-    GIT_TAG master
-    GIT_SHALLOW TRUE
-)
-list(APPEND EXTERNALS nlohmann)
-
 if (DEFINED DATAFRAME_SOURCE)
     set(dataframe_SOURCE_DIR ${DATAFRAME_SOURCE})
 else()
@@ -73,8 +57,6 @@ list(APPEND EXTERNALS eigen)
 FetchContent_MakeAvailable(${EXTERNALS})
 
 include_directories(
-    ${nlohmann_SOURCE_DIR}/include
-    ${glaze_SOURCE_DIR}/include
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
@@ -94,7 +76,9 @@ set_target_properties(graph PROPERTIES
 set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/include/CliffordState)
 set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/include/QuantumState)
 set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/include/Samplers)
+set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/include/MonteCarlo)
 
 add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${QUANTUMSTATE_DIR})
+add_subdirectory(${MONTECARLO_DIR})

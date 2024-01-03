@@ -7,6 +7,7 @@
 #include <string>
 #include <complex>
 #include <memory>
+#include <assert.h>
 
 // --- Definitions for gates/measurements --- //
 

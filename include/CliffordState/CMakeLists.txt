@@ -1,4 +1,4 @@
-add_library(clifford_state
+add_library(clifford_state 
 	CliffordState.hpp
 	Tableau.cpp
 	QuantumCHPState.hpp
