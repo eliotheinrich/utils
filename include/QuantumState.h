@@ -1,3 +1,5 @@
+#pragma once
+
 #include "QuantumState/QuantumStates.h"
 #include "QuantumState/QuantumCircuit.h"
 #include "QuantumState/Instructions.hpp"
