@@ -89,12 +89,12 @@ const uint32_t QuantumGraphState::CZ_LOOKUP[24][24][2][3] =
 
 
 QuantumGraphState::QuantumGraphState(uint32_t num_qubits, int seed) : CliffordState(num_qubits, seed), num_qubits(num_qubits) {
-  graph = Graph();
+  graph = Graph<>();
   for (uint32_t i = 0; i < num_qubits; i++) graph.add_vertex(HGATE);
 }
 
-QuantumGraphState::QuantumGraphState(Graph &graph, int seed) : CliffordState(graph.num_vertices, seed) {
-  this->graph = Graph(graph);
+QuantumGraphState::QuantumGraphState(Graph<> &graph, int seed) : CliffordState(graph.num_vertices, seed) {
+  this->graph = Graph<>(graph);
 }
 
 QuantumCHPState QuantumGraphState::to_chp() const {
@@ -104,13 +104,13 @@ QuantumCHPState QuantumGraphState::to_chp() const {
 
   // Prepare |+...+>
   for (uint32_t i = 0; i < num_qubits; i++)
-    chp.h_gate(i);
+    chp.h(i);
 
   // Apply graph edges
   for (uint32_t i = 0; i < num_qubits; i++) {
     for (auto j : graph.neighbors(i)) {
       if (i < j)
-        chp.cz_gate(i, j);
+        chp.cz(i, j);
     }
   }
 
@@ -121,11 +121,11 @@ QuantumCHPState QuantumGraphState::to_chp() const {
       uint32_t vj = CLIFFORD_DECOMPS[v][j];
       if (vj == SQRTXDGATE) {
         // (-iX)^(1/2) = SHS
-        chp.s_gate(i);
-        chp.h_gate(i);
-        chp.s_gate(i);
+        chp.s(i);
+        chp.h(i);
+        chp.s(i);
       } else if (vj == SQRTZGATE) {
-        chp.s_gate(i);
+        chp.s(i);
       }
     }
   }
@@ -315,31 +315,31 @@ void QuantumGraphState::remove_vop(uint32_t a, uint32_t b) {
     return graph.to_string();
   }
 
-  void QuantumGraphState::x_gate(uint32_t a) {
+  void QuantumGraphState::x(uint32_t a) {
     apply_gatel(a, XGATE);
   }
 
-  void QuantumGraphState::y_gate(uint32_t a) {
+  void QuantumGraphState::y(uint32_t a) {
     apply_gatel(a, YGATE);
   }
 
-  void QuantumGraphState::z_gate(uint32_t a) {
+  void QuantumGraphState::z(uint32_t a) {
     apply_gatel(a, ZGATE);
   }
 
-  void QuantumGraphState::h_gate(uint32_t a) {
+  void QuantumGraphState::h(uint32_t a) {
     apply_gatel(a, HGATE);
   }
 
-  void QuantumGraphState::s_gate(uint32_t a) {
+  void QuantumGraphState::s(uint32_t a) {
     apply_gatel(a, SGATE);
   }
 
-  void QuantumGraphState::sd_gate(uint32_t a) {
+  void QuantumGraphState::sd(uint32_t a) {
     apply_gatel(a, SDGATE);
   }
 
-  void QuantumGraphState::cz_gate(uint32_t a, uint32_t b) {
+  void QuantumGraphState::cz(uint32_t a, uint32_t b) {
     assert((a < num_qubits) && (b < num_qubits) && (a != b));
 
     if (!isolated(a, b))  {
@@ -408,13 +408,13 @@ void QuantumGraphState::remove_vop(uint32_t a, uint32_t b) {
 
     apply_gatel(a, HERMITIAN_CONJUGATE_TABLE[ca]);
     apply_gatel(b, HERMITIAN_CONJUGATE_TABLE[cb]);
-    cz_gate(a, b);
+    cz(a, b);
     apply_gatel(a, ca);
     apply_gatel(b, cb);
   }
   
-  double QuantumGraphState::graph_state_entropy(const std::vector<uint32_t> &qubits, Graph &graph) {
-    Graph bipartite_graph = graph.partition(qubits);
+  double QuantumGraphState::graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph) {
+    Graph<int, bool> bipartite_graph = graph.partition(qubits);
     int s = 2*bipartite_graph.num_vertices;
     for (uint32_t i = 0; i < bipartite_graph.num_vertices; i++) {
       if (bipartite_graph.get_val(i)) {

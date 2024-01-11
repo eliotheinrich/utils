@@ -45,77 +45,102 @@ class CliffordState : public EntropyState {
     }
 
 
-    virtual void h_gate(uint32_t a)=0;
-    virtual void s_gate(uint32_t a)=0;
+    virtual void h(uint32_t a)=0;
 
-    virtual void sd_gate(uint32_t a) {
-      s_gate(a);
-      s_gate(a);
-      s_gate(a);
-    }
+    virtual void s(uint32_t a)=0;
 
-    virtual void x_gate(uint32_t a) {
-      h_gate(a);
-      z_gate(a);
-      h_gate(a);
-    }
-    virtual void y_gate(uint32_t a) {
-      x_gate(a);
-      z_gate(a);
-    }
-    virtual void z_gate(uint32_t a) {
-      s_gate(a);
-      s_gate(a);
+    virtual void sd(uint32_t a) {
+      s(a);
+      s(a);
+      s(a);
     }
 
-    virtual void sx_gate(uint32_t a) {
-      h_gate(a);
-      s_gate(a);
-      h_gate(a);
-    }
-    virtual void sy_gate(uint32_t a) {
-      h_gate(a);
-      s_gate(a);
-      sx_gate(a);
-      sd_gate(a);
-      h_gate(a);
-    }
-    virtual void sz_gate(uint32_t a) {
-      s_gate(a);
+    virtual void x(uint32_t a) {
+      h(a);
+      z(a);
+      h(a);
     }
 
-    virtual void cz_gate(uint32_t a, uint32_t b)=0;
-    virtual void cx_gate(uint32_t a, uint32_t b) {
-      h_gate(b);
-      cz_gate(a, b);
-      h_gate(b);
-    }
-    virtual void cy_gate(uint32_t a, uint32_t b) {
-      s_gate(b);
-      h_gate(b);
-      cz_gate(a, b);
-      h_gate(b);
-      sd_gate(b);
+    virtual void y(uint32_t a) {
+      x(a);
+      z(a);
     }
 
-    virtual void swap_gate(uint32_t a, uint32_t b) {
-      cx_gate(a, b);
-      cx_gate(b, a);
-      cx_gate(a, b);
+    virtual void z(uint32_t a) {
+      s(a);
+      s(a);
     }
 
-    virtual void T4_gate(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-      cx_gate(a, d);
-      cx_gate(b, d);
-      cx_gate(c, d);
+    virtual void sqrtx(uint32_t a) {
+      h(a);
+      s(a);
+      h(a);
+    }
+    
+    virtual void sqrty(uint32_t a) {
+      h(a);
+      s(a);
+      sqrtx(a);
+      sd(a);
+      h(a);
+    }
 
-      cx_gate(d, a);
-      cx_gate(d, b);
-      cx_gate(d, c);
+    virtual void sqrtz(uint32_t a) {
+      s(a);
+    }
 
-      cx_gate(a, d);
-      cx_gate(b, d);
-      cx_gate(c, d);
+    virtual void sqrtxd(uint32_t a) {
+      h(a);
+      sd(a);
+      h(a);
+    }
+
+    virtual void sqrtyd(uint32_t a) {
+      h(a);
+      sd(a);
+      sqrtxd(a);
+      s(a);
+      h(a);
+    }
+
+    virtual void sqrtzd(uint32_t a) {
+      sd(a);
+    }
+
+    virtual void cz(uint32_t a, uint32_t b)=0;
+
+    virtual void cx(uint32_t a, uint32_t b) {
+      h(b);
+      cz(a, b);
+      h(b);
+    }
+
+    virtual void cy(uint32_t a, uint32_t b) {
+      s(b);
+      h(b);
+      cz(a, b);
+      h(b);
+      sd(b);
+    }
+
+    virtual void swap(uint32_t a, uint32_t b) {
+      cx(a, b);
+      cx(b, a);
+      cx(a, b);
+    }
+
+    virtual void T4(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+      cx(a, d);
+      cx(b, d);
+      cx(c, d);
+
+      cx(d, a);
+      cx(d, b);
+      cx(d, c);
+
+      cx(a, d);
+      cx(b, d);
+      cx(c, d);
     }
 
     virtual double mzr_expectation(uint32_t a)=0;
@@ -130,9 +155,9 @@ class CliffordState : public EntropyState {
     }
 
     virtual double mxr_expectation(uint32_t a) {
-      h_gate(a);
+      h(a);
       double p = mzr_expectation(a);
-      h_gate(a);
+      h(a);
       return p;
     }
     virtual double mxr_expectation() {
@@ -146,11 +171,11 @@ class CliffordState : public EntropyState {
     }
 
     virtual double myr_expectation(uint32_t a) {
-      s_gate(a);
-      h_gate(a);
+      s(a);
+      h(a);
       double p = mzr_expectation(a);
-      h_gate(a);
-      sd_gate(a);
+      h(a);
+      sd(a);
       return p;
     }
     virtual double myr_expectation() {
@@ -166,17 +191,17 @@ class CliffordState : public EntropyState {
     virtual bool mzr(uint32_t a)=0;
 
     virtual bool mxr(uint32_t a) {
-      h_gate(a);
+      h(a);
       bool outcome = mzr(a);
-      h_gate(a);
+      h(a);
       return outcome;
     }
     virtual bool myr(uint32_t a) {
-      s_gate(a);
-      h_gate(a);
+      s(a);
+      h(a);
       bool outcome = mzr(a);
-      h_gate(a);
-      sd_gate(a);
+      h(a);
+      sd(a);
       return outcome;
     }
 
@@ -202,90 +227,90 @@ class CliffordState : public EntropyState {
     void single_qubit_random_clifford(uint32_t a, uint32_t r) {
       // r == 0 is identity, so do nothing in thise case
       if (r == 1) {
-        x_gate(a);
+        x(a);
       } else if (r == 2) {
-        y_gate(a);
+        y(a);
       } else if (r == 3) {
-        z_gate(a);
+        z(a);
       } else if (r == 4) {
-        h_gate(a);
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
+        h(a);
+        s(a);
+        h(a);
+        s(a);
       } else if (r == 5) {
-        h_gate(a);
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        x_gate(a);
+        h(a);
+        s(a);
+        h(a);
+        s(a);
+        x(a);
       } else if (r == 6) {
-        h_gate(a);
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        y_gate(a);
+        h(a);
+        s(a);
+        h(a);
+        s(a);
+        y(a);
       } else if (r == 7) {
-        h_gate(a);
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        z_gate(a);
+        h(a);
+        s(a);
+        h(a);
+        s(a);
+        z(a);
       } else if (r == 8) {
-        h_gate(a);
-        s_gate(a);
+        h(a);
+        s(a);
       } else if (r == 9) {
-        h_gate(a);
-        s_gate(a);
-        x_gate(a);
+        h(a);
+        s(a);
+        x(a);
       } else if (r == 10) {
-        h_gate(a);
-        s_gate(a);
-        y_gate(a);
+        h(a);
+        s(a);
+        y(a);
       } else if (r == 11) {
-        h_gate(a);
-        s_gate(a);
-        z_gate(a);
+        h(a);
+        s(a);
+        z(a);
       } else if (r == 12) {
-        h_gate(a);
+        h(a);
       } else if (r == 13) {
-        h_gate(a);
-        x_gate(a);
+        h(a);
+        x(a);
       } else if (r == 14) {
-        h_gate(a);
-        y_gate(a);
+        h(a);
+        y(a);
       } else if (r == 15) {
-        h_gate(a);
-        z_gate(a);
+        h(a);
+        z(a);
       } else if (r == 16) {
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
+        s(a);
+        h(a);
+        s(a);
       } else if (r == 17) {
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        x_gate(a);
+        s(a);
+        h(a);
+        s(a);
+        x(a);
       } else if (r == 18) {
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        y_gate(a);
+        s(a);
+        h(a);
+        s(a);
+        y(a);
       } else if (r == 19) {
-        s_gate(a);
-        h_gate(a);
-        s_gate(a);
-        z_gate(a);
+        s(a);
+        h(a);
+        s(a);
+        z(a);
       } else if (r == 20) {
-        s_gate(a);
+        s(a);
       } else if (r == 21) {
-        s_gate(a);
-        x_gate(a);
+        s(a);
+        x(a);
       } else if (r == 22) {
-        s_gate(a);
-        y_gate(a);
+        s(a);
+        y(a);
       } else if (r == 23) {
-        s_gate(a);
-        z_gate(a);
+        s(a);
+        z(a);
       }
     }
 

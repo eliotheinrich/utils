@@ -46,26 +46,26 @@ class QuantumGraphState : public CliffordState {
 
 
   public:
-    Graph graph;
+    Graph<> graph;
 
     QuantumGraphState()=default;
     QuantumGraphState(uint32_t num_qubits, int seed=-1);
-    QuantumGraphState(Graph &graph, int seed=-1);
+    QuantumGraphState(Graph<> &graph, int seed=-1);
 
     QuantumCHPState to_chp() const;
     Statevector to_statevector() const;
 
     virtual std::string to_string() const override;
 
-    virtual void h_gate(uint32_t a) override;
-    virtual void s_gate(uint32_t a) override;
-    virtual void sd_gate(uint32_t a) override;
+    virtual void h(uint32_t a) override;
+    virtual void s(uint32_t a) override;
+    virtual void sd(uint32_t a) override;
 
-    virtual void x_gate(uint32_t a) override;
-    virtual void y_gate(uint32_t a) override;
-    virtual void z_gate(uint32_t a) override;
+    virtual void x(uint32_t a) override;
+    virtual void y(uint32_t a) override;
+    virtual void z(uint32_t a) override;
 
-    virtual void cz_gate(uint32_t a, uint b) override;
+    virtual void cz(uint32_t a, uint b) override;
     virtual double mzr_expectation(uint32_t a) override;
     virtual bool mzr(uint32_t a) override;
 
@@ -73,7 +73,7 @@ class QuantumGraphState : public CliffordState {
 
     void toggle_edge_gate(uint32_t a, uint b);
 
-    static double graph_state_entropy(const std::vector<uint32_t> &qubits, Graph &graph);
+    static double graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph);
     virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
 
     virtual double sparsity() const override;

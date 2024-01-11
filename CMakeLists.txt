@@ -29,17 +29,13 @@ include(FetchContent)
 
 set(EXTERNALS "")
 
-if (DEFINED DATAFRAME_SOURCE)
-    set(dataframe_SOURCE_DIR ${DATAFRAME_SOURCE})
-else()
-    FetchContent_Declare(
-        dataframe
-        GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
-        GIT_TAG master
-        GIT_SHALLOW TRUE
-    )
-    list(APPEND EXTERNALS dataframe)
-endif()
+FetchContent_Declare(
+    dataframe
+    GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+list(APPEND EXTERNALS dataframe)
 
 FetchContent_Declare(
     eigen
@@ -59,11 +55,11 @@ FetchContent_MakeAvailable(${EXTERNALS})
 include_directories(
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 add_library(graph
-    include/Graph.hpp
+    src/Graph.hpp
 )
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -73,12 +69,46 @@ set_target_properties(graph PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/include/CliffordState)
-set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/include/QuantumState)
-set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/include/Samplers)
-set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/include/MonteCarlo)
+set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/src/CliffordState)
+set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/src/QuantumState)
+set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/src/Samplers)
+set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 
 add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${QUANTUMSTATE_DIR})
 add_subdirectory(${MONTECARLO_DIR})
+
+if (BUILDING_PYQTOOLS)
+    find_package(Python 3.10 
+        REQUIRED COMPONENTS Interpreter Development.Module
+        OPTIONAL_COMPONENTS Development.SABIModule
+    )
+
+    # Finding nanobind
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR
+    )
+    list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
+    find_package(nanobind CONFIG REQUIRED)
+
+    nanobind_add_module(
+        pyqtools_bindings
+        STABLE_ABI
+        NB_STATIC
+        src/PyUtils.cpp
+    )
+
+    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state)
+
+    install(
+        TARGETS pyqtools_bindings
+        LIBRARY DESTINATION pyqtools
+    )
+endif()
+
+
+
+
+

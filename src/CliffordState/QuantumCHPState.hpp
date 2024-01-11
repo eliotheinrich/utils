@@ -49,37 +49,49 @@ class QuantumCHPState : public CliffordState {
     }
 
     std::string to_string() const {
-      std::string s = "";
-      s += "Tableau: \n" + tableau.to_string();
-      return s;
+      return tableau.to_string();
     }
 
     std::string to_string_ops() const {
-      std::string s = "";
-      s += "Tableau: \n" + tableau.to_string_ops();
-      return s;
+      return tableau.to_string_ops();
     }
 
     Statevector to_statevector() const {
       return tableau.to_statevector();
     }
 
-    virtual void h_gate(uint32_t a) override {
-      tableau.h_gate(a);
+    virtual void h(uint32_t a) override {
+      tableau.h(a);
     }
 
-    virtual void s_gate(uint32_t a) override {
-      tableau.s_gate(a);
+    virtual void s(uint32_t a) override {
+      tableau.s(a);
     }
 
-    virtual void cx_gate(uint32_t a, uint32_t b) override {
-      tableau.cx_gate(a, b);
+    virtual void sd(uint32_t a) override {
+      tableau.s(a);
+      tableau.s(a);
+      tableau.s(a);
     }
 
-    virtual void cz_gate(uint32_t a, uint32_t b) override {
-      tableau.h_gate(b);
-      tableau.cx_gate(a, b);
-      tableau.h_gate(b);
+    virtual void cx(uint32_t a, uint32_t b) override {
+      tableau.cx(a, b);
+    }
+
+    virtual void cy(uint32_t a, uint32_t b) override {
+      tableau.s(b);
+      tableau.h(b);
+      tableau.cz(a, b);
+      tableau.h(b);
+      tableau.s(b);
+      tableau.s(b);
+      tableau.s(b);
+    }
+
+    virtual void cz(uint32_t a, uint32_t b) override {
+      tableau.h(b);
+      tableau.cx(a, b);
+      tableau.h(b);
     }
 
     virtual double mzr_expectation(uint32_t a) override {

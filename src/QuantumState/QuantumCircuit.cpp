@@ -83,6 +83,11 @@ void QuantumCircuit::add_gate(const Eigen::MatrixXcd& gate, const std::vector<ui
 	add_gate(std::make_shared<MatrixGate>(gate, qbits));
 }
 
+void QuantumCircuit::add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit) {
+	std::vector<uint32_t> qbits{qubit};
+	add_gate(gate, qbits);
+}
+
 void QuantumCircuit::append(const QuantumCircuit& other) {
   if (num_qubits != other.num_qubits) {
     throw std::invalid_argument("Cannot append QuantumCircuits; numbers of qubits do not match.");

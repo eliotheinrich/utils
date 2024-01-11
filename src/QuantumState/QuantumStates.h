@@ -200,6 +200,8 @@ class DensityMatrix : public QuantumState {
 
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) override;
 
+		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
+
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate, const std::vector<uint32_t>& qbits) override;
 
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate) override;
@@ -243,6 +245,8 @@ class Statevector : public QuantumState {
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate) override;
+		
+		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 
 		virtual void evolve_diagonal(const Eigen::VectorXcd &gate, const std::vector<uint32_t> &qubits) override;
 

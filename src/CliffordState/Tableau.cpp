@@ -6,17 +6,17 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
   tableau_utils::Circuit circuit;
 
   if (z) {
-    tableau.h_gate(0);
+    tableau.h(0);
     circuit.push_back(tableau_utils::hgate{0});
   }
 
   for (uint32_t i = 0; i < num_qubits; i++) {
     if (tableau.z(0, i)) {
       if (tableau.x(0, i)) {
-        tableau.s_gate(i);
+        tableau.s(i);
         circuit.push_back(tableau_utils::sgate{i});
       } else {
-        tableau.h_gate(i);
+        tableau.h(i);
         circuit.push_back(tableau_utils::hgate{i});
       }
     }
@@ -33,7 +33,7 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
     for (uint32_t j = 0; j < nonzero_idx.size()/2; j++) {
       uint32_t q1 = nonzero_idx[2*j];
       uint32_t q2 = nonzero_idx[2*j+1];
-      tableau.cx_gate(q1, q2);
+      tableau.cx(q1, q2);
       circuit.push_back(tableau_utils::cxgate{q1, q2});
     }
 
@@ -45,9 +45,9 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
   if (ql != 0) {
     for (uint32_t i = 0; i < num_qubits; i++) {
       if (tableau.x(0, i)) {
-        tableau.cx_gate(0, ql);
-        tableau.cx_gate(ql, 0);
-        tableau.cx_gate(0, ql);
+        tableau.cx(0, ql);
+        tableau.cx(ql, 0);
+        tableau.cx(0, ql);
 
         circuit.push_back(tableau_utils::cxgate{0, ql});
         circuit.push_back(tableau_utils::cxgate{ql, 0});
@@ -59,7 +59,13 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
   }
 
   if (tableau.r(0)) {
-    tableau.y_gate(0);
+    // Apply Y gate to tableau
+    tableau.h(0);
+    tableau.s(0);
+    tableau.s(0);
+    tableau.h(0);
+    tableau.s(0);
+    tableau.s(0);
     circuit.push_back(tableau_utils::sgate{0});
     circuit.push_back(tableau_utils::sgate{0});
     circuit.push_back(tableau_utils::hgate{0});

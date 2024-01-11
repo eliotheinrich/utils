@@ -140,6 +140,10 @@ void Statevector::evolve(const Eigen::MatrixXcd &gate) {
   data = gate*data;
 }
 
+void Statevector::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
+	QuantumState::evolve(gate, qubit);
+}
+
 // Vector representing diagonal gate
 void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const std::vector<uint32_t> &qubits) {
   uint32_t s = 1u << num_qubits;

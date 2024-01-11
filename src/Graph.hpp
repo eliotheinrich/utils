@@ -9,25 +9,24 @@
 #include <random>
 #include <climits>
 
-#define DEFAULT_VAL 0
-
+template <typename T = int, typename V = int>
 class Graph {
   public:
-    std::vector<std::map<uint32_t, int>> edges;
-    std::vector<uint32_t> vals;
+    std::vector<std::map<uint32_t, T>> edges;
+    std::vector<V> vals;
 
     uint32_t num_vertices;
 
     Graph() : num_vertices(0) {}
     Graph(uint32_t num_vertices) : num_vertices(0) { 
       for (uint32_t i = 0; i < num_vertices; i++) {
-        add_vertex(DEFAULT_VAL);
+        add_vertex();
       }
     }
 
     Graph(const Graph &g) {
       for (uint32_t i = 0; i < g.num_vertices; i++) {
-        add_vertex(DEFAULT_VAL);
+        add_vertex();
       }
 
       for (uint32_t i = 0; i < g.num_vertices; i++) {
@@ -37,8 +36,8 @@ class Graph {
       }
     }
 
-    static Graph erdos_renyi_graph(uint32_t num_vertices, double p) {
-      Graph g(num_vertices);
+    static Graph<T, V> erdos_renyi_graph(uint32_t num_vertices, double p) {
+      Graph<T, V> g(num_vertices);
       thread_local std::random_device rd;
       thread_local std::minstd_rand r(rd());
       for (uint32_t i = 0; i < num_vertices-1; i++) {
@@ -52,8 +51,8 @@ class Graph {
       return g;
     }
 
-    static Graph scale_free_graph(uint32_t num_vertices, double alpha) {
-      Graph g(num_vertices);
+    static Graph<T, V> scale_free_graph(uint32_t num_vertices, double alpha) {
+      Graph<T, V> g(num_vertices);
 
       thread_local std::random_device rd;
       thread_local std::mt19937 gen(rd());
@@ -111,13 +110,13 @@ class Graph {
     }
 
     void add_vertex() { 
-      add_vertex(DEFAULT_VAL); 
+      add_vertex(V()); 
     }
 
-    void add_vertex(uint32_t v) {
+    void add_vertex(V val) {
       num_vertices++;
-      edges.push_back(std::map<uint32_t, int>());
-      vals.push_back(v);
+      edges.push_back(std::map<uint32_t, T>());
+      vals.push_back(val);
     }
 
     void remove_vertex(uint32_t v) {
@@ -129,7 +128,7 @@ class Graph {
       }
 
       for (uint32_t i = 0; i < num_vertices; i++) {
-        std::map<uint32_t, int> new_edges;
+        std::map<uint32_t, T> new_edges;
         for (auto const &[j, w] : edges[i]) {
           if (j > v) {
             new_edges.emplace(j-1, w);
@@ -141,13 +140,13 @@ class Graph {
       }
     }
 
-    void set_val(uint32_t v, uint32_t val) {
-      assert(v < num_vertices);
-      vals[v] = val;
+    void set_val(uint32_t i, V val) {
+      assert(i < num_vertices);
+      vals[i] = val;
     }
 
-    uint32_t get_val(uint32_t v) const { 
-      return vals[v]; 
+    V get_val(uint32_t i) const { 
+      return vals[i]; 
     }
 
     std::vector<uint32_t> neighbors(uint32_t a) const {
@@ -163,19 +162,19 @@ class Graph {
       return contains_directed_edge(v1, v2) && contains_directed_edge(v2, v1);
     }
 
-    int edge_weight(uint32_t v1, uint32_t v2) const {
+    T edge_weight(uint32_t v1, uint32_t v2) const {
       return edges[v1].at(v2);
     }
 
-    void set_edge_weight(uint32_t v1, uint32_t v2, int w) {
+    void set_edge_weight(uint32_t v1, uint32_t v2, T w) {
       edges[v1][v2] = w;
     }
 
     void add_edge(uint32_t v1, uint32_t v2) {
-      add_weighted_edge(v1, v2, 1);
+      add_weighted_edge(v1, v2, T());
     }
 
-    void add_directed_edge(uint32_t v1, uint32_t v2, int w) {
+    void add_directed_edge(uint32_t v1, uint32_t v2, T w) {
       if (!contains_edge(v1, v2)) {
         edges[v1].emplace(v2, w);
       }
@@ -185,7 +184,7 @@ class Graph {
       return edges[v1].count(v2);
     }
 
-    void add_weighted_edge(uint32_t v1, uint32_t v2, int w) {
+    void add_weighted_edge(uint32_t v1, uint32_t v2, T w) {
       add_directed_edge(v1, v2, w);
       if (v1 != v2) {
         add_directed_edge(v2, v1, w);
@@ -218,7 +217,7 @@ class Graph {
       }
     }
 
-    int adjacency_matrix(uint32_t v1, uint32_t v2) const {
+    T adjacency_matrix(uint32_t v1, uint32_t v2) const {
       if (contains_directed_edge(v1, v2)) {
         return edges[v1].at(v2);
       } else {
@@ -240,10 +239,10 @@ class Graph {
       }
     }
 
-    Graph partition(const std::vector<uint32_t> &nodes) const {
+    Graph<T, bool> partition(const std::vector<uint32_t> &nodes) const {
       std::set<uint32_t> nodess;
       std::copy(nodes.begin(), nodes.end(), std::inserter(nodess, nodess.end()));
-      Graph new_graph;
+      Graph<T, bool> new_graph;
       std::map<uint32_t, uint32_t> new_vertices;
 
       for (const uint32_t a : nodess) {
@@ -252,7 +251,7 @@ class Graph {
         }
 
         new_vertices.emplace(a, new_vertices.size());
-        new_graph.add_vertex(1);
+        new_graph.add_vertex(true);
         for (auto const &[b, _] : edges[a]) {
           if (nodess.count(b)) {
             continue;
@@ -260,7 +259,7 @@ class Graph {
 
           if (!new_vertices.count(b)) {
             new_vertices.emplace(b, new_vertices.size());
-            new_graph.add_vertex(0);
+            new_graph.add_vertex(false);
           }
 
           new_graph.add_edge(new_vertices[a], new_vertices[b]);
@@ -321,12 +320,12 @@ class Graph {
       return std::pair(false, std::vector<uint32_t>());
     }
 
-    int max_flow(std::vector<uint32_t> &sources, std::vector<uint32_t> &sinks) const {
+    T max_flow(std::vector<uint32_t> &sources, std::vector<uint32_t> &sinks) const {
       Graph g(*this);
 
-      g.add_vertex(DEFAULT_VAL);
+      g.add_vertex();
       uint32_t s = g.num_vertices - 1;
-      g.add_vertex(DEFAULT_VAL);
+      g.add_vertex();
       uint32_t t = g.num_vertices - 1;
 
       for (auto i : sources) {
@@ -336,12 +335,12 @@ class Graph {
         g.add_directed_edge(i, t, INT_MAX);
       }
 
-      int flow = g.max_flow(s, t);
+      T flow = g.max_flow(s, t);
 
       return flow;
     }
 
-    int max_flow(uint32_t s, uint32_t t) const {
+    T max_flow(uint32_t s, uint32_t t) const {
       Graph residual_graph(*this);
 
       for (uint32_t i = 0; i < num_vertices; i++) {
@@ -355,9 +354,9 @@ class Graph {
       std::vector<uint32_t> path_nodes = p.second;
 
       while (path_exists) {
-        int min_weight = INT_MAX;
+        T min_weight = INT_MAX;
         for (uint32_t j = 0; j < path_nodes.size() - 1; j++) {
-          int weight = residual_graph.edge_weight(path_nodes[j], path_nodes[j+1]);
+          T weight = residual_graph.edge_weight(path_nodes[j], path_nodes[j+1]);
           if (weight < min_weight) {
             min_weight = weight;
           }
@@ -375,7 +374,7 @@ class Graph {
         path_nodes = p.second;
       }
 
-      int flow = 0;
+      T flow = 0;
       for (auto const &[v, w] : residual_graph.edges[s]) {
         flow += edge_weight(s, v) - w;
       }

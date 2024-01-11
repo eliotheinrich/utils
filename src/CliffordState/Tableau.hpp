@@ -46,16 +46,16 @@ static void apply_circuit(const tableau_utils::Circuit &circuit, T &state) {
     for (auto const &gate : circuit) {
         std::visit(tableau_utils::overloaded{
                 [&state](tableau_utils::sgate s) {  
-                    state.s_gate(s.q); 
+                    state.s(s.q); 
                 },
                 [&state](tableau_utils::sdgate s) { 
-                    state.sd_gate(s.q);
+                    state.sd(s.q);
                 },
                 [&state](tableau_utils::hgate s) {  
-                    state.h_gate(s.q); 
+                    state.h(s.q); 
                 },
                 [&state](tableau_utils::cxgate s) { 
-                    state.cx_gate(s.q1, s.q2); 
+                    state.cx(s.q1, s.q2); 
                 }
         }, gate);
     }
@@ -256,7 +256,7 @@ class PauliString {
             return s;
         }
 
-        void s_gate(uint32_t a) {
+        void s(uint32_t a) {
             uint8_t xza = xz(a);
             bool xa = (xza >> 0u) & 1u;
             bool za = (xza >> 1u) & 1u;
@@ -267,7 +267,13 @@ class PauliString {
             set_z(a, xa != za);
         }
 
-        void h_gate(uint32_t a) {
+        void sd(uint32_t a) {
+            s(a);
+            s(a);
+            s(a);
+        }
+
+        void h(uint32_t a) {
             uint8_t xza = xz(a);
             bool xa = (xza >> 0u) & 1u;
             bool za = (xza >> 1u) & 1u;
@@ -279,7 +285,7 @@ class PauliString {
             set_z(a, xa);
         }
 
-        void cx_gate(uint32_t a, uint32_t b) {
+        void cx(uint32_t a, uint32_t b) {
             uint8_t xza = xz(a);
             bool xa = (xza >> 0u) & 1u;
             bool za = (xza >> 1u) & 1u;
@@ -293,6 +299,12 @@ class PauliString {
             set_r(r != ((xa && zb) && ((xb != za) != true)));
             set_x(b, xa != xb);
             set_z(a, za != zb);
+        }
+
+        void cz(uint32_t a, uint32_t b) {
+            h(b);
+            cx(a, b);
+            h(b);
         }
 
         bool commutes_at(PauliString &p, uint32_t i) const {
@@ -367,12 +379,6 @@ class PauliString {
 
         inline void set_r(bool v) { 
             phase = v; 
-        }
-
-        void sd_gate(uint32_t a) {
-            s_gate(a);
-            s_gate(a);
-            s_gate(a);
         }
 };
 
@@ -606,26 +612,38 @@ class Tableau {
             }
         }
 
-        void h_gate(uint32_t a) {
+        void h(uint32_t a) {
             validate_qubit(a);
             for (uint32_t i = 0; i < num_rows(); i++) {
-                rows[i].h_gate(a);
+                rows[i].h(a);
             }
         }
 
-        void s_gate(uint32_t a) {
+        void s(uint32_t a) {
             validate_qubit(a);
             for (uint32_t i = 0; i < num_rows(); i++) {
-                rows[i].s_gate(a);
+                rows[i].s(a);
             }
         }
 
-        void cx_gate(uint32_t a, uint32_t b) {
+        void sd(uint32_t a) {
+            s(a);
+            s(a);
+            s(a);
+        }
+
+        void cx(uint32_t a, uint32_t b) {
             validate_qubit(a);
             validate_qubit(b);
             for (uint32_t i = 0; i < num_rows(); i++) {
-                rows[i].cx_gate(a, b);
+                rows[i].cx(a, b);
             }
+        }
+
+        void cz(uint32_t a, uint32_t b) {
+            h(b);
+            cx(a, b);
+            h(b);
         }
 
         // Returns a pair containing (1) wether the outcome of a measurement on qubit a is deterministic
@@ -715,27 +733,5 @@ class Tableau {
 
         inline void set_r(uint32_t i, bool v) { 
             rows[i].set_r(v); 
-        }
-
-        void sd_gate(uint32_t a) {
-            s_gate(a);
-            s_gate(a);
-            s_gate(a);
-        }
-
-        void x_gate(uint32_t a) {
-            h_gate(a);
-            z_gate(a);
-            h_gate(a);
-        }
-
-        void y_gate(uint32_t a) {
-            x_gate(a);
-            z_gate(a);
-        }
-
-        void z_gate(uint32_t a) {
-            s_gate(a);
-            s_gate(a);
         }
 };

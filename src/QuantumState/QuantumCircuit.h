@@ -34,6 +34,7 @@ class QuantumCircuit {
     void add_measurement(const Measurement& m);
     void add_gate(const std::shared_ptr<Gate> &gate);
     void add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits);
+    void add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit);
 
     void append(const QuantumCircuit& other);
     void append(const Instruction& inst);
