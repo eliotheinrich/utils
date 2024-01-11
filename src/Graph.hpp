@@ -27,12 +27,12 @@ class Graph {
 
     Graph(const Graph &g) : num_vertices(0) {
       for (uint32_t i = 0; i < g.num_vertices; i++) {
-        add_vertex();
+        add_vertex(static_cast<V>(g.vals[i]));
       }
 
       for (uint32_t i = 0; i < g.num_vertices; i++) {
         for (auto const &[j, w] : g.edges[i]) {
-          add_directed_edge(i, j, w);
+          add_directed_edge(i, j, static_cast<T>(w));
         }
       }
     }
@@ -43,7 +43,7 @@ class Graph {
       thread_local std::minstd_rand r(rd());
       for (uint32_t i = 0; i < num_vertices-1; i++) {
         for (uint32_t j = i+1; j < num_vertices; j++) {
-          if (float(r())/float(RAND_MAX) < p) {
+          if (double(r())/double(RAND_MAX) < p) {
             g.toggle_edge(i, j);
           }
         }
