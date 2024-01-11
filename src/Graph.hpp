@@ -18,13 +18,14 @@ class Graph {
     uint32_t num_vertices;
 
     Graph() : num_vertices(0) {}
+
     Graph(uint32_t num_vertices) : num_vertices(0) { 
       for (uint32_t i = 0; i < num_vertices; i++) {
         add_vertex();
       }
     }
 
-    Graph(const Graph &g) {
+    Graph(const Graph &g) : num_vertices(0) {
       for (uint32_t i = 0; i < g.num_vertices; i++) {
         add_vertex();
       }
