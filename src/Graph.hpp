@@ -178,6 +178,8 @@ class Graph {
     void add_directed_edge(uint32_t v1, uint32_t v2, T w) {
       if (!contains_edge(v1, v2)) {
         edges[v1].emplace(v2, w);
+      } else {
+        edges[v1][v2] = w;
       }
     }
 
