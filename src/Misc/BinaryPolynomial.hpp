@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 class BinaryPolynomialTerm {
   public:
@@ -15,25 +16,21 @@ class BinaryPolynomialTerm {
 
     BinaryPolynomialTerm(const std::vector<size_t>& inds, bool coefficient=true) : inds(inds), coefficient(coefficient) {}
 
-    std::string to_string() const {
-      std::cout << "calling term.to_string() with inds = ";
-      for (auto i : inds) std::cout << i << " ";
-      std::cout << "\n";
+    BinaryPolynomialTerm(const BinaryPolynomialTerm& term) : inds(term.inds), coefficient(term.coefficient) {}
 
+    std::string to_string() const {
       if (degree() == 0) {
-        std::cout << "degree 0, returning " << (coefficient ? "1" : "0") << std::endl;
         return coefficient ? "1" : "0";
       }
 
       std::string s = "";
-      for (size_t i = 0; i < inds.size(); i++) {
+      for (size_t i = 0; i < degree(); i++) {
         s += "x_" + std::to_string(inds[i]);
         if (i != inds.size() - 1) {
           s += " ";
         }
       }
 
-      std::cout << "returning " << s << std::endl;
       return s;
     }
 
@@ -47,7 +44,7 @@ class BinaryPolynomialTerm {
       return b;
     }
 
-    void reduce() {
+    BinaryPolynomialTerm reduce() const {
       std::vector<size_t> new_inds;
     
       for (auto const i : inds) {
@@ -56,7 +53,7 @@ class BinaryPolynomialTerm {
         }
       }
 
-      inds = new_inds;
+      return BinaryPolynomialTerm(new_inds);
     }
 
     BinaryPolynomialTerm partial_evaluate(Bitstring bits, std::vector<size_t> applied_inds) const {
@@ -70,7 +67,7 @@ class BinaryPolynomialTerm {
           new_inds.push_back(i);
         } else {
           size_t j = std::distance(applied_inds.begin(), found);
-          b &= applied_inds[applied_inds[j]];
+          b &= bits.get(j);
         }
       }
 
@@ -104,33 +101,52 @@ class BinaryPolynomialTerm {
 
       return true;
     }
+
+    bool contains_ind(size_t i) const {
+      return std::find(inds.begin(), inds.end(), i) != inds.end();
+    }
 };
 
 class BinaryPolynomial {
   public:
     size_t n;
+    std::vector<BinaryPolynomialTerm> terms;
 
     BinaryPolynomial() {}
 
     BinaryPolynomial(size_t n) : n(n) {}
+
+    BinaryPolynomial(const std::vector<BinaryPolynomialTerm>& terms, size_t n) : n(n) {
+      for (auto const& term : terms) {
+        for (auto const& i : term.inds) {
+          if (i < 0 || i >= n) {
+            throw std::invalid_argument("Invalid terms passed to BinaryPolynomial constructor.");
+          }
+        }
+
+        add_term(term);
+      }
+    }
+
+    std::optional<size_t> contains_term(const BinaryPolynomialTerm& term) const {
+      for (size_t i = 0; i < terms.size(); i++) {
+        if (term == terms[i]) {
+          return i;
+        }
+      }
+
+      return std::nullopt;
+    }
 
     bool add_term(const BinaryPolynomialTerm& term) {
       if (!term.coefficient) {
         return false;
       }
 
-      size_t term_ind;
-      bool found_term = false;
-      for (size_t i = 0; i < terms.size(); i++) {
-        if (term == terms[i]) {
-          found_term = true;
-          term_ind = i;
-          break;
-        }
-      }
-
-      if (found_term) {
-        terms.erase(terms.begin() + term_ind);
+      auto term_ind = contains_term(term);
+      if (term_ind.has_value()) {
+        size_t i = term_ind.value();
+        terms.erase(terms.begin() + i);
         return false;
       } else {
         terms.push_back(term);
@@ -182,8 +198,9 @@ class BinaryPolynomial {
     BinaryPolynomial partial_evaluate(const Bitstring& bits, const std::vector<size_t>& assigned_bits) const {
       BinaryPolynomial poly(n);
 
-      for (auto const term : terms) {
-        poly.add_term(term.partial_evaluate(bits, assigned_bits));
+      for (auto const& term : terms) {
+        BinaryPolynomialTerm new_term = term.partial_evaluate(bits, assigned_bits);
+        poly.add_term(new_term);
       }
 
       return poly;
@@ -203,19 +220,16 @@ class BinaryPolynomial {
 
     BinaryPolynomial operator+(const BinaryPolynomial& other) {
       BinaryPolynomial poly(n);
-      for (auto const term : terms) {
+      for (auto const& term : terms) {
         poly.add_term(term);
       }
 
-      for (auto const term : other.terms) {
+      for (auto const& term : other.terms) {
         poly.add_term(term);
       }
 
       return poly;
     }
-
-  private:
-    std::vector<BinaryPolynomialTerm> terms;
 };
 
 

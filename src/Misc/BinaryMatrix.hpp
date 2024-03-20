@@ -40,25 +40,65 @@ struct Bitstring {
 
   Bitstring(const Bitstring& bitstring) : Bitstring(bitstring.bits, bitstring.num_bits) {}
 
+  static Bitstring random(uint32_t num_bits, std::minstd_rand& rng) {
+    size_t num_words = num_bits / 32u + 1;
+    std::vector<binary_word> bits(num_words);
+    for (size_t i = 0; i < bits.size(); i++) {
+      bits[i] = rng();
+    }
+
+    return Bitstring(bits, num_bits);
+  }
+
   std::string to_string() const {
     std::string s;
     for (size_t i = 0; i < num_bits; i++) {
-      s += std::to_string(get(i));
+      s += std::to_string(static_cast<uint8_t>(get(i)));
     }
 
     return s;
   }
 
   inline void set(size_t i, bool v) {
+    if (i > num_bits) {
+      throw std::invalid_argument("Invalid bit index.");
+    }
+
     size_t word_ind = i / 32u;
     size_t bit_ind = i % 32u;
     bits[word_ind] = (bits[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
   }
 
   inline bool get(size_t i) const {
+    if (i > num_bits) {
+      throw std::invalid_argument("Invalid bit index.");
+    }
+
     size_t word_ind = i / 32u;
     size_t bit_ind = i % 32u;
     return static_cast<bool>((bits[word_ind] >> bit_ind) & 1u);
+  }
+
+  uint32_t hamming_weight() const {
+    uint32_t s = 0;
+    for (size_t i = 0; i < num_bits; i++) {
+      s += get(i);
+    }
+
+    return s;
+  }
+
+  Bitstring operator^(const Bitstring& other) const {
+    if (num_bits != other.num_bits) {
+      throw std::invalid_argument("Bitstring size mismatch.");
+    }
+
+    Bitstring new_bits(num_bits);
+    for (size_t i = 0; i < bits.size(); i++) {
+      new_bits.bits[i] = bits[i] ^ other.bits[i];
+    }
+
+    return new_bits;
   }
 };
 
@@ -76,10 +116,10 @@ class BinaryMatrix {
         num_words = 0;
         num_cols = 0;
       } else {
-        size_t num_bits = data[0].num_bits;
-        num_cols = num_bits / 32u + 1;
+        num_cols = data[0].num_bits;
+        num_words = num_cols / 32u + 1;
         for (size_t i = 1; i < num_rows; i++) {
-          if (data[i].num_bits != num_words) {
+          if (data[i].num_bits != num_cols) {
             throw std::invalid_argument("Provided data is ragged!");
           }
         }
@@ -153,7 +193,7 @@ class BinaryMatrix {
       M.rref();
       uint32_t r = 0;
       for (size_t i = 0; i < num_rows; i++) {
-        for (size_t j = 0; j < num_words; j++) {
+        for (size_t j = 0; j < num_cols; j++) {
           if (M.data[i].get(j)) {
             r++;
             break;
@@ -162,6 +202,23 @@ class BinaryMatrix {
       }
       
       return r;
+    }
+
+    std::vector<bool> multiply(const std::vector<bool>& v) const {
+      std::vector<bool> result(num_rows);
+
+      if (v.size() != num_cols) {
+        throw std::invalid_argument("Dimension mismatch in BinaryMatrix multiply.");
+      }
+
+      for (size_t i = 0; i < num_rows; i++) {
+        result[i] = false;
+        for (size_t j = 0; j < num_cols; j++) {
+          result[i] = result[i] ^ (get(i, j) && v[j]);
+        }
+      }
+
+      return result;
     }
 
     std::vector<bool> solve_linear_system(const std::vector<bool>& v) {
@@ -173,7 +230,8 @@ class BinaryMatrix {
       for (size_t i = 0; i < num_rows; i++) {
         for (size_t j = 0; j < num_cols; j++) {
           if (copy.get(i, j)) {
-            solution[i] = copy.get(i, num_cols);
+            solution[j] = copy.get(i, num_cols);
+            break;
           }
         }
       }
@@ -182,11 +240,14 @@ class BinaryMatrix {
     }
 
     bool in_col_space(const std::vector<bool>& v) const {
-      BinaryMatrix copy(data);
+      return transpose().in_row_space(v);
+    }
 
+    bool in_row_space(const std::vector<bool>& v) const {
+      BinaryMatrix copy(data);
       uint32_t r1 = copy.rank();
-      copy.append_col(v);
-      uint32_t r2 = copy.rank(true);
+      copy.append_row(v);
+      uint32_t r2 = copy.rank();
 
       return r1 == r2;
     }
@@ -215,9 +276,7 @@ class BinaryMatrix {
     }
 
     void add_rows(size_t r1, size_t r2) {
-      for (size_t i = 0; i < num_words; i++) {
-        data[r2].set(i, data[r2].get(i) ^ data[r1].get(i));
-      }
+      data[r2] = data[r1] ^ data[r2];
     }
 
     void append_row(const std::vector<bool>& row) {
@@ -249,11 +308,6 @@ class BinaryMatrix {
       *this = transpose();
     }
     
-    bool operator[](const size_t i, const size_t j) const {
-      return get(i, j);
-    }
-
-
   private:
     size_t num_rows;
     size_t num_cols;

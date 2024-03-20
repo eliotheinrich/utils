@@ -24,13 +24,16 @@ bool test_solve_linear_system() {
   if (x != correct) {
     return false;
   }
+
+  return true;
 }
 
 bool test_binary_polynomial() {
   BinaryPolynomial poly(5);
   poly.add_term(1, 2);
   poly.add_term(1);
-  poly.add_term({});
+  auto inds = std::vector<size_t>{};
+  poly.add_term(inds);
 
   std::cout << poly.to_string() << std::endl;
 

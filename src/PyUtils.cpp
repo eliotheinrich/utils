@@ -144,7 +144,6 @@ NB_MODULE(pyqtools_bindings, m) {
     .def(nanobind::init<uint32_t>())
     .def("system_size", &QuantumCHPState::system_size)
     .def("__str__", &QuantumCHPState::to_string)
-    //.def("h", &QuantumCHPState::h_gate)
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
     .def("s", [](QuantumCHPState& self, uint32_t q) { self.s(q); })
     .def("sd", [](QuantumCHPState& self, uint32_t q) { self.sd(q); })
