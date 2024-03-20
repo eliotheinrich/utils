@@ -18,8 +18,8 @@ set(PFFFT_DIR $ENV{PFFFT_DIR})
 find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
-set(BLAS_DIR $ENV{BLAS_PATH})
-set(LAPACK_DIR $ENV{LAPACK_PATH})
+set(BLAS_DIR $ENV{BLAS_DIR})
+set(LAPACK_DIR $ENV{LAPACK_DIR})
 set(LAPACKBLAS gfortran lapack openblas)
 set(LAPACKBLAS_DIR ${LAPACK_DIR} ${BLAS_DIR})
 
