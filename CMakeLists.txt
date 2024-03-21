@@ -25,7 +25,7 @@ set(LAPACKBLAS_DIR ${LAPACK_DIR} ${BLAS_DIR})
 
 set(ITENSOR_DIR $ENV{ITENSOR_DIR})
 
-link_directories(${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
+set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
 
 # -------------------------------- #
 # ------ Fetching externals ------ #
@@ -80,6 +80,8 @@ add_subdirectory(${QUANTUMSTATE_DIR})
 add_subdirectory(${MONTECARLO_DIR})
 add_subdirectory(${MISC_DIR})
 add_subdirectory(${TEST_DIR})
+
+target_link_directories(quantum_state PUBLIC ${EXTERNAL_DIRS})
 
 if (BUILDING_PYQTOOLS)
     find_package(Python 3.10 
