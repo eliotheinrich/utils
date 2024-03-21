@@ -190,7 +190,7 @@ class PauliString {
             } else if (s == "X") {
                 g << 0, 1, 1, 0;
             } else if (s == "Y") {
-                g << 0, -1j, 1j, 0;
+                g << 0, std::complex<double>(0.0, -1.0), std::complex<double>(0.0, 1.0), 0;
             } else {
                 g << 1, 0, 0, -1;
             }

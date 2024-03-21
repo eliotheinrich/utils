@@ -4,7 +4,7 @@ add_library(clifford_state
 	QuantumCHPState.hpp
 	QuantumGraphState.cpp
 )
-target_link_libraries(clifford_state PRIVATE graph samplers quantum_state)
+target_link_libraries(clifford_state PRIVATE samplers quantum_state)
 set_target_properties(clifford_state PROPERTIES 
     LINKER_LANGUAGE CXX 
     POSITION_INDEPENDENT_CODE ON

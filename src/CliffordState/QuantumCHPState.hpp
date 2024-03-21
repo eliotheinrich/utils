@@ -48,7 +48,7 @@ class QuantumCHPState : public CliffordState {
       return !(tableau == other.tableau);
     }
 
-    std::string to_string() const {
+    virtual std::string to_string() const override {
       return tableau.to_string();
     }
 

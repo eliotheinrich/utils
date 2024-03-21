@@ -135,8 +135,8 @@ QuantumCHPState QuantumGraphState::to_chp() const {
 
 Statevector QuantumGraphState::to_statevector() const {
   Eigen::Matrix2cd H; H << 1, 1, 1, -1; H = H/std::sqrt(2);
-  Eigen::Matrix2cd sqrtmX; sqrtmX << 1 - 1j, 1 + 1j, 1 + 1j, 1 - 1j; sqrtmX = sqrtmX/2;
-  Eigen::Matrix2cd sqrtZ; sqrtZ << 1, 0, 0, 1j;
+  Eigen::Matrix2cd sqrtmX; sqrtmX << std::complex<double>(1.0, -1.0), std::complex<double>(1.0, 1.0), std::complex<double>(1.0, 1.0), std::complex<double>(1.0, -1.0); sqrtmX = sqrtmX/2;
+  Eigen::Matrix2cd sqrtZ; sqrtZ << 1, 0, 0, std::complex<double>(0.0, 1.0);
   Eigen::Matrix4cd CZ; CZ << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1;
 
   uint32_t num_qubits = system_size();

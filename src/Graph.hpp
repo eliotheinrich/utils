@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <iterator>
 #include <set>
 #include <map>
 #include <assert.h>

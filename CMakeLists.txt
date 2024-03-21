@@ -18,14 +18,14 @@ set(PFFFT_DIR $ENV{PFFFT_DIR})
 find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
-set(BLAS_DIR $ENV{BLAS_PATH})
-set(LAPACK_DIR $ENV{LAPACK_PATH})
-set(LAPACKBLAS gfortran lapack openblas)
+set(BLAS_DIR $ENV{BLAS_DIR})
+set(LAPACK_DIR $ENV{LAPACK_DIR})
+set(LAPACKBLAS lapack openblas)
 set(LAPACKBLAS_DIR ${LAPACK_DIR} ${BLAS_DIR})
 
 set(ITENSOR_DIR $ENV{ITENSOR_DIR})
-add_library(itensor STATIC IMPORTED)
-set_target_properties(itensor PROPERTIES IMPORTED_LOCATION ${ITENSOR_DIR}/lib/libitensor.a)
+
+link_directories(${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
 
 # -------------------------------- #
 # ------ Fetching externals ------ #
@@ -62,18 +62,10 @@ include_directories(
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src
-)
-
-add_library(graph
-    src/Graph.hpp
+    src
 )
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-set_target_properties(graph PROPERTIES 
-    LINKER_LANGUAGE CXX 
-    POSITION_INDEPENDENT_CODE ON
-)
 
 set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/src/CliffordState)
 set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/src/QuantumState)

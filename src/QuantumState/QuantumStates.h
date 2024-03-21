@@ -88,8 +88,6 @@ class QuantumState : public EntropyState {
 		uint32_t num_qubits;
 		uint32_t basis;
 
-		virtual ~QuantumState() = default;
-
 		QuantumState() = default;
 
 		QuantumState(uint32_t num_qubits, int s=-1) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {
@@ -289,11 +287,11 @@ class UnitaryState : public QuantumState {
 
 		UnitaryState(uint32_t num_qubits);
 
-		std::string to_string() const;
+		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override;
 
-		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits);
+		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate) override;
 
@@ -301,7 +299,7 @@ class UnitaryState : public QuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
-		virtual bool measure(uint32_t q) {
+		virtual bool measure(uint32_t q) override {
 			throw std::invalid_argument("Cannot perform measurement on UnitaryState.");
 		}
 
