@@ -109,8 +109,3 @@ if (BUILDING_PYQTOOLS)
         LIBRARY DESTINATION pyqtools
     )
 endif()
-
-
-
-
-
