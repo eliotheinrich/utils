@@ -1,23 +1,26 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <stdexcept>
-#include <cstdint>
+#include "BinaryMatrixBase.hpp"
+
 #define binary_word uint32_t
+
+constexpr uint32_t binary_word_size() {
+  return 8*sizeof(static_cast<binary_word>(0));
+}
+
 
 struct Bitstring {
   std::vector<binary_word> bits;
   uint32_t num_bits;
 
   Bitstring(size_t num_bits) : num_bits(num_bits) {
-    bits = std::vector<binary_word>(num_bits / 32u + 1);
+    bits = std::vector<binary_word>(num_bits / binary_word_size() + 1);
   }
 
   Bitstring(const std::vector<binary_word>& bits, uint32_t num_bits) : bits(bits), num_bits(num_bits) {}
 
   Bitstring(const std::vector<bool>& bits_bool) : num_bits(bits_bool.size()) {
-    size_t num_words = bits_bool.size() / 32u + 1;
+    size_t num_words = bits_bool.size() / binary_word_size() + 1;
     bits = std::vector<binary_word>(num_words);
     for (size_t i = 0; i < bits_bool.size(); i++) {
       set(i, bits_bool[i]);
@@ -41,7 +44,7 @@ struct Bitstring {
   Bitstring(const Bitstring& bitstring) : Bitstring(bitstring.bits, bitstring.num_bits) {}
 
   static Bitstring random(uint32_t num_bits, std::minstd_rand& rng) {
-    size_t num_words = num_bits / 32u + 1;
+    size_t num_words = num_bits / binary_word_size() + 1;
     std::vector<binary_word> bits(num_words);
     for (size_t i = 0; i < bits.size(); i++) {
       bits[i] = rng();
@@ -64,8 +67,8 @@ struct Bitstring {
       throw std::invalid_argument("Invalid bit index.");
     }
 
-    size_t word_ind = i / 32u;
-    size_t bit_ind = i % 32u;
+    size_t word_ind = i / binary_word_size();
+    size_t bit_ind = i % binary_word_size();
     bits[word_ind] = (bits[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
   }
 
@@ -74,8 +77,8 @@ struct Bitstring {
       throw std::invalid_argument("Invalid bit index.");
     }
 
-    size_t word_ind = i / 32u;
-    size_t bit_ind = i % 32u;
+    size_t word_ind = i / binary_word_size();
+    size_t bit_ind = i % binary_word_size();
     return static_cast<bool>((bits[word_ind] >> bit_ind) & 1u);
   }
 
@@ -102,22 +105,19 @@ struct Bitstring {
   }
 };
 
-class BinaryMatrix {
+class BinaryMatrix : public BinaryMatrixBase {
   public:
-    BinaryMatrix(size_t num_rows, size_t num_cols) : num_rows(num_rows), num_cols(num_cols), num_words(num_cols / 32u + 1) {
+    BinaryMatrix(size_t num_rows, size_t num_cols) : BinaryMatrixBase(num_rows, num_cols), num_words(num_cols / binary_word_size() + 1) {
       data = std::vector<Bitstring>(num_rows, Bitstring(num_cols));
     }
 
     BinaryMatrix() : BinaryMatrix(0, 0) {}
 
-    BinaryMatrix(const std::vector<Bitstring>& data) : data(data) {
-      num_rows = data.size();
+    BinaryMatrix(const std::vector<Bitstring>& data) : BinaryMatrixBase(data.size(), BinaryMatrix::extract_num_cols(data)), data(data) {
       if (num_rows == 0) {
         num_words = 0;
-        num_cols = 0;
       } else {
-        num_cols = data[0].num_bits;
-        num_words = num_cols / 32u + 1;
+        num_words = num_cols / binary_word_size() + 1;
         for (size_t i = 1; i < num_rows; i++) {
           if (data[i].num_bits != num_cols) {
             throw std::invalid_argument("Provided data is ragged!");
@@ -127,160 +127,43 @@ class BinaryMatrix {
     }
 
     BinaryMatrix(const std::vector<Bitstring>& data, size_t num_cols) : BinaryMatrix(data) {
-      if ((num_words - 1)*32u > num_cols || num_cols > num_words*32u) {
+      if ((num_words - 1)*binary_word_size() > num_cols || num_cols > num_words*binary_word_size()) {
         throw std::invalid_argument("Provided number of columns is not valid for the data.");
       }
 
       this->num_cols = num_cols;
     }
 
-    std::string to_string() const {
-      std::string s;
-      for (size_t i = 0; i < num_rows; i++) {
-        if (i != 0) {
-          s += " "; 
-        }
-        s += "[ ";
-        for (size_t j = 0; j < num_cols; j++) {
-          s += std::to_string(static_cast<uint8_t>(get(i, j))) + " ";
-        }
-        s += "]";
-        if (i != num_rows - 1) {
-          s += ",\n";
-        }
-      }
-
-      return "[" + s + "]";
-    }
-
-    void rref() {
-      size_t c = 0;
-      size_t i = 0;
-      while (c < num_cols) {
-        size_t r = i;
-
-        bool found_pivot = false;
-        while (r < num_rows) {
-          if (get(r, c)) {
-            found_pivot = true;
-            break;
-          }
-          r++;
-        }
-
-        if (found_pivot) {
-          swap_rows(r, i);
-          for (size_t ri = 0; ri < num_rows; ri++) {
-            if (ri != i && get(ri, c)) {
-              add_rows(i, ri);
-            }
-          }
-          i++;
-        }
-        c++;
-      }
-    }
-
-    uint32_t rank(bool inplace=false) {
-      BinaryMatrix copy;
-      BinaryMatrix& M = inplace ? *this : copy;
-
-      if (!inplace) {
-        copy = BinaryMatrix(data);
-        M = copy;
-      }
-
-      M.rref();
-      uint32_t r = 0;
+    virtual void transpose() override {
+      std::vector<Bitstring> data_new(num_rows, Bitstring(num_cols));
       for (size_t i = 0; i < num_rows; i++) {
         for (size_t j = 0; j < num_cols; j++) {
-          if (M.data[i].get(j)) {
-            r++;
-            break;
-          }
-        }
-      }
-      
-      return r;
-    }
-
-    std::vector<bool> multiply(const std::vector<bool>& v) const {
-      std::vector<bool> result(num_rows);
-
-      if (v.size() != num_cols) {
-        throw std::invalid_argument("Dimension mismatch in BinaryMatrix multiply.");
-      }
-
-      for (size_t i = 0; i < num_rows; i++) {
-        result[i] = false;
-        for (size_t j = 0; j < num_cols; j++) {
-          result[i] = result[i] ^ (get(i, j) && v[j]);
+          data_new[j].set(i, get(i, j));
         }
       }
 
-      return result;
+      data = data_new;
+      std::swap(num_rows, num_cols);
     }
 
-    std::vector<bool> solve_linear_system(const std::vector<bool>& v) {
-      BinaryMatrix copy(*this);
-      copy.append_col(v);
-      copy.rref();
-
-      std::vector<bool> solution(num_rows);
-      for (size_t i = 0; i < num_rows; i++) {
-        for (size_t j = 0; j < num_cols; j++) {
-          if (copy.get(i, j)) {
-            solution[j] = copy.get(i, num_cols);
-            break;
-          }
-        }
-      }
-
-      return solution;
-    }
-
-    bool in_col_space(const std::vector<bool>& v) const {
-      return transpose().in_row_space(v);
-    }
-
-    bool in_row_space(const std::vector<bool>& v) const {
-      BinaryMatrix copy(data);
-      uint32_t r1 = copy.rank();
-      copy.append_row(v);
-      uint32_t r2 = copy.rank();
-
-      return r1 == r2;
-    }
-
-    BinaryMatrix transpose() const {
-      BinaryMatrix copy(num_cols, num_rows);
-      for (size_t i = 0; i < num_rows; i++) {
-        for (size_t j = 0; j < num_cols; j++) {
-          copy.set(j, i, get(i, j));
-        }
-      }
-      
-      return copy;
-    }
-
-    inline bool get(size_t i, size_t j) const {
+    virtual bool get(size_t i, size_t j) const override {
       return data[i].get(j);
     }
 
-    inline void set(size_t i, size_t j, bool v) {
+    virtual void set(size_t i, size_t j, bool v) override {
       data[i].set(j, v);
     }
 
-    void swap_rows(size_t r1, size_t r2) {
+    virtual void swap_rows(size_t r1, size_t r2) override {
       std::swap(data[r1], data[r2]);
     }
 
-    void add_rows(size_t r1, size_t r2) {
+    virtual void add_rows(size_t r1, size_t r2) override {
       data[r2] = data[r1] ^ data[r2];
     }
 
-    void append_row(const std::vector<bool>& row) {
-      size_t row_num_words = row.size() / 32u + 1;
+    virtual void append_row(const std::vector<bool>& row) override {
+      size_t row_num_words = row.size() / binary_word_size() + 1;
       if (row_num_words != num_words) {
         throw std::invalid_argument("Invalid row length.");
       }
@@ -288,29 +171,29 @@ class BinaryMatrix {
       std::vector<binary_word> row_words(row_num_words);
 
       for (size_t i = 0; i < row.size(); i++) {
-        size_t word_ind = i / 32u;
-        size_t bit_ind = i % 32u;
+        size_t word_ind = i / binary_word_size();
+        size_t bit_ind = i % binary_word_size();
         row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
       }
-      
+
       num_rows++;
       data.push_back(Bitstring(row_words, num_cols));
     }
 
-    void append_col(const std::vector<bool>& col) {
-      if (col.size() != data.size()) {
-        throw std::invalid_argument("Invalid column length.");
-      }
-      
-      // Could be optimized...
-      *this = transpose();
-      append_row(col);
-      *this = transpose();
+    virtual std::unique_ptr<BinaryMatrixBase> clone() const override {
+      return std::make_unique<BinaryMatrix>(data);
     }
     
   private:
-    size_t num_rows;
-    size_t num_cols;
+    static size_t extract_num_cols(const std::vector<Bitstring>& data) {
+      size_t num_rows = data.size();
+      if (num_rows == 0) {
+        return 0;
+      } else {
+        return data[0].num_bits;
+      }
+    }
+
     size_t num_words;
     std::vector<Bitstring> data;
 };
