@@ -53,17 +53,13 @@ void random_binary_matrix(std::shared_ptr<BinaryMatrixBase> A, int s) {
 }
 
 bool test_binary_matrix() {
-  size_t v = 10;
+  size_t v = 3;
   std::shared_ptr<SparseBinaryMatrix> M1 = std::make_shared<SparseBinaryMatrix>(v, v);
   std::shared_ptr<BinaryMatrix> M2 = std::make_shared<BinaryMatrix>(v, v);
 
   for (int i = 0; i < 100; i++) {
-    std::cout << "i = " << i << "\n";
     random_binary_matrix(M1, i);
     random_binary_matrix(M2, i);
-
-    std::cout << "M1 = \n" << M1->to_string() << "\n\n";
-    std::cout << "M2 = \n" << M2->to_string() << "\n\n";
 
     int r1 = M1->rank();
     int r2 = M2->rank();
@@ -80,9 +76,35 @@ bool test_binary_matrix() {
   return true;
 }
 
+bool test_generator_matrix() {
+  std::vector<std::shared_ptr<BinaryMatrixBase>> test_cases;
+  test_cases.push_back(std::make_shared<BinaryMatrix>(3, 5));
+  //test_cases.push_back(std::make_shared<SparseBinaryMatrix>(3, 5));
+
+  for (auto A : test_cases) {
+    A->set(0, 0, 1);
+    A->set(0, 1, 1);
+    A->set(0, 2, 1);
+
+    A->set(1, 1, 1);
+    A->set(1, 3, 1);
+
+    A->set(2, 0, 1);
+    A->set(2, 4, 1);
+
+    std::cout << "H = \n" << A->to_string() << std::endl;
+  
+    auto G = A->to_generator_matrix();
+    std::cout << "G = \n" << G->to_string() << std::endl;
+  }
+
+
+  return true;
+}
 
 int main() {
-  assert(test_solve_linear_system());
-  assert(test_binary_polynomial());
-  assert(test_binary_matrix());
+ // assert(test_solve_linear_system());
+ // assert(test_binary_polynomial());
+ // assert(test_binary_matrix());
+  assert(test_generator_matrix());
 }

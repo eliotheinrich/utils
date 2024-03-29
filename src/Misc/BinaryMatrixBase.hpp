@@ -1,18 +1,20 @@
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <stdexcept>
 #include <cstdint>
 #include <memory>
 #include <random>
-#include <optional>
 
 class BinaryMatrixBase {
   public:
     uint32_t num_rows;
     uint32_t num_cols;
     BinaryMatrixBase(uint32_t num_rows, uint32_t num_cols) : num_rows(num_rows), num_cols(num_cols) {}
+
+    virtual ~BinaryMatrixBase()=default;
 
     virtual std::string to_string() const {
       std::string s;
@@ -34,15 +36,24 @@ class BinaryMatrixBase {
     }
 
 
-    virtual void rref() {
+    virtual std::vector<std::pair<size_t, size_t>> rref() {
+      std::vector<size_t> sites(num_cols);
+      std::iota(sites.begin(), sites.end(), 0);
+      return partial_rref(sites);
+    }
+
+    virtual std::vector<std::pair<size_t, size_t>> partial_rref(const std::vector<size_t>& sites) {
+      std::vector<std::pair<size_t, size_t>> pivots;
+
       size_t c = 0;
       size_t i = 0;
-      while (c < num_cols) {
+      while (c < sites.size()) {
+        size_t ci = sites[c];
         size_t r = i;
 
         bool found_pivot = false;
         while (r < num_rows) {
-          if (get(r, c)) {
+          if (get(r, ci)) {
             found_pivot = true;
             break;
           }
@@ -50,9 +61,12 @@ class BinaryMatrixBase {
         }
 
         if (found_pivot) {
-          swap_rows(r, i);
+          if (r != i) {
+            swap_rows(r, i);
+            pivots.push_back({r, i});
+          }
           for (size_t ri = 0; ri < num_rows; ri++) {
-            if (ri != i && get(ri, c)) {
+            if (ri != i && get(ri, ci)) {
               add_rows(i, ri);
             }
           }
@@ -60,14 +74,42 @@ class BinaryMatrixBase {
         }
         c++;
       }
+      
+      return pivots;
     }
 
-    virtual uint32_t rank(std::optional<BinaryMatrixBase*> A = std::nullopt) {
+   virtual std::unique_ptr<BinaryMatrixBase> to_generator_matrix(bool inplace=false) {
+      throw std::invalid_argument("to_generator_matrix is not implemented for this BinaryMatrix type.");
+    }
+
+    virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const=0;
+
+    virtual std::vector<bool> get_row(size_t r) const {
+      std::vector<bool> row(num_cols);
+      for (size_t i = 0; i < num_cols; i++) {
+        row[i] = get(r, i);
+      }
+      
+      return row;
+    }
+
+    virtual std::vector<bool> get_col(size_t c) const {
+      std::vector<bool> col(num_rows);
+      for (size_t i = 0; i < num_rows; i++) {
+        col[i] = get(i, c);
+      }
+
+      return col;
+    }
+
+    virtual uint32_t rank(bool inplace=false) {
       BinaryMatrixBase* workspace;
-      if (A.has_value()) {
-        workspace = A.value();
-      } else {
+      std::unique_ptr<BinaryMatrixBase> dummy;
+      if (inplace) {
         workspace = this;
+      } else {
+        dummy = clone();
+        workspace = dummy.get();
       }
 
       workspace->rref();
@@ -84,7 +126,7 @@ class BinaryMatrixBase {
       return r;
     }
 
-    std::vector<bool> multiply(const std::vector<bool>& v) const {
+    virtual std::vector<bool> multiply(const std::vector<bool>& v) const {
       std::vector<bool> result(num_rows);
 
       if (v.size() != num_cols) {

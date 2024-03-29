@@ -99,4 +99,21 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
       inds = new_inds;
       std::swap(num_rows, num_cols);
     }
+
+    virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const override {
+      if (r2 < r1 || c2 < c1) {
+        throw std::invalid_argument("Invalid slice indices.");
+      }
+
+      std::unique_ptr<SparseBinaryMatrix> A = std::make_unique<SparseBinaryMatrix>(r2 - r1, c2 - c1);
+      for (size_t r = r1; r < r2; r++) {
+        for (auto const& c : inds[r]) {
+          if (c >= c1 && c < c2) {
+            A->set(r - r1, c - c1, 1);
+          }
+        }
+      }
+
+      return A;
+    }
 };
