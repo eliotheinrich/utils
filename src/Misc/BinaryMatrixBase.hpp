@@ -82,6 +82,10 @@ class BinaryMatrixBase {
       throw std::invalid_argument("to_generator_matrix is not implemented for this BinaryMatrix type.");
     }
 
+   virtual std::unique_ptr<BinaryMatrixBase> to_parity_check_matrix(bool inplace=false) {
+      throw std::invalid_argument("to_parity_check_matrix is not implemented for this BinaryMatrix type.");
+    }
+
     virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const=0;
 
     virtual std::vector<bool> get_row(size_t r) const {

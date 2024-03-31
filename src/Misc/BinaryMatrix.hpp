@@ -188,6 +188,16 @@ class BinaryMatrix : public BinaryMatrixBase {
       data.push_back(Bitstring(row_words, num_cols));
     }
 
+    void append_row(const Bitstring& row) {
+      size_t row_num_bits = row.num_bits;
+      if (row_num_bits != num_cols) {
+        throw std::invalid_argument("Invalid row length.");
+      }
+
+      num_rows++;
+      data.push_back(row);
+    }
+
     virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const override {
       if (r2 < r1 || c2 < c1) {
         throw std::invalid_argument("Invalid slice indices.");
@@ -221,16 +231,12 @@ class BinaryMatrix : public BinaryMatrixBase {
 
       size_t k = num_cols - num_rows;
 
-      //std::cout << "Before partial rref: \n" << workspace.to_string() << "\n\n";
       std::vector<size_t> sites(num_rows);
       std::iota(sites.begin(), sites.end(), k);
       workspace.partial_rref(sites);
-      //std::cout << "After partial rref: \n" << workspace.to_string() << "\n\n";
 
       std::unique_ptr<BinaryMatrixBase> A_ptr = workspace.slice(0, num_rows, 0, k);
       BinaryMatrix* A = dynamic_cast<BinaryMatrix*>(A_ptr.get());
-
-      //std::cout << "A = \n" << A->to_string() << "\n\n";
 
       std::unique_ptr<BinaryMatrix> G = std::make_unique<BinaryMatrix>(num_cols, k);
       for (size_t i = 0; i < k; i++) {
@@ -241,11 +247,32 @@ class BinaryMatrix : public BinaryMatrixBase {
         G->data[i] = A->data[i - k];
       }
 
-      //auto K = multiply(*G);
-      //std::cout << "H * G.T = \n" << K.to_string() << std::endl;
-
       G->transpose();
       return G;
+    }
+
+    virtual std::unique_ptr<BinaryMatrixBase> to_parity_check_matrix(bool inplace=false) override {
+      BinaryMatrix workspace;
+      if (inplace) {
+        workspace = *this;
+      } else {
+        workspace = BinaryMatrix(*this);
+      }
+
+      std::vector<size_t> sites(num_rows);
+      std::iota(sites.begin(), sites.end(), 0);
+      workspace.partial_rref(sites);
+
+      std::unique_ptr<BinaryMatrixBase> A = workspace.slice(0, num_rows, num_rows, num_cols);
+      BinaryMatrix* At = dynamic_cast<BinaryMatrix*>(A.get());
+
+      BinaryMatrix I = BinaryMatrix::identity(num_cols - num_rows);
+      for (size_t i = 0; i < num_cols - num_rows; i++) {
+        At->append_row(I.data[i]);
+      }
+
+      A->transpose();
+      return A;
     }
 
     BinaryMatrix multiply(const BinaryMatrix& other) const {

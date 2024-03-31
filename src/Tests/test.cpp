@@ -1,6 +1,7 @@
 #include "BinaryMatrix.hpp"
 #include "SparseBinaryMatrix.hpp"
 #include "BinaryPolynomial.hpp"
+#include "Graph.hpp"
 #include <iostream>
 #include <cassert>
 
@@ -76,6 +77,21 @@ bool test_binary_matrix() {
   return true;
 }
 
+BinaryMatrix generate_random_interaction_matrix(size_t n, double p) {
+  Graph<int> g = Graph<int>::erdos_renyi_graph(n, p);
+  BinaryMatrix A(n, n);
+
+  for (size_t a = 0; a < g.num_vertices; a++) {
+    A.set(a, a, 1);
+    for (auto const& [i, _] : g.edges[a]) {
+      A.set(a, i, 1);
+    }
+  }
+
+  return A;
+}
+
+
 bool test_generator_matrix() {
   std::vector<std::shared_ptr<BinaryMatrixBase>> test_cases;
   test_cases.push_back(std::make_shared<BinaryMatrix>(3, 5));
@@ -92,10 +108,12 @@ bool test_generator_matrix() {
     A->set(2, 0, 1);
     A->set(2, 4, 1);
 
-    std::cout << "H = \n" << A->to_string() << std::endl;
   
     auto G = A->to_generator_matrix();
+    auto H = G->to_parity_check_matrix();
+    std::cout << "A = \n" << A->to_string() << std::endl;
     std::cout << "G = \n" << G->to_string() << std::endl;
+    std::cout << "H = \n" << H->to_string() << std::endl;
   }
 
 
@@ -103,8 +121,11 @@ bool test_generator_matrix() {
 }
 
 int main() {
- // assert(test_solve_linear_system());
- // assert(test_binary_polynomial());
- // assert(test_binary_matrix());
+  assert(test_solve_linear_system());
+  assert(test_binary_polynomial());
+  assert(test_binary_matrix());
   assert(test_generator_matrix());
+
+  //auto A = generate_random_interaction_matrix(5, 0.2);
+  //std::cout << "A = \n" << A.to_string() << "\n";
 }
