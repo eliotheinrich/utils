@@ -35,13 +35,18 @@ include(FetchContent)
 
 set(EXTERNALS "")
 
-FetchContent_Declare(
-    dataframe
-    GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
-    GIT_TAG master
-    GIT_SHALLOW TRUE
-)
-list(APPEND EXTERNALS dataframe)
+if (DEFINED DATAFRAME_SOURCE)
+    set(dataframe_SOURCE_DIR ${DATAFRAME_SOURCE})
+    add_subdirectory(${DATAFRAME_SOURCE} "dataframe_src")
+else()
+    FetchContent_Declare(
+        dataframe
+        GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+    )
+    list(APPEND EXTERNALS dataframe)
+endif()
 
 FetchContent_Declare(
     eigen
@@ -75,10 +80,10 @@ set(MISC_DIR ${PROJECT_SOURCE_DIR}/src/Misc)
 set(TEST_DIR ${PROJECT_SOURCE_DIR}/src/Tests)
 
 add_subdirectory(${CLIFFORD_DIR})
-add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${QUANTUMSTATE_DIR})
 add_subdirectory(${MONTECARLO_DIR})
 add_subdirectory(${MISC_DIR})
+add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${TEST_DIR})
 
 target_link_directories(quantum_state PUBLIC ${EXTERNAL_DIRS})
@@ -104,7 +109,7 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state)
+    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code)
 
     install(
         TARGETS pyqtools_bindings

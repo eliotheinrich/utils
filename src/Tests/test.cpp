@@ -1,5 +1,6 @@
 #include "BinaryMatrix.hpp"
 #include "SparseBinaryMatrix.hpp"
+#include "LinearCode.h"
 #include "BinaryPolynomial.hpp"
 #include "Graph.hpp"
 #include <iostream>
@@ -77,45 +78,88 @@ bool test_binary_matrix() {
   return true;
 }
 
-BinaryMatrix generate_random_interaction_matrix(size_t n, double p) {
-  Graph<int> g = Graph<int>::erdos_renyi_graph(n, p);
-  BinaryMatrix A(n, n);
-
-  for (size_t a = 0; a < g.num_vertices; a++) {
-    A.set(a, a, 1);
-    for (auto const& [i, _] : g.edges[a]) {
-      A.set(a, i, 1);
-    }
-  }
-
-  return A;
-}
-
-
 bool test_generator_matrix() {
-  std::vector<std::shared_ptr<BinaryMatrixBase>> test_cases;
-  test_cases.push_back(std::make_shared<BinaryMatrix>(3, 5));
+  std::vector<BinaryMatrix> test_cases;
+  test_cases.push_back(BinaryMatrix(3, 5));
   //test_cases.push_back(std::make_shared<SparseBinaryMatrix>(3, 5));
 
   for (auto A : test_cases) {
-    A->set(0, 0, 1);
-    A->set(0, 1, 1);
-    A->set(0, 2, 1);
+    A.set(0, 0, 1);
+    A.set(0, 1, 1);
+    A.set(0, 2, 1);
 
-    A->set(1, 1, 1);
-    A->set(1, 3, 1);
+    A.set(1, 1, 1);
+    A.set(1, 3, 1);
 
-    A->set(2, 0, 1);
-    A->set(2, 4, 1);
+    A.set(2, 0, 1);
+    A.set(2, 4, 1);
 
   
-    auto G = A->to_generator_matrix();
-    auto H = G->to_parity_check_matrix();
-    std::cout << "A = \n" << A->to_string() << std::endl;
-    std::cout << "G = \n" << G->to_string() << std::endl;
-    std::cout << "H = \n" << H->to_string() << std::endl;
+
+    auto G = ParityCheckMatrix(A).to_generator_matrix();
+    auto H = G.to_parity_check_matrix();
+
+    if (!(G.congruent(H) && H.congruent(G))) {
+      std::cout << "A = \n" << A.to_string() << std::endl;
+      std::cout << "G = \n" << G.to_string() << std::endl;
+      std::cout << "H = \n" << H.to_string() << std::endl;
+      return false;
+    }
   }
 
+  return true;
+}
+
+bool test_random_regular_graph() {
+  for (size_t n = 3; n < 10; n++) {
+    for (size_t k = 1; k < n/2; k++) {
+      if (n * k % 2) {
+        // Algorithm not defined in this case
+        continue;
+      }
+
+      Graph<int, int> g = Graph<int, int>::random_regular_graph(n, k);
+      for (size_t j = 0; j < g.num_vertices; j++) {
+        if (g.degree(j) != k) {
+          std::cout << "Degree violation.\n";
+          std::cout << g.to_string() << std::endl;
+          return false;
+        }
+
+        if (g.contains_edge(j, j)) {
+          std::cout << "Edge violation.\n";
+          std::cout << g.to_string() << std::endl;
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+bool test_parity_check_reduction() {
+  size_t num_runs = 100;
+  thread_local std::random_device rd;
+  std::minstd_rand rng(rd());
+  for (size_t i = 0; i < num_runs; i++) {
+    size_t num_cols = rng() % 20;
+    size_t num_rows = num_cols + 5;
+    ParityCheckMatrix P(0, num_cols);
+
+    for (size_t j = 0; j < num_rows; j++) {
+      Bitstring b = Bitstring::random(num_cols, rng);
+      P.append_row(b);
+    }
+
+    uint32_t rank = P.rank();
+    P.reduce();
+
+    if (rank != P.num_rows) {
+      std::cout << P.to_string() << std::endl;
+      return false;
+    }
+  }
 
   return true;
 }
@@ -125,7 +169,6 @@ int main() {
   assert(test_binary_polynomial());
   assert(test_binary_matrix());
   assert(test_generator_matrix());
-
-  //auto A = generate_random_interaction_matrix(5, 0.2);
-  //std::cout << "A = \n" << A.to_string() << "\n";
+  assert(test_random_regular_graph());
+  assert(test_parity_check_reduction());
 }

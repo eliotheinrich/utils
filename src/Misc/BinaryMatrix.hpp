@@ -198,6 +198,17 @@ class BinaryMatrix : public BinaryMatrixBase {
       data.push_back(row);
     }
 
+    virtual void remove_row(size_t r) override {
+      if (r >= num_rows) {
+        std::string error_message = "Cannot delete " + std::to_string(r) + "; outside of range.";
+        throw std::invalid_argument(error_message);
+      }
+
+      data.erase(data.begin() + r);
+      num_rows--;
+    }
+
+
     virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const override {
       if (r2 < r1 || c2 < c1) {
         throw std::invalid_argument("Invalid slice indices.");
@@ -215,64 +226,6 @@ class BinaryMatrix : public BinaryMatrixBase {
 
     virtual std::unique_ptr<BinaryMatrixBase> clone() const override {
       return std::make_unique<BinaryMatrix>(data);
-    }
-
-    virtual std::unique_ptr<BinaryMatrixBase> to_generator_matrix(bool inplace=false) override {
-      BinaryMatrix workspace;
-      if (inplace) {
-        workspace = *this;
-      } else {
-        workspace = BinaryMatrix(*this);
-      }
-
-      if (num_cols <= num_rows) {
-        throw std::invalid_argument("Invalid parity check matrix.");
-      }
-
-      size_t k = num_cols - num_rows;
-
-      std::vector<size_t> sites(num_rows);
-      std::iota(sites.begin(), sites.end(), k);
-      workspace.partial_rref(sites);
-
-      std::unique_ptr<BinaryMatrixBase> A_ptr = workspace.slice(0, num_rows, 0, k);
-      BinaryMatrix* A = dynamic_cast<BinaryMatrix*>(A_ptr.get());
-
-      std::unique_ptr<BinaryMatrix> G = std::make_unique<BinaryMatrix>(num_cols, k);
-      for (size_t i = 0; i < k; i++) {
-        G->set(i, i, 1);
-      }
-
-      for (size_t i = k; i < num_cols; i++) {
-        G->data[i] = A->data[i - k];
-      }
-
-      G->transpose();
-      return G;
-    }
-
-    virtual std::unique_ptr<BinaryMatrixBase> to_parity_check_matrix(bool inplace=false) override {
-      BinaryMatrix workspace;
-      if (inplace) {
-        workspace = *this;
-      } else {
-        workspace = BinaryMatrix(*this);
-      }
-
-      std::vector<size_t> sites(num_rows);
-      std::iota(sites.begin(), sites.end(), 0);
-      workspace.partial_rref(sites);
-
-      std::unique_ptr<BinaryMatrixBase> A = workspace.slice(0, num_rows, num_rows, num_cols);
-      BinaryMatrix* At = dynamic_cast<BinaryMatrix*>(A.get());
-
-      BinaryMatrix I = BinaryMatrix::identity(num_cols - num_rows);
-      for (size_t i = 0; i < num_cols - num_rows; i++) {
-        At->append_row(I.data[i]);
-      }
-
-      A->transpose();
-      return A;
     }
 
     BinaryMatrix multiply(const BinaryMatrix& other) const {
@@ -295,7 +248,10 @@ class BinaryMatrix : public BinaryMatrixBase {
       return A;
     }
 
-  private:
+    std::vector<Bitstring> data;
+
+
+  protected:
     size_t num_words() const {
       return num_cols / binary_word_size() + 1;
     }
@@ -308,6 +264,4 @@ class BinaryMatrix : public BinaryMatrixBase {
         return data[0].num_bits;
       }
     }
-
-    std::vector<Bitstring> data;
 };

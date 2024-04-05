@@ -83,6 +83,16 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
       num_rows++;
     }
 
+    virtual void remove_row(size_t r) override {
+      if (r >= num_rows) {
+        std::string error_message = "Cannot delete " + std::to_string(r) + "; outside of range.";
+        throw std::invalid_argument(error_message);
+      }
+
+      inds.erase(inds.begin() + r);
+      num_rows--;
+    }
+
     virtual std::unique_ptr<BinaryMatrixBase> clone() const override {
       return std::make_unique<SparseBinaryMatrix>(inds, num_cols);
     }

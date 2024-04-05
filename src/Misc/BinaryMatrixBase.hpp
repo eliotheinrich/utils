@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -78,14 +79,6 @@ class BinaryMatrixBase {
       return pivots;
     }
 
-   virtual std::unique_ptr<BinaryMatrixBase> to_generator_matrix(bool inplace=false) {
-      throw std::invalid_argument("to_generator_matrix is not implemented for this BinaryMatrix type.");
-    }
-
-   virtual std::unique_ptr<BinaryMatrixBase> to_parity_check_matrix(bool inplace=false) {
-      throw std::invalid_argument("to_parity_check_matrix is not implemented for this BinaryMatrix type.");
-    }
-
     virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const=0;
 
     virtual std::vector<bool> get_row(size_t r) const {
@@ -106,7 +99,7 @@ class BinaryMatrixBase {
       return col;
     }
 
-    virtual uint32_t rank(bool inplace=false) {
+    virtual uint32_t partial_rank(const std::vector<size_t>& sites, bool inplace=false) {
       BinaryMatrixBase* workspace;
       std::unique_ptr<BinaryMatrixBase> dummy;
       if (inplace) {
@@ -116,11 +109,11 @@ class BinaryMatrixBase {
         workspace = dummy.get();
       }
 
-      workspace->rref();
+      workspace->partial_rref(sites);
       uint32_t r = 0;
       for (size_t i = 0; i < num_rows; i++) {
-        for (size_t j = 0; j < num_cols; j++) {
-          if (workspace->get(i, j)) {
+        for (size_t j = 0; j < sites.size(); j++) {
+          if (workspace->get(i, sites[j])) {
             r++;
             break;
           }
@@ -128,6 +121,12 @@ class BinaryMatrixBase {
       }
       
       return r;
+    }
+
+    virtual uint32_t rank(bool inplace=false) {
+      std::vector<size_t> sites(num_cols);
+      std::iota(sites.begin(), sites.end(), 0);
+      return partial_rank(sites, inplace);
     }
 
     virtual std::vector<bool> multiply(const std::vector<bool>& v) const {
@@ -200,6 +199,19 @@ class BinaryMatrixBase {
       // Could be optimized...
       transpose();
       append_row(col);
+      transpose();
+    }
+
+    virtual void remove_row(size_t r)=0;
+
+    virtual void remove_col(size_t c) {
+      if (c >= num_cols) {
+        std::string error_message = "Cannot delete " + std::to_string(c) + "; outside of range.";
+        throw std::invalid_argument(error_message);
+      }
+
+      transpose();
+      remove_row(c);
       transpose();
     }
 

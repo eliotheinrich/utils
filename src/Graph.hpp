@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include <vector>
 #include <iterator>
 #include <set>
@@ -9,6 +11,7 @@
 #include <cstdint>
 #include <random>
 #include <climits>
+#include <optional>
 
 template <typename T = int, typename V = int>
 class Graph {
@@ -38,13 +41,23 @@ class Graph {
       }
     }
 
-    static Graph<T, V> erdos_renyi_graph(uint32_t num_vertices, double p) {
+    static std::minstd_rand* get_rng(std::optional<std::minstd_rand*> rng) {
+      if (rng.has_value()) {
+        return rng.value();
+      } else {
+        thread_local std::random_device rd;
+        return new std::minstd_rand(rd());
+      }
+    }
+
+    static Graph<T, V> erdos_renyi_graph(uint32_t num_vertices, double p, std::optional<std::minstd_rand*> rng_opt = std::nullopt) {
       Graph<T, V> g(num_vertices);
-      thread_local std::random_device rd;
-      thread_local std::minstd_rand r(rd());
-      for (uint32_t i = 0; i < num_vertices-1; i++) {
+
+      auto rng = *Graph::get_rng(rng_opt);
+
+      for (uint32_t i = 0; i < num_vertices; i++) {
         for (uint32_t j = i+1; j < num_vertices; j++) {
-          if (double(r())/double(RAND_MAX) < p) {
+          if (double(rng())/double(RAND_MAX) < p) {
             g.toggle_edge(i, j);
           }
         }
@@ -53,16 +66,33 @@ class Graph {
       return g;
     }
 
-    static Graph<T, V> scale_free_graph(uint32_t num_vertices, double alpha) {
+    static Graph<T, V> random_regular_graph(uint32_t num_vertices, size_t k, std::optional<std::minstd_rand*> rng_opt = std::nullopt, uint32_t max_depth=0) {
+      if (num_vertices*k % 2 == 1) {
+        throw std::invalid_argument("To generate random regular graph, num_vertices*k must be even.");
+      }
+
+      if (k >= num_vertices) {
+        throw std::invalid_argument("k must be less than num_vertices.");
+      }
+
+      Graph<T, V> buckets(num_vertices*k);
+      Graph<T, V> g(num_vertices);
+      std::vector<size_t> sites(num_vertices*k);
+      std::minstd_rand rng = *Graph::get_rng(rng_opt);
+
+      recursive_random_regular_graph(buckets, g, sites, rng, max_depth, 0);
+      return g;
+    }
+
+    static Graph<T, V> scale_free_graph(uint32_t num_vertices, double alpha, std::optional<std::minstd_rand*> rng_opt = std::nullopt) {
       Graph<T, V> g(num_vertices);
 
-      thread_local std::random_device rd;
-      thread_local std::mt19937 gen(rd());
+      auto rng = *Graph::get_rng(rng_opt);
       std::uniform_real_distribution<> dis(0.0, 1.0);
 
       std::vector<uint32_t> degrees(num_vertices);
       for (uint32_t i = 0; i < num_vertices; i++) {
-        double u = dis(gen);
+        double u = dis(rng);
         double x = std::pow(1.0 - u * (1.0 - std::pow(1.0/num_vertices, 1.0 - alpha)), 1.0 / (1.0 - alpha));
 
         degrees[i] = x * (num_vertices - 1) + 1;
@@ -87,7 +117,7 @@ class Graph {
           j++;
         }
 
-        std::shuffle(random_vertices.begin(), random_vertices.end(), gen);
+        std::shuffle(random_vertices.begin(), random_vertices.end(), rng);
 
         for (uint32_t j = 0; j < random_vertices.size(); j++) {
           g.add_edge(i, random_vertices[j]);
@@ -530,5 +560,55 @@ class Graph {
       }
 
       return double(max_cluster_size)/num_vertices;
+    }
+
+  private:
+    static void recursive_random_regular_graph(
+        Graph<T, V>& buckets, 
+        Graph<T, V>& g, 
+        std::vector<size_t>& sites, 
+        std::minstd_rand& rng, 
+        uint32_t max_depth, 
+        uint32_t depth
+      ) {
+
+      if (max_depth != 0) {
+        if (depth > max_depth) {
+          throw std::invalid_argument("Maximum depth reached.");
+        }
+      }
+
+      // Create pairs
+      buckets = Graph<T, V>(buckets.num_vertices);
+      g = Graph<T, V>(g.num_vertices);
+      std::iota(sites.begin(), sites.end(), 0);
+      std::shuffle(sites.begin(), sites.end(), rng);
+
+      for (size_t i = 0; i < sites.size()/2; i++) {
+        buckets.add_edge(sites[i], sites[i + sites.size()/2]);
+      }
+
+      size_t num_vertices = g.num_vertices;
+      size_t k = buckets.num_vertices/num_vertices;
+
+      // Collapse nodes
+      for (size_t v1 = 0; v1 < num_vertices*k; v1++) {
+        for (auto const& [v2, _] : buckets.edges[v1]) {
+          // Only consider each edge once
+          if (v2 < v1) {
+            continue;
+          }
+
+          size_t i = v1 / k;
+          size_t j = v2 / k;
+
+          if (i == j || g.contains_edge(i, j)) {
+            recursive_random_regular_graph(buckets, g, sites, rng, max_depth, depth + 1);
+            return;
+          }
+
+          g.add_edge(i, j);
+        }
+      }
     }
 };
