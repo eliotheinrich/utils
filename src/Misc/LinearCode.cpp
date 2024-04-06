@@ -44,6 +44,52 @@ GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
   return G;
 }
 
+size_t ParityCheckMatrix::degree(size_t c) const {
+  size_t n = 0;
+  for (size_t i = 0; i < num_rows; i++) {
+    if (get(i, c)) {
+      n++;
+    }
+  }
+
+  return n;
+}
+
+std::vector<std::vector<size_t>> ParityCheckMatrix::leaf_removal(size_t num_steps, std::minstd_rand& rng) const {
+  ParityCheckMatrix H(*this);
+  std::vector<std::vector<size_t>> sizes(num_steps, std::vector<size_t>(num_cols, 0u));
+
+  size_t n = 0;
+  for (; n < num_steps; n++) {
+    std::vector<size_t> leafs;
+
+    // Record sizes
+    for (size_t c = 0; c < num_cols; c++) {
+      size_t deg = degree(c);
+      if (deg == 1) {
+        leafs.push_back(c);
+      }
+
+      sizes[n][deg]++;
+    }
+
+    if (leafs.size() == 0) {
+      break;
+    }
+
+    std::shuffle(leafs.begin(), leafs.end(), rng);
+
+    H.remove_col(leafs[0]);
+  }
+
+  // Pad remaining entries
+  for (size_t i = sizes.size(); n < num_steps; n++) {
+    sizes[i] = sizes[n];
+  }
+
+  return sizes;
+}
+
 bool ParityCheckMatrix::congruent(const GeneratorMatrix& G) const {
   GeneratorMatrix copy(G);
   copy.transpose();

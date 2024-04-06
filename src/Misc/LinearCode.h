@@ -13,6 +13,8 @@ class ParityCheckMatrix : public BinaryMatrix {
 
     GeneratorMatrix to_generator_matrix(bool inplace=false);
 
+    size_t degree(size_t c) const;
+    std::vector<std::vector<size_t>> leaf_removal(size_t num_steps, std::minstd_rand& rng) const;
     bool congruent(const GeneratorMatrix& G) const;
     void reduce();
 };

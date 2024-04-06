@@ -164,6 +164,41 @@ bool test_parity_check_reduction() {
   return true;
 }
 
+bool test_leaf_removal() {
+  ParityCheckMatrix H(3, 5);
+
+  H.set(0, 0, 1);
+  H.set(0, 1, 1);
+  H.set(0, 3, 1);
+
+  H.set(1, 1, 1);
+  H.set(1, 2, 1);
+  H.set(1, 3, 1);
+
+  H.set(2, 2, 1);
+  H.set(2, 3, 1);
+  H.set(2, 4, 1);
+
+  std::minstd_rand rng(5);
+  auto result = H.leaf_removal(5, rng);
+
+  std::cout << "[";
+  for (size_t i = 0; i < result.size(); i++) {
+    auto v = result[i];
+    std::cout << "[ ";
+    for (auto c : v) {
+      std::cout << c << " ";
+    }
+    std::cout << "]";
+    if (i != result.size() - 1) {
+      std::cout << "\n";
+    }
+  }
+  std::cout << "]";
+
+  return true;
+}
+
 int main() {
   assert(test_solve_linear_system());
   assert(test_binary_polynomial());
@@ -171,4 +206,5 @@ int main() {
   assert(test_generator_matrix());
   assert(test_random_regular_graph());
   assert(test_parity_check_reduction());
+  assert(test_leaf_removal());
 }
