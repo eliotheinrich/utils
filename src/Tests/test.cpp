@@ -182,19 +182,7 @@ bool test_leaf_removal() {
   std::minstd_rand rng(5);
   auto result = H.leaf_removal(5, rng);
 
-  std::cout << "[";
-  for (size_t i = 0; i < result.size(); i++) {
-    auto v = result[i];
-    std::cout << "[ ";
-    for (auto c : v) {
-      std::cout << c << " ";
-    }
-    std::cout << "]";
-    if (i != result.size() - 1) {
-      std::cout << "\n";
-    }
-  }
-  std::cout << "]";
+  // TODO rigorous test
 
   return true;
 }

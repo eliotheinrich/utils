@@ -60,13 +60,22 @@ std::vector<std::vector<size_t>> ParityCheckMatrix::leaf_removal(size_t num_step
   std::vector<std::vector<size_t>> sizes(num_steps, std::vector<size_t>(num_cols, 0u));
 
   size_t n = 0;
+  bool keep_going = true;
   for (; n < num_steps; n++) {
+    if (!keep_going) {
+      break;
+    }
+
+    std::vector<size_t> to_remove;
     std::vector<size_t> leafs;
 
     // Record sizes
-    for (size_t c = 0; c < num_cols; c++) {
-      size_t deg = degree(c);
-      if (deg == 1) {
+    for (size_t c = 0; c < H.num_cols; c++) {
+      size_t deg = H.degree(c);
+      if (deg == 0) {
+        to_remove.push_back(c);
+        continue;
+      } else if (deg == 1) {
         leafs.push_back(c);
       }
 
@@ -74,17 +83,37 @@ std::vector<std::vector<size_t>> ParityCheckMatrix::leaf_removal(size_t num_step
     }
 
     if (leafs.size() == 0) {
-      break;
+      keep_going = false;
+    } else {
+      size_t c = leafs[rng() % leafs.size()];
+      auto it = std::upper_bound(to_remove.cbegin(), to_remove.cend(), c);
+      to_remove.insert(it, c);
+
+      // Find and remove corresponding hyperedge
+      size_t k;
+      for (size_t i = 0; i < H.num_rows; i++) {
+        if (H.get(i, c)) {
+          k = i;
+          break;
+        }
+      }
+
+      H.remove_row(k);
     }
 
-    std::shuffle(leafs.begin(), leafs.end(), rng);
+    std::reverse(to_remove.begin(), to_remove.end());
 
-    H.remove_col(leafs[0]);
+    // Remove leaf and 0-deg sites
+    H.transpose();
+    for (auto site : to_remove) {
+      H.remove_row(site);
+    }
+    H.transpose();
   }
 
   // Pad remaining entries
-  for (size_t i = sizes.size(); n < num_steps; n++) {
-    sizes[i] = sizes[n];
+  for (size_t i = n; i < num_steps; i++) {
+    sizes[i] = sizes[n-1];
   }
 
   return sizes;
@@ -181,27 +210,6 @@ uint32_t GeneratorMatrix::generator_locality(const std::vector<size_t>& sites) {
   }
 
   return partial_rank(sites) + partial_rank(sites_complement) - rank();
-}
-
-std::vector<uint32_t> GeneratorMatrix::generator_locality_samples(const std::vector<size_t>& sites) {
-  std::vector<size_t> sites_complement;
-  std::vector<bool> exists(num_cols, false);
-
-  for (size_t i = 0; i < sites.size(); i++) {
-    if (sites[i] >= num_cols) {
-      throw std::invalid_argument("Invalid site index.");
-    }
-
-    exists[sites[i]] = true;
-  }
-
-  for (size_t i = 0; i < num_cols; i++) {
-    if (!exists[i]) {
-      sites_complement.push_back(i);
-    }
-  }
-
-  return {partial_rank(sites), partial_rank(sites_complement), rank(), num_rows, num_cols};
 }
 
 bool GeneratorMatrix::congruent(const ParityCheckMatrix& H) const {
