@@ -70,6 +70,13 @@ namespace quantumstate_utils {
 	}
 }
 
+#define QS_SQRT2 0.70710678118
+namespace quantumstate_gates {
+  static const Eigen::Matrix2cd H = (Eigen::Matrix2cd() << QS_SQRT2, QS_SQRT2, QS_SQRT2, -QS_SQRT2).finished();
+  static const Eigen::Matrix2cd Z = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -1.0).finished();
+  static const Eigen::Matrix2cd X = (Eigen::Matrix2cd() << 0.0, 1.0, 1.0, 0.0).finished();
+}
+
 class EntropyState;
 
 class QuantumState : public EntropyState {
@@ -153,6 +160,10 @@ class QuantumState : public EntropyState {
 				evolve(inst);
 			}
 		}
+
+    virtual void h(size_t q) {
+      evolve(quantumstate_gates::H, q);
+    }
 
 		virtual bool measure(uint32_t q)=0;
 		
@@ -329,6 +340,7 @@ class MatrixProductState : public QuantumState {
 
 	public:
     MatrixProductState()=default;
+    ~MatrixProductState();
 
 		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-4);
 

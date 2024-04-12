@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BinaryMatrix.hpp"
+#include <optional>
 
 class ParityCheckMatrix;
 class GeneratorMatrix;
@@ -14,9 +15,12 @@ class ParityCheckMatrix : public BinaryMatrix {
     GeneratorMatrix to_generator_matrix(bool inplace=false);
 
     size_t degree(size_t c) const;
-    std::vector<std::vector<size_t>> leaf_removal(size_t num_steps, std::minstd_rand& rng) const;
+    std::vector<size_t> degree_distribution() const;
+    std::pair<std::optional<size_t>, std::vector<size_t>> leaf_removal_iteration(std::minstd_rand& rng);
+
     bool congruent(const GeneratorMatrix& G) const;
     void reduce();
+
 };
 
 class GeneratorMatrix : public BinaryMatrix {

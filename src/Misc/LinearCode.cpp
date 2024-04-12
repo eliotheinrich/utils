@@ -14,10 +14,6 @@ GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
     workspace = ParityCheckMatrix(*this);
   }
 
-  if (num_cols < num_rows) {
-    throw std::invalid_argument("Invalid parity check matrix.");
-  }
-
   // Put parity check matrix in canonical form
   workspace.reduce();
   size_t n = workspace.num_cols;
@@ -55,68 +51,46 @@ size_t ParityCheckMatrix::degree(size_t c) const {
   return n;
 }
 
-std::vector<std::vector<size_t>> ParityCheckMatrix::leaf_removal(size_t num_steps, std::minstd_rand& rng) const {
-  ParityCheckMatrix H(*this);
-  std::vector<std::vector<size_t>> sizes(num_steps, std::vector<size_t>(num_cols, 0u));
-
-  size_t n = 0;
-  bool keep_going = true;
-  for (; n < num_steps; n++) {
-    if (!keep_going) {
-      break;
-    }
-
-    std::vector<size_t> to_remove;
-    std::vector<size_t> leafs;
-
-    // Record sizes
-    for (size_t c = 0; c < H.num_cols; c++) {
-      size_t deg = H.degree(c);
-      if (deg == 0) {
-        to_remove.push_back(c);
-        continue;
-      } else if (deg == 1) {
-        leafs.push_back(c);
-      }
-
-      sizes[n][deg]++;
-    }
-
-    if (leafs.size() == 0) {
-      keep_going = false;
-    } else {
-      size_t c = leafs[rng() % leafs.size()];
-      auto it = std::upper_bound(to_remove.cbegin(), to_remove.cend(), c);
-      to_remove.insert(it, c);
-
-      // Find and remove corresponding hyperedge
-      size_t k;
-      for (size_t i = 0; i < H.num_rows; i++) {
-        if (H.get(i, c)) {
-          k = i;
-          break;
-        }
-      }
-
-      H.remove_row(k);
-    }
-
-    std::reverse(to_remove.begin(), to_remove.end());
-
-    // Remove leaf and 0-deg sites
-    H.transpose();
-    for (auto site : to_remove) {
-      H.remove_row(site);
-    }
-    H.transpose();
-  }
-
-  // Pad remaining entries
-  for (size_t i = n; i < num_steps; i++) {
-    sizes[i] = sizes[n-1];
+std::vector<size_t> ParityCheckMatrix::degree_distribution() const {
+  std::vector<size_t> sizes(num_rows, 0u);
+  for (size_t i = 0; i < num_cols; i++) {
+    sizes[degree(i)]++;
   }
 
   return sizes;
+}
+
+std::pair<std::optional<size_t>, std::vector<size_t>> ParityCheckMatrix::leaf_removal_iteration(std::minstd_rand& rng) {
+  std::vector<size_t> sizes(num_rows+1);
+  std::vector<size_t> leafs;
+  std::vector<size_t> edges;
+
+  for (size_t c = 0; c < num_cols; c++) {
+    size_t deg = 0;
+    size_t e;
+    for (size_t r = 0; r < num_rows; r++) {
+      if (get(r, c)) {
+        e = r;
+        deg++;
+      }
+    }
+
+    if (deg == 1) {
+      leafs.push_back(c);
+      edges.push_back(e);
+    }
+
+    sizes[deg]++;
+  }
+
+  if (leafs.size() == 0) {
+    return {std::nullopt, sizes};
+  }
+
+  size_t r = rng() % leafs.size();
+  remove_row(edges[r]);
+
+  return {edges[r], sizes};
 }
 
 bool ParityCheckMatrix::congruent(const GeneratorMatrix& G) const {

@@ -346,6 +346,8 @@ MatrixProductState::MatrixProductState(uint32_t num_qubits, uint32_t bond_dimens
   impl = std::make_unique<MatrixProductStateImpl>(num_qubits, bond_dimension, sv_threshold);
  }
 
+MatrixProductState::~MatrixProductState()=default;
+
 std::string MatrixProductState::to_string() const {
 	Statevector state(*this);
 	return state.to_string();

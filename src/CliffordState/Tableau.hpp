@@ -384,10 +384,10 @@ class PauliString {
 
 class Tableau {
     private:
-        uint32_t num_qubits;
         bool track_destabilizers;
 
     public:
+        uint32_t num_qubits;
         std::vector<PauliString> rows;
 
         Tableau()=default;

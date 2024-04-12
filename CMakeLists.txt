@@ -4,11 +4,10 @@ project(utils LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 
-set(CMAKE_CXX_FLAGS "")
+set(CMAKE_CXX_FLAGS "-pthread")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-
 
 # ---------------------------------- #
 # -- Manually installed libraries -- #
@@ -79,14 +78,12 @@ set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 set(MISC_DIR ${PROJECT_SOURCE_DIR}/src/Misc)
 set(TEST_DIR ${PROJECT_SOURCE_DIR}/src/Tests)
 
-add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${QUANTUMSTATE_DIR})
+add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${MONTECARLO_DIR})
 add_subdirectory(${MISC_DIR})
 add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${TEST_DIR})
-
-target_link_directories(quantum_state PUBLIC ${EXTERNAL_DIRS})
 
 if (BUILDING_PYQTOOLS)
     find_package(Python 3.10 

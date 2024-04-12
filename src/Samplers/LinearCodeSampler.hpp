@@ -9,14 +9,16 @@ class LinearCodeSampler {
     bool inplace;
 
     bool sample_rank;
+    bool sample_solveable;
 
-    bool sample_entanglement;
+    bool sample_locality;
 
-    bool sample_all_entanglement;
+    bool sample_all_locality;
     size_t spacing;
 
     bool sample_leaf_removal;
     size_t num_steps;
+    size_t max_size;
 
 
   public:
@@ -24,20 +26,25 @@ class LinearCodeSampler {
 
     LinearCodeSampler(dataframe::Params& params) {
       inplace = dataframe::utils::get<int>(params, "inplace", false);
-      spacing = dataframe::utils::get<int>(params, "spacing", 1);
-      num_steps = dataframe::utils::get<int>(params, "num_leaf_removal_steps", 0);
 
       sample_rank = dataframe::utils::get<int>(params, "sample_rank", true);
-      sample_entanglement = dataframe::utils::get<int>(params, "sample_entanglement", false);
-      sample_all_entanglement = dataframe::utils::get<int>(params, "sample_all_entanglement", false);
+      sample_solveable = dataframe::utils::get<int>(params, "sample_solveable", true);
+      sample_locality = dataframe::utils::get<int>(params, "sample_locality", false);
+
+      sample_all_locality = dataframe::utils::get<int>(params, "sample_all_locality", false);
+      spacing = dataframe::utils::get<int>(params, "spacing", 1);
+
+      sample_leaf_removal = dataframe::utils::get<int>(params, "sample_leaf_removal", false);
+      num_steps = dataframe::utils::get<int>(params, "num_leaf_removal_steps", 0);
+      max_size = dataframe::utils::get<int>(params, "max_size", 0);
     }
 
-    void add_entanglement_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
+    void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
       slide.add_data("locality");
       slide.push_data("locality", static_cast<double>(matrix->generator_locality(sites)));
     }
 
-    void add_all_entanglement_samples(dataframe::DataSlide& slide, std::shared_ptr<GeneratorMatrix> matrix) const {
+    void add_all_locality_samples(dataframe::DataSlide& slide, std::shared_ptr<GeneratorMatrix> matrix) const {
       std::vector<dataframe::Sample> s;
       std::vector<size_t> sites;
       size_t num_samples = matrix->num_cols / spacing;
@@ -58,12 +65,35 @@ class LinearCodeSampler {
     }
 
     void add_leaf_removal_samples(dataframe::DataSlide& slide, std::shared_ptr<ParityCheckMatrix> matrix, std::minstd_rand& rng) const {
-      auto data = matrix->leaf_removal(num_steps, rng);
+      ParityCheckMatrix H(*matrix.get());
+      size_t _num_steps = num_steps ? num_steps : H.num_rows;
+      size_t _max_size = max_size ? max_size : H.num_rows;
+      std::vector<std::vector<size_t>> sizes(_num_steps);
+
+      std::optional<size_t> r = 0;
+      std::vector<size_t> s;
+      size_t n = 0;
+      while (r.has_value() && n < _num_steps) {
+        std::tie(r, s) = H.leaf_removal_iteration(rng);
+        s.resize(_max_size, 0u);
+        sizes[n] = s;
+
+        n++;
+      }
+
+
+      for (size_t i = n; i < _num_steps; i++) {
+        sizes[i] = sizes[n-1];
+      }
+
+      size_t core_size = H.num_rows;
+      slide.add_data("core_size");
+      slide.push_data("core_size", core_size);
+
       slide.add_data("leafs");
-      for (size_t i = 0; i < data.size(); i++) {
-        // Need to cast to doubles before adding to slide
-        std::vector<double> samples(data[i].size());
-        std::transform(data[i].begin(), data[i].end(), samples.begin(), [](size_t val) { return static_cast<double>(val); });
+      for (size_t i = 0; i < _num_steps; i++) {
+        std::vector<double> samples(_max_size);
+        std::transform(sizes[i].begin(), sizes[i].end(), samples.begin(), [](size_t val) { return static_cast<double>(val); });
         slide.push_data("leafs", samples);
       }
     }
@@ -80,22 +110,34 @@ class LinearCodeSampler {
       }
 
 
+      uint32_t r;
       if (sample_rank) {
         slide.add_data("rank");
-        slide.push_data("rank", H->rank(inplace));
+        r = H->rank(inplace);
+        slide.push_data("rank", r);
       }
 
-      if (sample_entanglement) {
-        std::vector<size_t> sites_val;
-        if (!sites.has_value()) {
-          throw std::invalid_argument("If sampling partial entanglement, must provide list of sites.");
+      if (sample_solveable) {
+        if (!sample_rank) {
+          r = H->rank(inplace);
         }
 
-        add_entanglement_samples(slide, G, sites.value());
+        bool solveable = (r >= H->num_rows);
+        slide.add_data("solveable");
+        slide.push_data("solveable", solveable);
       }
 
-      if (sample_all_entanglement) {
-        add_all_entanglement_samples(slide, G);
+      if (sample_locality) {
+        std::vector<size_t> sites_val;
+        if (!sites.has_value()) {
+          throw std::invalid_argument("If sampling partial locality, must provide list of sites.");
+        }
+
+        add_locality_samples(slide, G, sites.value());
+      }
+
+      if (sample_all_locality) {
+        add_all_locality_samples(slide, G);
       }
 
       if (sample_leaf_removal) {

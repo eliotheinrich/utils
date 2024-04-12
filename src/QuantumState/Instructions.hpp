@@ -9,6 +9,8 @@
 #include <memory>
 #include <assert.h>
 
+#include "CircuitUtils.h"
+
 // --- Definitions for gates/measurements --- //
 
 class Gate {

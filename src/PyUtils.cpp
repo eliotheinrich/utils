@@ -1,5 +1,6 @@
 #include "QuantumState.h"
 #include "CliffordState.h"
+#include "BinaryPolynomial.h"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
@@ -169,4 +170,12 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("to_statevector", &QuantumCHPState::to_statevector)
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2.0)
     .def("random_clifford", &QuantumCHPState::random_clifford);
+
+  nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
+    .def(nanobind::init<size_t, size_t>)
+    .def("set", &BinaryMatrix::set)
+    .def("get", &BinaryMatrix::get)
+    .def("__str__", &BinaryMatrix.to_string)
+    .def("rref", &BinaryMatrix.rref)
+    .def("rank", &BinaryMatrix.rank);
 }

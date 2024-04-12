@@ -26,6 +26,8 @@ class InterfaceSampler {
 
     bool sample_staircases;
 
+    bool sample_surface_moments;
+
     uint32_t get_bin_idx(double s) const {
       if ((s < min_av) || (s > max_av)) {
         std::string error_message = std::to_string(s) + " is not between " + std::to_string(min_av) + " and " + std::to_string(max_av) + ". \n";
@@ -65,6 +67,7 @@ class InterfaceSampler {
       avalanche_sizes = std::vector<uint32_t>(num_bins);
 
       sample_staircases = dataframe::utils::get<int>(params, "sample_staircases", false);
+      sample_surface_moments = dataframe::utils::get<int>(params, "sample_surface_moments", false);
     }
 
     std::vector<double> structure_function(const std::vector<int>& surface) const;
@@ -120,11 +123,31 @@ class InterfaceSampler {
       size_t num_sites = surface.size();
 
       std::vector<double> surface_d(num_sites);
-      for (size_t i = 0; i < num_sites; i++) {
-        surface_d[i] = static_cast<double>(surface[i]);
-      }
-
+      std::transform(surface.begin(), surface.end(), surface_d.begin(),
+                     [](int v) { return static_cast<double>(v); });
       samples.emplace("surface", surface_d);
+
+      std::vector<double> surface_d_pow(num_sites);
+
+      if (sample_surface_moments) {
+        std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
+            [](double d) { return std::pow(d, 2); });
+        //std::cout << "Surface = [";
+        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d[i] << " "; } std::cout << "]\n";
+        samples.emplace("surface_second_moment", surface_d_pow);
+        //std::cout << "Surface^2 = [";
+        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
+        std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
+            [](double d) { return std::pow(d, 3); });
+        samples.emplace("surface_third_moment", surface_d_pow);
+        //std::cout << "Surface^3 = [";
+        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
+        std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
+            [](double d) { return std::pow(d, 4); });
+        samples.emplace("surface_fourth_moment", surface_d_pow);
+        //std::cout << "Surface^5 = [";
+        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
+      }
     }
 
     void add_avalanche_samples(dataframe::data_t &samples) {

@@ -1,7 +1,5 @@
-#include "BinaryMatrix.hpp"
-#include "SparseBinaryMatrix.hpp"
-#include "LinearCode.h"
-#include "BinaryPolynomial.hpp"
+#include "QuantumState.h"
+#include "BinaryPolynomial.h"
 #include "Graph.hpp"
 #include <iostream>
 #include <cassert>
@@ -180,9 +178,19 @@ bool test_leaf_removal() {
   H.set(2, 4, 1);
 
   std::minstd_rand rng(5);
-  auto result = H.leaf_removal(5, rng);
+  auto result = H.leaf_removal_iteration(rng);
 
   // TODO rigorous test
+
+  return true;
+}
+
+bool test_mps() {
+  MatrixProductState mps(5, 5);
+  mps.h(0);
+  mps.h(1);
+  Statevector s(mps);
+  std::cout << s.to_string() << std::endl;
 
   return true;
 }
@@ -195,4 +203,5 @@ int main() {
   assert(test_random_regular_graph());
   assert(test_parity_check_reduction());
   assert(test_leaf_removal());
+  assert(test_mps());
 }
