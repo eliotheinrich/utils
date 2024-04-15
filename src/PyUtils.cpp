@@ -9,6 +9,7 @@
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/eigen/dense.h>
 
@@ -172,10 +173,11 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("random_clifford", &QuantumCHPState::random_clifford);
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
-    .def(nanobind::init<size_t, size_t>)
+    .def(nanobind::init<size_t, size_t>())
     .def("set", &BinaryMatrix::set)
+    .def("set", [](BinaryMatrix& self, size_t i, size_t j, size_t v) { self.set(i, j, static_cast<bool>(v)); })
     .def("get", &BinaryMatrix::get)
-    .def("__str__", &BinaryMatrix.to_string)
-    .def("rref", &BinaryMatrix.rref)
-    .def("rank", &BinaryMatrix.rank);
+    .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
+    .def("rref", [](BinaryMatrix& self) { self.rref(); })
+    .def("rank", &BinaryMatrix::rank, "inplace"_a=false);
 }

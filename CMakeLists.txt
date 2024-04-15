@@ -86,6 +86,7 @@ add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${TEST_DIR})
 
 if (BUILDING_PYQTOOLS)
+    message("Building pyqtools!")
     find_package(Python 3.10 
         REQUIRED COMPONENTS Interpreter Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule
@@ -106,7 +107,10 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code)
+    target_link_libraries(pyqtools_bindings PUBLIC ${LAPACKBLAS} itensor)
+    target_include_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR})
+    target_link_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR}/lib ${BLAS_DIR} ${LAPACK_DIR})
+    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code ${LAPACKBLAS} itensor)
 
     install(
         TARGETS pyqtools_bindings

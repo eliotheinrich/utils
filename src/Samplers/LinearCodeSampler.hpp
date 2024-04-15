@@ -45,13 +45,13 @@ class LinearCodeSampler {
     }
 
     void add_all_locality_samples(dataframe::DataSlide& slide, std::shared_ptr<GeneratorMatrix> matrix) const {
-      std::vector<dataframe::Sample> s;
       std::vector<size_t> sites;
       size_t num_samples = matrix->num_cols / spacing;
+      std::vector<double> s(num_samples);
       size_t n = 0;
       for (size_t i = 0; i < num_samples; i++) {
         // Sample locality
-        s.push_back(static_cast<double>(matrix->generator_locality(sites)));
+        s[i] = static_cast<double>(matrix->generator_locality(sites));
 
         // Add new sites
         for (size_t j = 0; j < spacing; j++) {
