@@ -9,7 +9,7 @@ class GeneratorMatrix;
 class ParityCheckMatrix : public BinaryMatrix {
   public:
     ParityCheckMatrix()=default;
-    ParityCheckMatrix(uint32_t num_rows, uint32_t num_cols);
+    ParityCheckMatrix(size_t num_rows, size_t num_cols);
     ParityCheckMatrix(const BinaryMatrix& other);
 
     GeneratorMatrix to_generator_matrix(bool inplace=false);
@@ -26,7 +26,7 @@ class ParityCheckMatrix : public BinaryMatrix {
 class GeneratorMatrix : public BinaryMatrix {
   public:
     GeneratorMatrix()=default;
-    GeneratorMatrix(uint32_t num_rows, uint32_t num_cols);
+    GeneratorMatrix(size_t num_rows, size_t num_cols);
     GeneratorMatrix(const BinaryMatrix& other);
 
     ParityCheckMatrix to_parity_check_matrix(bool inplace=false);
