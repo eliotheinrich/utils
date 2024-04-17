@@ -1,6 +1,6 @@
 #include "LinearCode.h"
 
-ParityCheckMatrix::ParityCheckMatrix(uint32_t num_rows, uint32_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
+ParityCheckMatrix::ParityCheckMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 
 ParityCheckMatrix::ParityCheckMatrix(const BinaryMatrix& other) : ParityCheckMatrix(other.num_rows, other.num_cols) {
   data = other.data;
@@ -136,7 +136,7 @@ void ParityCheckMatrix::reduce() {
 
 
 
-GeneratorMatrix::GeneratorMatrix(uint32_t num_rows, uint32_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
+GeneratorMatrix::GeneratorMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 
 GeneratorMatrix::GeneratorMatrix(const BinaryMatrix& other) : GeneratorMatrix(other.num_rows, other.num_cols) {
   data = other.data;

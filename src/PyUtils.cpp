@@ -174,10 +174,22 @@ NB_MODULE(pyqtools_bindings, m) {
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
     .def(nanobind::init<size_t, size_t>())
+    .def_ro("num_cols", &BinaryMatrix::num_cols)
+    .def_ro("num_rows", &BinaryMatrix::num_rows)
     .def("set", &BinaryMatrix::set)
     .def("set", [](BinaryMatrix& self, size_t i, size_t j, size_t v) { self.set(i, j, static_cast<bool>(v)); })
     .def("get", &BinaryMatrix::get)
     .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
     .def("rref", [](BinaryMatrix& self) { self.rref(); })
-    .def("rank", &BinaryMatrix::rank, "inplace"_a=false);
+    .def("rank", [](BinaryMatrix& self, bool inplace) { return self.rank(inplace); }, "inplace"_a=false);
+
+  nanobind::class_<ParityCheckMatrix, BinaryMatrix>(m, "ParityCheckMatrix")
+    .def(nanobind::init<size_t, size_t>())
+    .def("reduce", &ParityCheckMatrix::reduce)
+    .def("to_generator_matrix", &ParityCheckMatrix::to_generator_matrix, "inplace"_a = false);
+
+  nanobind::class_<GeneratorMatrix, BinaryMatrix>(m, "GeneratorMatrix")
+    .def(nanobind::init<size_t, size_t>())
+    .def("to_parity_check_matrix", &GeneratorMatrix::to_parity_check_matrix, "inplace"_a = false)
+    .def("generator_locality", &GeneratorMatrix::generator_locality);
 }
