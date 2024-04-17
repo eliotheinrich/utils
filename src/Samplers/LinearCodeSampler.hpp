@@ -19,6 +19,7 @@ class LinearCodeSampler {
     bool sample_leaf_removal;
     size_t num_steps;
     size_t max_size;
+    bool include_isolated_in_core;
 
 
   public:
@@ -37,6 +38,7 @@ class LinearCodeSampler {
       sample_leaf_removal = dataframe::utils::get<int>(params, "sample_leaf_removal", false);
       num_steps = dataframe::utils::get<int>(params, "num_leaf_removal_steps", 0);
       max_size = dataframe::utils::get<int>(params, "max_size", 0);
+      include_isolated_in_core = dataframe::utils::get<int>(params, "include_isolated_in_core", false);
     }
 
     void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
@@ -84,6 +86,10 @@ class LinearCodeSampler {
 
       for (size_t i = n; i < _num_steps; i++) {
         sizes[i] = sizes[n-1];
+      }
+
+      if (!include_isolated_in_core) {
+        H.reduce();
       }
 
       size_t core_size = H.num_rows;

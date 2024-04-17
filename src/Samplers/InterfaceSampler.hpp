@@ -132,21 +132,13 @@ class InterfaceSampler {
       if (sample_surface_moments) {
         std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
             [](double d) { return std::pow(d, 2); });
-        //std::cout << "Surface = [";
-        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d[i] << " "; } std::cout << "]\n";
         samples.emplace("surface_second_moment", surface_d_pow);
-        //std::cout << "Surface^2 = [";
-        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
         std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
             [](double d) { return std::pow(d, 3); });
         samples.emplace("surface_third_moment", surface_d_pow);
-        //std::cout << "Surface^3 = [";
-        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
         std::transform(surface_d.begin(), surface_d.end(), surface_d_pow.begin(), 
             [](double d) { return std::pow(d, 4); });
         samples.emplace("surface_fourth_moment", surface_d_pow);
-        //std::cout << "Surface^5 = [";
-        //for (size_t i = 0; i < 5; i++) { std::cout << surface_d_pow[i] << " "; } std::cout << "]\n";
       }
     }
 
