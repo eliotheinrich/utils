@@ -134,4 +134,16 @@ class QuantumCHPState : public CliffordState {
 
       return static_cast<double>(s);
     }
+
+    int partial_rank(const std::vector<uint32_t> &qubits) {
+      return tableau.rank(qubits);
+    }
+
+    void set_x(size_t i, size_t j, bool v) {
+      tableau.set_x(i, j, v);
+    }
+
+    void set_z(size_t i, size_t j, bool v) {
+      tableau.set_z(i, j, v);
+    }
 };
