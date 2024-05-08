@@ -41,6 +41,7 @@ class EntropySampler {
       }
 
       sample_variable_mutual_information = dataframe::utils::get<int>(params, "sample_variable_mutual_information", false);
+
       // Spatial average is generally applied when boundary conditions are periodic, so spatially_average
       // as a default for setting pbc used by variable mutual information samples
       pbc = dataframe::utils::get<int>(params, "pbc", spatially_average);
