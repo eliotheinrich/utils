@@ -417,6 +417,23 @@ void QuantumGraphState::toggle_edge_gate(uint32_t a, uint32_t b) {
   apply_gatel(b, cb);
 }
 
+uint32_t QuantumGraphState::distance(const QuantumGraphState& other) const {
+  if (num_qubits != other.num_qubits) {
+    throw std::invalid_argument("Graph states do not have matching number of qubits; cannot compute distance.");
+  }
+
+  uint32_t s = 0u;
+  for (size_t i = 0; i < num_qubits; i++) {
+    for (size_t j = i+1; j < num_qubits; j++) {
+      if (graph.contains_edge(i, j) != other.graph.contains_edge(i, j)) {
+        s += 1;
+      }
+    }
+  }
+
+  return s;
+}
+
 double QuantumGraphState::graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph) {
   Graph<int, bool> bipartite_graph = graph.partition(qubits);
   int s = 2*bipartite_graph.num_vertices;

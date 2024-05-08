@@ -33,8 +33,6 @@ class QuantumGraphState : public CliffordState {
     static const uint32_t CLIFFORD_PRODUCTS[24][24];
     static const uint32_t CZ_LOOKUP[24][24][2][3];
 
-    uint32_t num_qubits;
-
     void apply_gater(uint32_t a, uint gate_id);
     void apply_gatel(uint32_t a, uint gate_id);
     void local_complement(uint32_t a);
@@ -46,6 +44,7 @@ class QuantumGraphState : public CliffordState {
 
 
   public:
+    uint32_t num_qubits;
     Graph<> graph;
 
     QuantumGraphState()=default;
@@ -72,6 +71,8 @@ class QuantumGraphState : public CliffordState {
     void mzr_graph(uint32_t a, bool outcome);
 
     void toggle_edge_gate(uint32_t a, uint b);
+
+    uint32_t distance(const QuantumGraphState& other) const;
 
     static double graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph);
     virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;

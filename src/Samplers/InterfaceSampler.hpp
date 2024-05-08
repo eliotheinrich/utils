@@ -27,7 +27,7 @@ class InterfaceSampler {
     bool sample_staircases;
 
     bool sample_threshold;
-    uint32_t threshold;
+    int threshold;
 
     bool sample_edges;
 
@@ -220,13 +220,10 @@ class InterfaceSampler {
       samples.emplace("threshold_fraction", m/num_sites);
     }
 
-    void add_edge_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+    std::pair<size_t, size_t> find_edges(const std::vector<int>& surface) const {
       size_t num_sites = surface.size();
 
       std::vector<double> staircase_counts(num_sites, 0.0);
-
-      bool sizing_staircase = false;
-      uint32_t size = 0;
 
       size_t i = 1;
       while (i < num_sites && staircase(i, surface)) {
@@ -243,7 +240,12 @@ class InterfaceSampler {
 
       double e2 = i;
 
-      samples.emplace("edge_positions", {e1/num_sites, e2/num_sites});
+      return {e1, e2};
+    }
+
+    void add_edge_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+      auto [e1, e2] = find_edges(surface);
+      samples.emplace("edge_positions", {static_cast<double>(e1), static_cast<double>(e2)});
     }
 
 

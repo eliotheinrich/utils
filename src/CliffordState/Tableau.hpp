@@ -392,8 +392,8 @@ class Tableau {
 
         Tableau()=default;
 
-        Tableau(uint32_t num_qubits)
-         : num_qubits(num_qubits), track_destabilizers(true) {
+        Tableau(uint32_t num_qubits) :
+          track_destabilizers(true), num_qubits(num_qubits) {
             rows = std::vector<PauliString>(2*num_qubits + 1, PauliString(num_qubits));
             for (uint32_t i = 0; i < num_qubits; i++) {
                 rows[i].set_x(i, true);
@@ -402,7 +402,7 @@ class Tableau {
         }
 
         Tableau(uint32_t num_qubits, const std::vector<PauliString>& rows)
-         : num_qubits(num_qubits), track_destabilizers(false), rows(rows) {}
+         : track_destabilizers(false), num_qubits(num_qubits), rows(rows) {}
 
         uint32_t num_rows() const { 
             if (track_destabilizers) { 

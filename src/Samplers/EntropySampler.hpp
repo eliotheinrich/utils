@@ -27,7 +27,7 @@ class EntropySampler {
       sample_mutual_information = dataframe::utils::get<int>(params, "sample_mutual_information", false);
       if (sample_mutual_information) {
         assert(partition_size > 0);
-        num_bins = dataframe::utils::get<int>(params, "num_mi_bins", 100);
+        num_eta_bins = dataframe::utils::get<int>(params, "num_mi_bins", 100);
         min_eta = dataframe::utils::get<double>(params, "min_eta", 0.01);
         max_eta = dataframe::utils::get<double>(params, "max_eta", 1.0);
       }
@@ -41,6 +41,12 @@ class EntropySampler {
       }
 
       sample_variable_mutual_information = dataframe::utils::get<int>(params, "sample_variable_mutual_information", false);
+
+      sample_correlation_distance = dataframe::utils::get<int>(params, "sample_correlation_distance", false);
+      if (sample_correlation_distance) {
+        num_distance_bins = dataframe::utils::get<int>(params, "num_distance_bins", 100);
+      }
+
       // Spatial average is generally applied when boundary conditions are periodic, so spatially_average
       // as a default for setting pbc used by variable mutual information samples
       pbc = dataframe::utils::get<int>(params, "pbc", spatially_average);
@@ -58,7 +64,7 @@ class EntropySampler {
 
     void add_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<double> entropy_table = compute_entropy_table(index, state);
-      std::vector<std::vector<double>> mutual_information_samples(num_bins);
+      std::vector<std::vector<double>> mutual_information_samples(num_eta_bins);
       for (uint32_t x1 = 0; x1 < system_size; x1++) {
         for (uint32_t x3 = 0; x3 < system_size; x3++) {
           uint32_t x2 = (x1 + partition_size) % system_size;
@@ -76,7 +82,7 @@ class EntropySampler {
           double entropy3 = state->entropy(combined_sites, index);
 
           double sample = entropy1 + entropy2 - entropy3;
-          uint32_t idx = get_bin_idx(eta);
+          uint32_t idx = get_bin_idx(eta, min_eta, max_eta, num_eta_bins);
 
           mutual_information_samples[idx].push_back(sample);
         }
@@ -137,6 +143,29 @@ class EntropySampler {
       samples.emplace("entropy" + std::to_string(index), entropy_samples);
     }
 
+    void add_correlation_distance_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+      std::vector<std::vector<double>> bins(num_distance_bins, std::vector<double>());
+      std::vector<size_t> counts(num_distance_bins, 0);
+      for (size_t x1 = 0; x1 < system_size; x1++) {
+        for (size_t x2 = 0; x2 < system_size; x2++) {
+          if (x1 == x2) {
+            continue;
+          }
+
+          std::vector<uint32_t> s1{static_cast<uint32_t>(x1)};
+          std::vector<uint32_t> s2{static_cast<uint32_t>(x2)};
+          std::vector<uint32_t> s3{static_cast<uint32_t>(x1), static_cast<uint32_t>(x2)};
+
+          double I = state->entropy(s1, index) + state->entropy(s2, index) - state->entropy(s3, index);
+          double d = distance(x1, x2);
+          size_t i = get_bin_idx(d, 0.0, 1.0, num_distance_bins);
+          bins[i].push_back(I);
+        }
+      }
+      
+      samples.emplace("correlation_distance" + std::to_string(index), bins);
+    }
+
     void add_samples(dataframe::data_t &samples, std::shared_ptr<EntropyState> state) {
       for (auto const &i : renyi_indices) {
         if (sample_entropy) {
@@ -158,6 +187,10 @@ class EntropySampler {
         if (sample_variable_mutual_information) {
           add_variable_mutual_information_samples(samples, i, state);
         }
+
+        if (sample_correlation_distance) {
+          add_correlation_distance_samples(samples, i, state);
+        }
       }
     }
 
@@ -173,7 +206,7 @@ class EntropySampler {
 
     bool sample_all_partition_sizes;
 
-    uint32_t num_bins;
+    size_t num_eta_bins;
     double min_eta;
     double max_eta;
     bool sample_mutual_information;
@@ -186,15 +219,17 @@ class EntropySampler {
 
     bool pbc;
     bool sample_variable_mutual_information;
+    bool sample_correlation_distance;
+    size_t num_distance_bins;
 
-    uint32_t get_bin_idx(double s) const {
-      if ((s < min_eta) || (s > max_eta)) {
-        std::string error_message = std::to_string(s) + " is not between " + std::to_string(min_eta) + " and " + std::to_string(max_eta) + ". \n";
+    size_t get_bin_idx(double s, double min, double max, size_t num_bins) const {
+      if ((s < min) || (s > max)) {
+        std::string error_message = std::to_string(s) + " is not between " + std::to_string(min) + " and " + std::to_string(max) + ". \n";
         throw std::invalid_argument(error_message);
       }
 
-      double bin_width = static_cast<double>(max_eta - min_eta)/num_bins;
-      return static_cast<uint32_t>((s - min_eta) / bin_width);
+      double bin_width = static_cast<double>(max - min)/num_bins;
+      return static_cast<size_t>((s - min) / bin_width);
     }
 
     std::vector<uint32_t> to_interval(uint32_t x1, uint32_t x2) const {
@@ -239,6 +274,15 @@ class EntropySampler {
       double x13 = get_x(x1, x3);
       double x24 = get_x(x2, x4);
       return x12*x34/(x13*x24);
+    }
+
+    double distance(int x1, int x2) const {
+      double d = std::abs(x1 - x2)/static_cast<double>(system_size);
+      if (pbc) {
+        return (d > 0.5) ? (1.0 - d) : d;
+      } else {
+        return d;
+      }
     }
 
     std::vector<double> compute_entropy_table(uint32_t index, std::shared_ptr<EntropyState> state) const {

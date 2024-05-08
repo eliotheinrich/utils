@@ -62,7 +62,7 @@ class LinearCodeSampler {
         }
       }
 
-      slide.add_data("locality");
+      slide.add_data("locality", num_samples);
       slide.push_samples_to_data("locality", s);
     }
 
@@ -96,7 +96,7 @@ class LinearCodeSampler {
       slide.add_data("core_size");
       slide.push_samples_to_data("core_size", core_size);
 
-      slide.add_data("leafs");
+      slide.add_data("leafs", _max_size);
       for (size_t i = 0; i < _num_steps; i++) {
         std::vector<double> samples(_max_size);
         std::transform(sizes[i].begin(), sizes[i].end(), samples.begin(), [](size_t val) { return static_cast<double>(val); });
