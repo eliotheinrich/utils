@@ -166,6 +166,14 @@ ParityCheckMatrix GeneratorMatrix::to_parity_check_matrix(bool inplace) {
   return ParityCheckMatrix(*At);
 }
 
+uint32_t GeneratorMatrix::sym(const std::vector<size_t>& sites1, const std::vector<size_t>& sites2) {
+  std::vector<size_t> all_sites;
+  all_sites.insert(all_sites.end(), sites1.begin(), sites1.end());
+  all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
+  return partial_rank(sites1) + partial_rank(sites2) - partial_rank(all_sites);
+}
+
+
 uint32_t GeneratorMatrix::generator_locality(const std::vector<size_t>& sites) {
   std::vector<size_t> sites_complement;
   std::vector<bool> exists(num_cols, false);

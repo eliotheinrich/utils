@@ -31,6 +31,7 @@ class GeneratorMatrix : public BinaryMatrix {
 
     ParityCheckMatrix to_parity_check_matrix(bool inplace=false);
 
+    uint32_t sym(const std::vector<size_t>& sites1, const std::vector<size_t>& sites2);
     std::vector<uint32_t> generator_locality_samples(const std::vector<size_t>& sites);
     uint32_t generator_locality(const std::vector<size_t>& sites);
 

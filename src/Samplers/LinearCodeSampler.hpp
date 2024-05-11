@@ -11,6 +11,8 @@ class LinearCodeSampler {
     bool sample_rank;
     bool sample_solveable;
 
+    bool sample_sym;
+
     bool sample_locality;
 
     bool sample_all_locality;
@@ -35,10 +37,21 @@ class LinearCodeSampler {
       sample_all_locality = dataframe::utils::get<int>(params, "sample_all_locality", false);
       spacing = dataframe::utils::get<int>(params, "spacing", 1);
 
+      sample_sym = dataframe::utils::get<int>(params, "sample_sym", false);
+
       sample_leaf_removal = dataframe::utils::get<int>(params, "sample_leaf_removal", false);
       num_steps = dataframe::utils::get<int>(params, "num_leaf_removal_steps", 0);
       max_size = dataframe::utils::get<int>(params, "max_size", 0);
       include_isolated_in_core = dataframe::utils::get<int>(params, "include_isolated_in_core", false);
+    }
+
+    void add_sym_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites1, const std::vector<size_t>& sites2) const {
+      std::vector<size_t> all_sites;
+      all_sites.insert(all_sites.end(), sites1.begin(), sites1.end());
+      all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
+
+      slide.add_data("sym");
+      slide.push_samples_to_data("sym", (double) matrix->partial_rank(sites1) + matrix->partial_rank(sites2) - matrix->partial_rank(all_sites));
     }
 
     void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
@@ -104,7 +117,7 @@ class LinearCodeSampler {
       }
     }
 
-    void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, std::minstd_rand& rng, const std::optional<std::vector<size_t>>& sites = std::nullopt) {
+    void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, std::minstd_rand& rng, const std::optional<std::vector<size_t>>& sites1 = std::nullopt, const std::optional<std::vector<size_t>>& sites2 = std::nullopt) {
       std::shared_ptr<GeneratorMatrix> G;
       std::shared_ptr<ParityCheckMatrix> H;
       if (matrix.index() == 0) {
@@ -134,12 +147,19 @@ class LinearCodeSampler {
       }
 
       if (sample_locality) {
-        std::vector<size_t> sites_val;
-        if (!sites.has_value()) {
+        if (!sites1.has_value()) {
           throw std::invalid_argument("If sampling partial locality, must provide list of sites.");
         }
 
-        add_locality_samples(slide, G, sites.value());
+        add_locality_samples(slide, G, sites1.value());
+      }
+
+      if (sample_sym) {
+        if (!sites1.has_value() || !sites2.has_value()) {
+          throw std::invalid_argument("If sampling sym, must provide list of sites.");
+        }
+
+        add_sym_samples(slide, G, sites1.value(), sites2.value());
       }
 
       if (sample_all_locality) {
