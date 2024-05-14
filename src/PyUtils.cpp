@@ -195,6 +195,13 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("transpose", &BinaryMatrix::transpose)
     .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
     .def("rref", [](BinaryMatrix& self) { self.rref(); })
+    .def("partial_rref", [](BinaryMatrix& self, const std::vector<int>& sites) { 
+        std::vector<size_t> _sites(sites.size());
+        for (size_t i = 0; i < sites.size(); i++) {
+          _sites[i] = static_cast<size_t>(sites[i]);
+        }
+        self.partial_rref(_sites); 
+      })
     .def("rank", [](BinaryMatrix& self, bool inplace) { return self.rank(inplace); }, "inplace"_a=false);
 
   nanobind::class_<ParityCheckMatrix, BinaryMatrix>(m, "ParityCheckMatrix")
