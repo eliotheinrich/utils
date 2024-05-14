@@ -203,7 +203,7 @@ NB_MODULE(pyqtools_bindings, m) {
         self.partial_rref(_sites); 
       })
     .def("rank", [](BinaryMatrix& self, bool inplace) { return self.rank(inplace); }, "inplace"_a=false)
-    .def("partial_rref", [](BinaryMatrix& self, const std::vector<int>& sites, bool inplace) { 
+    .def("partial_rank", [](BinaryMatrix& self, const std::vector<int>& sites, bool inplace) { 
         std::vector<size_t> _sites(sites.size());
         for (size_t i = 0; i < sites.size(); i++) {
           _sites[i] = static_cast<size_t>(sites[i]);
