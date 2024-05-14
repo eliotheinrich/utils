@@ -184,6 +184,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("set", &BinaryMatrix::set)
     .def("set", [](BinaryMatrix& self, size_t i, size_t j, size_t v) { self.set(i, j, static_cast<bool>(v)); })
     .def("get", &BinaryMatrix::get)
+    .def("transpose", &BinaryMatrix::transpose)
     .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
     .def("rref", [](BinaryMatrix& self) { self.rref(); })
     .def("rank", [](BinaryMatrix& self, bool inplace) { return self.rank(inplace); }, "inplace"_a=false);

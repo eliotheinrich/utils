@@ -124,11 +124,12 @@ class BinaryMatrix : public BinaryMatrixBase {
     }
 
     BinaryMatrix(const std::vector<Bitstring>& data, size_t num_cols) : BinaryMatrix(data) {
+      this->num_cols = num_cols;
+
       if ((num_words() - 1)*binary_word_size() > num_cols || num_cols > num_words()*binary_word_size()) {
+        std::cout << "num_words() = " << num_words() << ", binary_word_size() = " << binary_word_size() << ", num_cols = " << num_cols << ", data.size() = " << data.size() << "\n";
         throw std::invalid_argument("Provided number of columns is not valid for the data.");
       }
-
-      this->num_cols = num_cols;
     }
 
     BinaryMatrix(const BinaryMatrix& other) : BinaryMatrix(other.data, other.num_cols) {}
