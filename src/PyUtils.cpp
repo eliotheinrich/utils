@@ -184,6 +184,14 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("set", &BinaryMatrix::set)
     .def("set", [](BinaryMatrix& self, size_t i, size_t j, size_t v) { self.set(i, j, static_cast<bool>(v)); })
     .def("get", &BinaryMatrix::get)
+    .def("append_row", [](BinaryMatrix& self, const std::vector<bool>& row) { self.append_row(row); })
+    .def("append_row", [](BinaryMatrix& self, const std::vector<int>& row) { 
+        std::vector<bool> rowb(row.size());
+        for (size_t i = 0; i < row.size(); i++) {
+          rowb[i] = static_cast<bool>(row[i]);
+        }
+        self.append_row(rowb); 
+      })
     .def("transpose", &BinaryMatrix::transpose)
     .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
     .def("rref", [](BinaryMatrix& self) { self.rref(); })
