@@ -26,8 +26,6 @@ class QuantumStateSampler {
     }
 
   public:
-    QuantumStateSampler()=default;
-
     QuantumStateSampler(dataframe::Params& params) {
       system_size = dataframe::utils::get<int>(params, "system_size");
 
@@ -42,6 +40,8 @@ class QuantumStateSampler {
 
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", true);
     }
+
+    ~QuantumStateSampler()=default;
 
     void add_probability_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       std::vector<double> probabilities = state->probabilities();
@@ -67,12 +67,12 @@ class QuantumStateSampler {
         }
       }
 
-      samples.emplace("probabilities", probability_probs);
+      dataframe::utils::emplace(samples, "probabilities", probability_probs);
     }
 
     void add_bitstring_distribution(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       std::vector<double> probabilities = state->probabilities();
-      samples.emplace("bitstring_distribution", probabilities);
+      dataframe::utils::emplace(samples, "bitstring_distribution", probabilities);
     }
 
     void add_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {

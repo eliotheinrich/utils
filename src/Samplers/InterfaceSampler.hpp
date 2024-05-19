@@ -11,12 +11,6 @@ class InterfaceSampler {
     bool sample_surface;
     bool sample_surface_avg;
 
-    uint32_t num_bins;
-    uint32_t min_av;
-    uint32_t max_av;
-    bool sample_avalanche_sizes;
-    std::vector<uint32_t> avalanche_sizes;
-
     bool sample_structure_function;
     bool transform_fluctuations;
 
@@ -31,6 +25,12 @@ class InterfaceSampler {
 
     bool sample_edges;
 
+    uint32_t num_bins;
+    uint32_t min_av;
+    uint32_t max_av;
+    bool sample_avalanche_sizes;
+    std::vector<uint32_t> avalanche_sizes;
+
     uint32_t get_bin_idx(double s) const {
       if ((s < min_av) || (s > max_av)) {
         std::string error_message = std::to_string(s) + " is not between " + std::to_string(min_av) + " and " + std::to_string(max_av) + ". \n";
@@ -43,8 +43,6 @@ class InterfaceSampler {
     }
 
   public:
-    InterfaceSampler()=default;
-
     InterfaceSampler(dataframe::Params& params) {
       system_size = dataframe::utils::get<int>(params, "system_size");
 
@@ -58,6 +56,8 @@ class InterfaceSampler {
       sample_structure_function = dataframe::utils::get<int>(params, "sample_structure_function", false);
       transform_fluctuations = dataframe::utils::get<int>(params, "transform_fluctuations", false);
 
+      sample_avalanche_sizes = dataframe::utils::get<int>(params, "sample_avalanche_sizes", false);
+
       num_bins = dataframe::utils::get<int>(params, "num_bins", 100);
       min_av = dataframe::utils::get<int>(params, "min_av", 1);
       max_av = dataframe::utils::get<int>(params, "max_av", 100);
@@ -66,7 +66,6 @@ class InterfaceSampler {
         throw std::invalid_argument("max_av must be greater than min_av");
       }
 
-      sample_avalanche_sizes = dataframe::utils::get<int>(params, "sample_avalanche_sizes", false);
       avalanche_sizes = std::vector<uint32_t>(num_bins);
 
       sample_staircases = dataframe::utils::get<int>(params, "sample_staircases", false);
@@ -79,10 +78,10 @@ class InterfaceSampler {
       sample_edges = dataframe::utils::get<int>(params, "sample_edges", false);
     }
 
-    std::vector<double> structure_function(const std::vector<int>& surface) const;
+    ~InterfaceSampler()=default;
 
     void record_size(uint32_t s) {
-      if (s >= min_av && s <= max_av) {
+      if (s >= min_av && s < max_av) {
         uint32_t idx = get_bin_idx(s);
         avalanche_sizes[idx]++;
       }
@@ -134,7 +133,7 @@ class InterfaceSampler {
       std::vector<double> surface_d(num_sites);
       std::transform(surface.begin(), surface.end(), surface_d.begin(),
                      [](int v) { return static_cast<double>(v); });
-      samples.emplace("surface", surface_d);
+      dataframe::utils::emplace(samples, "surface", surface_d);
     }
 
     void add_avalanche_samples(dataframe::data_t &samples) {
@@ -151,14 +150,17 @@ class InterfaceSampler {
         }
       }
 
-      samples.emplace("avalanche", avalanche_prob);
+      dataframe::utils::emplace(samples, "avalanche", avalanche_prob);
 
       avalanche_sizes = std::vector<uint32_t>(num_bins, 0);
     }
 
+
+    std::vector<double> structure_function(const std::vector<int>& surface) const;
+  
     void add_structure_function_samples(dataframe::data_t &samples, const std::vector<int> &surface) const {
       std::vector<double> sk = structure_function(surface);
-      samples.emplace("structure", sk);
+      dataframe::utils::emplace(samples, "structure", sk);
     }
 
     void add_rugosity_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
@@ -170,7 +172,7 @@ class InterfaceSampler {
         rugosity[width-1] = std::pow(roughness_window(width, surface), 2);
       }
 
-      samples.emplace("rugosity", rugosity);
+      dataframe::utils::emplace(samples, "rugosity", rugosity);
     }
 
     inline bool staircase(const size_t i, const std::vector<int>& surface) const {
@@ -205,7 +207,7 @@ class InterfaceSampler {
         staircase_counts[size]++;
       }
 
-      samples.emplace("staircases", staircase_counts);
+      dataframe::utils::emplace(samples, "staircases", staircase_counts);
     }
 
     void add_threshold_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
@@ -217,9 +219,9 @@ class InterfaceSampler {
         }
       }
 
-      samples.emplace("threshold_fraction", m/num_sites);
+      dataframe::utils::emplace(samples, "threshold_fraction", m/num_sites);
     }
-
+    
     std::pair<size_t, size_t> find_edges(const std::vector<int>& surface) const {
       size_t num_sites = surface.size();
 
@@ -245,7 +247,7 @@ class InterfaceSampler {
 
     void add_edge_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
       auto [e1, e2] = find_edges(surface);
-      samples.emplace("edge_positions", {static_cast<double>(e1), static_cast<double>(e2)});
+      dataframe::utils::emplace(samples, "edge_positions", {static_cast<double>(e1), static_cast<double>(e2)});
     }
 
 
@@ -255,7 +257,7 @@ class InterfaceSampler {
       }
 
       if (sample_surface_avg) {
-        samples.emplace("surface_avg", surface_avg(surface));
+        dataframe::utils::emplace(samples, "surface_avg", surface_avg(surface));
       }
 
       if (sample_rugosity) {
@@ -263,7 +265,7 @@ class InterfaceSampler {
       }
 
       if (sample_roughness) {
-        samples.emplace("roughness", roughness(surface));
+        dataframe::utils::emplace(samples, "roughness", roughness(surface));
       }
 
       if (sample_avalanche_sizes) {

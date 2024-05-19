@@ -52,6 +52,8 @@ class EntropySampler {
       pbc = dataframe::utils::get<int>(params, "pbc", spatially_average);
     }
 
+    ~EntropySampler()=default;
+
     void add_entropy_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<double> entropy_samples;
       if (spatially_average) {
@@ -59,7 +61,8 @@ class EntropySampler {
       } else {
         entropy_samples = {state->cum_entropy(partition_size, index)};
       }
-      samples.emplace("entropy" + std::to_string(index) + "_" + std::to_string(partition_size), entropy_samples);
+      std::string key = "entropy" + std::to_string(index) + "_" + std::to_string(partition_size);
+      dataframe::utils::emplace(samples, key, entropy_samples);
     }
 
     void add_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
@@ -87,8 +90,9 @@ class EntropySampler {
           mutual_information_samples[idx].push_back(sample);
         }
       }
-
-      samples.emplace("mutual_information" + std::to_string(index), mutual_information_samples);
+      
+      std::string key = "mutual_information" + std::to_string(index);
+      dataframe::utils::emplace(samples, key, mutual_information_samples);
     }
 
     void add_fixed_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
@@ -96,8 +100,9 @@ class EntropySampler {
       std::vector<uint32_t> interval2 = to_interval(x3, x4);
       std::vector<uint32_t> interval3 = to_combined_interval(x1, x2, x3, x4);
 
-      samples.emplace("mutual_information" + std::to_string(index), 
-          state->entropy(interval1, index) + state->entropy(interval2, index) - state->entropy(interval3, index));
+      std::string key = "mutual_information" + std::to_string(index);
+      auto mutual_information = state->entropy(interval1, index) + state->entropy(interval2, index) - state->entropy(interval3, index);
+      dataframe::utils::emplace(samples, key, mutual_information);
     }
 
     void add_variable_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
@@ -124,7 +129,7 @@ class EntropySampler {
         }
       }
 
-      samples.emplace("variable_mutual_information", mutual_information_samples);
+      dataframe::utils::emplace(samples, "variable_mutual_information", mutual_information_samples);
     }
 
     void add_entropy_all_partition_sizes(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
@@ -140,7 +145,8 @@ class EntropySampler {
         entropy_samples[i] = s;
       }
 
-      samples.emplace("entropy" + std::to_string(index), entropy_samples);
+      std::string key = "entropy" + std::to_string(index);
+      dataframe::utils::emplace(samples, key, entropy_samples);
     }
 
     void add_correlation_distance_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
@@ -163,7 +169,8 @@ class EntropySampler {
         }
       }
       
-      samples.emplace("correlation_distance" + std::to_string(index), bins);
+      std::string key = "correlation_distance" + std::to_string(index);
+      dataframe::utils::emplace(samples, key, bins);
     }
 
     void add_samples(dataframe::data_t &samples, std::shared_ptr<EntropyState> state) {

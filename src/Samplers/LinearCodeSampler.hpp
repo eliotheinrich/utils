@@ -25,8 +25,6 @@ class LinearCodeSampler {
 
 
   public:
-    LinearCodeSampler()=default;
-
     LinearCodeSampler(dataframe::Params& params) {
       inplace = dataframe::utils::get<int>(params, "inplace", false);
 
@@ -44,6 +42,8 @@ class LinearCodeSampler {
       max_size = dataframe::utils::get<int>(params, "max_size", 0);
       include_isolated_in_core = dataframe::utils::get<int>(params, "include_isolated_in_core", false);
     }
+
+    ~LinearCodeSampler()=default;
 
     void add_sym_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites1, const std::vector<size_t>& sites2) const {
       std::vector<size_t> all_sites;
