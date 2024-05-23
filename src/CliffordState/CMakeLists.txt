@@ -2,6 +2,7 @@ add_library(clifford_state
 	CliffordState.hpp
 	Tableau.cpp
 	QuantumCHPState.hpp
+  QuantumCHPState.cpp
 	QuantumGraphState.cpp
 )
 set_target_properties(clifford_state PROPERTIES 

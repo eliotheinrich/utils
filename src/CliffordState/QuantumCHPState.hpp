@@ -147,3 +147,12 @@ class QuantumCHPState : public CliffordState {
       tableau.set_z(i, j, v);
     }
 };
+
+#include <glaze/glaze.hpp>
+
+template<>
+struct glz::meta<QuantumCHPState> {
+  static constexpr auto value = glz::object(
+    "tableau", &QuantumCHPState::tableau
+  );
+};

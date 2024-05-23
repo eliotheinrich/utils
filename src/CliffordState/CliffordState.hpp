@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Frame.h"
 #include "Tableau.hpp"
 #include <deque>
 #include <algorithm>
@@ -37,13 +38,11 @@ class CliffordState : public EntropyState {
       return static_cast<double>(rand())/static_cast<double>(RAND_MAX);
     }
 
-
     virtual ~CliffordState() {}
 
     uint32_t system_size() const { 
       return EntropyState::system_size; 
     }
-
 
     virtual void h(uint32_t a)=0;
 
