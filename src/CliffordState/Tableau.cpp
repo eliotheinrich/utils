@@ -90,3 +90,22 @@ tableau_utils::Circuit PauliString::transform(PauliString const &p) const {
 
   return c1;
 }
+
+//template <>
+//struct glz::meta<PauliString> {
+//  static constexpr auto value = glz::object(
+//    "num_qubits", &PauliString::num_qubits,
+//    "phase", &PauliString::phase,
+//    "width", &PauliString::width,
+//    "bit_string", &PauliString::bit_string
+//  );
+//};
+//
+//template <>
+//struct glz::meta<Tableau> {
+//  static constexpr auto value = glz::object(
+//    "track_destabilizers", &Tableau::track_destabilizers,
+//    "num_qubits", &Tableau::num_qubits,
+//    "rows", &Tableau::rows
+//  );
+//};

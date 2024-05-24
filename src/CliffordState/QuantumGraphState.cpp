@@ -1,5 +1,7 @@
 #include "QuantumGraphState.h"
+
 #include <climits>
+#include <glaze/glaze.hpp>
 
 
 const uint32_t QuantumGraphState::ZGATES[4] = {IDGATE, ZGATE, SGATE, SDGATE};
@@ -552,3 +554,20 @@ double QuantumGraphState::sparsity() const {
 
   return s/(num_qubits*num_qubits);
 }
+
+template <>
+struct glz::meta<Graph<>> {
+  static constexpr auto value = glz::object(
+    "num_vertices", &Graph<>::num_vertices,
+    "vals", &Graph<>::vals,
+    "edges", &Graph<>::edges
+  );
+};
+
+template <>
+struct glz::meta<QuantumGraphState> {
+  static constexpr auto value = glz::object(
+    "num_qubits", &QuantumGraphState::num_qubits,
+    "graph", &QuantumGraphState::graph
+  );
+};
