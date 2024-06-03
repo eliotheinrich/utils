@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <random>
+#include <fmt/core.h>
 
 class BinaryMatrixBase {
   public:
@@ -206,8 +207,7 @@ class BinaryMatrixBase {
 
     virtual void remove_col(size_t c) {
       if (c >= num_cols) {
-        std::string error_message = "Cannot delete " + std::to_string(c) + "; outside of range.";
-        throw std::invalid_argument(error_message);
+        throw std::invalid_argument(fmt::format("Cannot delete {}; outside of range.", c));
       }
 
       transpose();

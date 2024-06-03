@@ -1,4 +1,6 @@
 #include "LinearCode.h"
+#include <fmt/core.h>
+
 
 ParityCheckMatrix::ParityCheckMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 
@@ -170,7 +172,44 @@ uint32_t GeneratorMatrix::sym(const std::vector<size_t>& sites1, const std::vect
   std::vector<size_t> all_sites;
   all_sites.insert(all_sites.end(), sites1.begin(), sites1.end());
   all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
-  return partial_rank(sites1) + partial_rank(sites2) - partial_rank(all_sites);
+  
+  GeneratorMatrix G1 = submatrix(sites1);
+  GeneratorMatrix G2 = submatrix(sites2);
+  GeneratorMatrix G3 = submatrix(all_sites);
+
+  uint32_t r1 = G1.rank(true) + G2.rank(true) - G3.rank(false);
+  uint32_t r2 = partial_rank(sites1) + partial_rank(sites2) - partial_rank(all_sites);
+
+  if (r1 != r2) {
+    throw std::runtime_error(fmt::format("Ranks do not match: {}, {}", r1, r2));
+  }
+  return r1;
+}
+
+GeneratorMatrix GeneratorMatrix::submatrix(const std::vector<size_t>& sites) const {
+  GeneratorMatrix G(num_rows, sites.size());
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < sites.size(); j++) {
+      G.set(i, j, get(i, sites[j]));
+    }
+  }
+
+  return G;
+}
+
+GeneratorMatrix GeneratorMatrix::supported(const std::vector<size_t>& sites) const {
+  GeneratorMatrix G(0, num_cols);
+
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < sites.size(); j++) {
+      if (get(i, sites[j])) {
+        G.append_row(get_row(i));
+        break;
+      }
+    }
+  }
+
+  return G;
 }
 
 

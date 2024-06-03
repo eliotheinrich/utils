@@ -23,6 +23,8 @@ class LinearCodeSampler {
     size_t max_size;
     bool include_isolated_in_core;
 
+    bool sample_generator_weights;
+
 
   public:
     LinearCodeSampler(dataframe::Params& params) {
@@ -41,6 +43,8 @@ class LinearCodeSampler {
       num_steps = dataframe::utils::get<int>(params, "num_leaf_removal_steps", 0);
       max_size = dataframe::utils::get<int>(params, "max_size", 0);
       include_isolated_in_core = dataframe::utils::get<int>(params, "include_isolated_in_core", false);
+
+      sample_generator_weights = dataframe::utils::get<int>(params, "sample_generator_weights", false);
     }
 
     ~LinearCodeSampler()=default;
@@ -117,6 +121,27 @@ class LinearCodeSampler {
       }
     }
 
+    void add_generator_weight_samples(dataframe::DataSlide& slide, std::shared_ptr<GeneratorMatrix> G) const {
+      double avg_w = 0.0;
+      for (size_t i = 0; i < G->num_rows; i++) {
+        double w = 0.0;
+        for (size_t j = 0; j < G->num_cols; j++) {
+          if (G->get(i, j)) {
+            w += 1.0;
+          }
+        }
+
+        avg_w += w;
+      }
+
+      slide.add_data("generator_weights");
+      if (G->num_rows == 0) {
+        slide.push_samples_to_data("generator_weights", 0.0);
+      } else {
+        slide.push_samples_to_data("generator_weights", avg_w/G->num_rows);
+      }
+    }
+
     void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, std::minstd_rand& rng, const std::optional<std::vector<size_t>>& sites1 = std::nullopt, const std::optional<std::vector<size_t>>& sites2 = std::nullopt) {
       std::shared_ptr<GeneratorMatrix> G;
       std::shared_ptr<ParityCheckMatrix> H;
@@ -132,16 +157,16 @@ class LinearCodeSampler {
       uint32_t r;
       if (sample_rank) {
         slide.add_data("rank");
-        r = H->rank(inplace);
+        r = G->rank(inplace);
         slide.push_samples_to_data("rank", r);
       }
 
       if (sample_solveable) {
         if (!sample_rank) {
-          r = H->rank(inplace);
+          r = G->rank(inplace);
         }
 
-        bool solveable = (r >= H->num_rows);
+        bool solveable = (r >= 1);
         slide.add_data("solveable");
         slide.push_samples_to_data("solveable", solveable);
       }
@@ -168,6 +193,10 @@ class LinearCodeSampler {
 
       if (sample_leaf_removal) {
         add_leaf_removal_samples(slide, H, rng);
+      }
+
+      if (sample_generator_weights) {
+        add_generator_weight_samples(slide, G);
       }
     }
 };

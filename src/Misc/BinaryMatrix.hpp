@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BinaryMatrixBase.hpp"
+#include <fmt/format.h>
 
 #define binary_word uint32_t
 
@@ -201,8 +202,7 @@ class BinaryMatrix : public BinaryMatrixBase {
 
     virtual void remove_row(size_t r) override {
       if (r >= num_rows) {
-        std::string error_message = "Cannot delete " + std::to_string(r) + "; outside of range.";
-        throw std::invalid_argument(error_message);
+        throw std::invalid_argument(fmt::format("Cannot delete {}; outside of range.", r));
       }
 
       data.erase(data.begin() + r);

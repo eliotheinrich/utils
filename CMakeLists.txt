@@ -50,7 +50,7 @@ endif()
 FetchContent_Declare(
   glaze
   GIT_REPOSITORY https://github.com/stephenberry/glaze.git
-  GIT_TAG d907f9cfb7197a29fa7cbefab310895593f5b105
+  GIT_TAG main
 )
 list(APPEND EXTERNALS glaze)
 
@@ -91,6 +91,9 @@ add_subdirectory(${MONTECARLO_DIR})
 add_subdirectory(${MISC_DIR})
 add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${TEST_DIR})
+
+find_package(fmt)
+target_link_libraries(linear_code fmt::fmt)
 
 if (BUILDING_PYQTOOLS)
     message("Building pyqtools!")
