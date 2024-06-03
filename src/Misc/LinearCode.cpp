@@ -233,6 +233,19 @@ uint32_t GeneratorMatrix::generator_locality(const std::vector<size_t>& sites) {
   return partial_rank(sites) + partial_rank(sites_complement) - rank();
 }
 
+GeneratorMatrix GeneratorMatrix::truncate(const std::vector<size_t>& sites) const {
+  GeneratorMatrix G(0, num_cols);
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < sites.size(); j++) {
+      if (get(i, sites[j])) {
+        G.append_row(data[i]);
+      }
+    }
+  }
+
+  return G;
+}
+
 bool GeneratorMatrix::congruent(const ParityCheckMatrix& H) const {
   GeneratorMatrix copy(*this);
   copy.transpose();

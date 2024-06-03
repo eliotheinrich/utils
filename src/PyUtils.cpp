@@ -184,30 +184,26 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("set", &BinaryMatrix::set)
     .def("set", [](BinaryMatrix& self, size_t i, size_t j, size_t v) { self.set(i, j, static_cast<bool>(v)); })
     .def("get", &BinaryMatrix::get)
-    .def("append_row", [](BinaryMatrix& self, const std::vector<bool>& row) { self.append_row(row); })
     .def("append_row", [](BinaryMatrix& self, const std::vector<int>& row) { 
-        std::vector<bool> rowb(row.size());
-        for (size_t i = 0; i < row.size(); i++) {
-          rowb[i] = static_cast<bool>(row[i]);
-        }
-        self.append_row(rowb); 
+        std::vector<bool> _row(row.size());
+        std::transform(row.begin(), row.end(), _row.begin(),
+            [](int value) { return static_cast<bool>(value); });
+        self.append_row(_row);
       })
     .def("transpose", &BinaryMatrix::transpose)
     .def("__str__", [](BinaryMatrix& self) { return self.to_string(); })
     .def("rref", [](BinaryMatrix& self) { self.rref(); })
     .def("partial_rref", [](BinaryMatrix& self, const std::vector<int>& sites) { 
         std::vector<size_t> _sites(sites.size());
-        for (size_t i = 0; i < sites.size(); i++) {
-          _sites[i] = static_cast<size_t>(sites[i]);
-        }
+        std::transform(sites.begin(), sites.end(), _sites.begin(),
+            [](int value) { return static_cast<size_t>(value); });
         self.partial_rref(_sites); 
       })
     .def("rank", [](BinaryMatrix& self, bool inplace) { return self.rank(inplace); }, "inplace"_a=false)
     .def("partial_rank", [](BinaryMatrix& self, const std::vector<int>& sites, bool inplace) { 
         std::vector<size_t> _sites(sites.size());
-        for (size_t i = 0; i < sites.size(); i++) {
-          _sites[i] = static_cast<size_t>(sites[i]);
-        }
+        std::transform(sites.begin(), sites.end(), _sites.begin(),
+            [](int value) { return static_cast<size_t>(value); });
         return self.partial_rank(_sites, inplace); 
       }, "sites"_a, "inplace_"_a=false);
 
@@ -219,5 +215,11 @@ NB_MODULE(pyqtools_bindings, m) {
   nanobind::class_<GeneratorMatrix, BinaryMatrix>(m, "GeneratorMatrix")
     .def(nanobind::init<size_t, size_t>())
     .def("to_parity_check_matrix", &GeneratorMatrix::to_parity_check_matrix, "inplace"_a = false)
+    .def("truncate", [](GeneratorMatrix& self, const std::vector<int>& sites) {
+        std::vector<size_t> _sites(sites.size());
+        std::transform(sites.begin(), sites.end(), _sites.begin(),
+            [](int value) { return static_cast<size_t>(value); });
+        return self.truncate(_sites);
+      })
     .def("generator_locality", &GeneratorMatrix::generator_locality);
 }
