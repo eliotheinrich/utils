@@ -172,44 +172,34 @@ uint32_t GeneratorMatrix::sym(const std::vector<size_t>& sites1, const std::vect
   std::vector<size_t> all_sites;
   all_sites.insert(all_sites.end(), sites1.begin(), sites1.end());
   all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
-  
-  GeneratorMatrix G1 = submatrix(sites1);
-  GeneratorMatrix G2 = submatrix(sites2);
-  GeneratorMatrix G3 = submatrix(all_sites);
 
-  uint32_t r1 = G1.rank(true) + G2.rank(true) - G3.rank(false);
-  uint32_t r2 = partial_rank(sites1) + partial_rank(sites2) - partial_rank(all_sites);
+  GeneratorMatrix G1 = supported(sites1);
+  GeneratorMatrix G2 = supported(sites2);
+  GeneratorMatrix G3 = supported(all_sites);
 
-  if (r1 != r2) {
-    throw std::runtime_error(fmt::format("Ranks do not match: {}, {}", r1, r2));
-  }
-  return r1;
+  return G1.rank() + G2.rank() - G3.rank();
 }
 
-GeneratorMatrix GeneratorMatrix::submatrix(const std::vector<size_t>& sites) const {
-  GeneratorMatrix G(num_rows, sites.size());
-  for (size_t i = 0; i < num_rows; i++) {
-    for (size_t j = 0; j < sites.size(); j++) {
-      G.set(i, j, get(i, sites[j]));
-    }
+GeneratorMatrix GeneratorMatrix::truncate(const std::vector<size_t>& rows) const {
+  GeneratorMatrix G(rows.size(), num_cols);
+  for (size_t i = 0; i < rows.size(); i++) {
+    G.data[i] = data[rows[i]];
   }
 
   return G;
 }
 
 GeneratorMatrix GeneratorMatrix::supported(const std::vector<size_t>& sites) const {
-  GeneratorMatrix G(0, num_cols);
-
+  std::vector<size_t> has_support;
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < sites.size(); j++) {
       if (get(i, sites[j])) {
-        G.append_row(get_row(i));
-        break;
+        has_support.push_back(i);
       }
     }
   }
 
-  return G;
+  return truncate(has_support);
 }
 
 
@@ -231,19 +221,6 @@ uint32_t GeneratorMatrix::generator_locality(const std::vector<size_t>& sites) {
   }
 
   return partial_rank(sites) + partial_rank(sites_complement) - rank();
-}
-
-GeneratorMatrix GeneratorMatrix::truncate(const std::vector<size_t>& sites) const {
-  GeneratorMatrix G(0, num_cols);
-  for (size_t i = 0; i < num_rows; i++) {
-    for (size_t j = 0; j < sites.size(); j++) {
-      if (get(i, sites[j])) {
-        G.append_row(data[i]);
-      }
-    }
-  }
-
-  return G;
 }
 
 bool GeneratorMatrix::congruent(const ParityCheckMatrix& H) const {

@@ -96,7 +96,6 @@ find_package(fmt)
 target_link_libraries(linear_code fmt::fmt)
 
 if (BUILDING_PYQTOOLS)
-    message("Building pyqtools!")
     find_package(Python 3.10 
         REQUIRED COMPONENTS Interpreter Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule

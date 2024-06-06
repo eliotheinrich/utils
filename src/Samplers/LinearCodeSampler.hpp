@@ -55,7 +55,7 @@ class LinearCodeSampler {
       all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
 
       slide.add_data("sym");
-      slide.push_samples_to_data("sym", (double) matrix->partial_rank(sites1) + matrix->partial_rank(sites2) - matrix->partial_rank(all_sites));
+      slide.push_samples("sym", (double) matrix->sym(sites1, sites2));
     }
 
     void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
