@@ -1,5 +1,7 @@
 #include "LinearCode.h"
-#include <fmt/core.h>
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 
 ParityCheckMatrix::ParityCheckMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
@@ -195,6 +197,7 @@ GeneratorMatrix GeneratorMatrix::supported(const std::vector<size_t>& sites) con
     for (size_t j = 0; j < sites.size(); j++) {
       if (get(i, sites[j])) {
         has_support.push_back(i);
+        break;
       }
     }
   }
