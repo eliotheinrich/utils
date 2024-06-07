@@ -31,7 +31,7 @@ class LinearCodeSampler {
       inplace = dataframe::utils::get<int>(params, "inplace", false);
 
       sample_rank = dataframe::utils::get<int>(params, "sample_rank", true);
-      sample_solveable = dataframe::utils::get<int>(params, "sample_solveable", true);
+      sample_solveable = dataframe::utils::get<int>(params, "sample_solveable", sample_rank);
       sample_locality = dataframe::utils::get<int>(params, "sample_locality", false);
 
       sample_all_locality = dataframe::utils::get<int>(params, "sample_all_locality", false);
