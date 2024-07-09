@@ -138,6 +138,17 @@ void ParityCheckMatrix::reduce() {
   }
 }
 
+bool ParityCheckMatrix::is_in_space(const std::vector<bool>& v) const {
+  std::vector<bool> parity = BinaryMatrixBase::multiply(v);
+  
+  int pc = 0;
+  for (auto b : parity) {
+    pc = (pc + int(b)) % 2;
+  }
+
+  return !bool(pc);
+}
+
 
 
 GeneratorMatrix::GeneratorMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }

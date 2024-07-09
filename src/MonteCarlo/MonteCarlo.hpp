@@ -6,6 +6,8 @@
 #include <string>
 #include <Frame.h>
 
+#include <Drawable.h>
+
 #define PI 3.14159265
 
 enum BoundaryCondition { Periodic, Open };
@@ -53,11 +55,11 @@ static CoolingSchedule parse_cooling_schedule(const std::string& s) {
   }
 }
 
-class MonteCarloSimulator : public dataframe::Simulator {
+class MonteCarloSimulator : public Drawable {
   // Most basic Monte-Carlo model to be simulated must have some notion of energy
   // as well as a mutation data structure. Specifics must be supplied by child classes.
   public:
-    MonteCarloSimulator(dataframe::Params &params, uint32_t num_threads) : dataframe::Simulator(params), num_threads(num_threads) {
+    MonteCarloSimulator(dataframe::Params &params, uint32_t num_threads) : Drawable(params), num_threads(num_threads) {
       final_temperature = dataframe::utils::get<double>(params, "temperature");
       temperature = final_temperature;
       init_temperature = dataframe::utils::get<double>(params, "initial_temperature", final_temperature);
@@ -67,7 +69,7 @@ class MonteCarloSimulator : public dataframe::Simulator {
     virtual ~MonteCarloSimulator()=default;
 
     // Implement Simulator methods but introduce MonteCarlo methods
-    virtual void timesteps(uint32_t num_steps) {
+    virtual void timesteps(uint32_t num_steps) override {
       uint64_t num_updates = system_size()*num_steps;
       for (uint64_t i = 0; i < num_updates; i++) {
         generate_mutation();
@@ -82,7 +84,7 @@ class MonteCarloSimulator : public dataframe::Simulator {
       }
     }
 
-    virtual void equilibration_timesteps(uint32_t num_steps) {
+    virtual void equilibration_timesteps(uint32_t num_steps) override {
       uint32_t steps_per_update = num_steps / num_cooling_updates;
       temperature = init_temperature;
       for (uint64_t i = 0; i < num_cooling_updates; i++) {
@@ -97,6 +99,9 @@ class MonteCarloSimulator : public dataframe::Simulator {
       temperature = final_temperature;
       timesteps(num_steps % num_cooling_updates);
     }
+
+
+    virtual void callback(int key) override;
 
     // To be overridden by child classes
     virtual double energy() const = 0;

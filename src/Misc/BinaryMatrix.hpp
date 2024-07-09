@@ -200,6 +200,25 @@ class BinaryMatrix : public BinaryMatrixBase {
       data.push_back(row);
     }
 
+    virtual void set_row(size_t r, const std::vector<bool>& row) override {
+      size_t row_num_words = row.size() / binary_word_size() + 1;
+      if (row_num_words != num_words()) {
+        throw std::invalid_argument("Invalid row length.");
+      }
+
+      std::vector<binary_word> row_words(row_num_words);
+
+      for (size_t i = 0; i < row.size(); i++) {
+        size_t word_ind = i / binary_word_size();
+        size_t bit_ind = i % binary_word_size();
+        row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
+      }
+
+      Bitstring bits = Bitstring(row_words, num_cols);
+
+      data[r] = bits;
+    }
+
     virtual void remove_row(size_t r) override {
       if (r >= num_rows) {
         throw std::invalid_argument(fmt::format("Cannot delete {}; outside of range.", r));

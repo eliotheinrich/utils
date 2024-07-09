@@ -25,6 +25,8 @@ class LinearCodeSampler {
 
     bool sample_generator_weights;
 
+    bool avoid_diagonalize;
+
 
   public:
     LinearCodeSampler(dataframe::Params& params) {
@@ -45,6 +47,8 @@ class LinearCodeSampler {
       include_isolated_in_core = dataframe::utils::get<int>(params, "include_isolated_in_core", false);
 
       sample_generator_weights = dataframe::utils::get<int>(params, "sample_generator_weights", false);
+
+      avoid_diagonalize = dataframe::utils::get<int>(params, "avoid_diagonalize", false);
     }
 
     ~LinearCodeSampler()=default;
@@ -147,12 +151,15 @@ class LinearCodeSampler {
       std::shared_ptr<ParityCheckMatrix> H;
       if (matrix.index() == 0) {
         G = std::get<std::shared_ptr<GeneratorMatrix>>(matrix);
-        H = std::shared_ptr<ParityCheckMatrix>(new ParityCheckMatrix(G->to_parity_check_matrix()));
+        if (!avoid_diagonalize) {
+          H = std::shared_ptr<ParityCheckMatrix>(new ParityCheckMatrix(G->to_parity_check_matrix()));
+        }
       } else {
         H = std::get<std::shared_ptr<ParityCheckMatrix>>(matrix);
-        G = std::shared_ptr<GeneratorMatrix>(new GeneratorMatrix(H->to_generator_matrix()));
+        if (!avoid_diagonalize) {
+          G = std::shared_ptr<GeneratorMatrix>(new GeneratorMatrix(H->to_generator_matrix()));
+        }
       }
-
 
       uint32_t r;
       if (sample_rank) {

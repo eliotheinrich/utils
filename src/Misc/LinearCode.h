@@ -21,6 +21,7 @@ class ParityCheckMatrix : public BinaryMatrix {
     bool congruent(const GeneratorMatrix& G) const;
     void reduce();
 
+    bool is_in_space(const std::vector<bool>& v) const;
 };
 
 class GeneratorMatrix : public BinaryMatrix {

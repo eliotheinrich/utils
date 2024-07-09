@@ -192,6 +192,8 @@ class BinaryMatrixBase {
 
     virtual void append_row(const std::vector<bool>& row)=0;
 
+    virtual void set_row(size_t r, const std::vector<bool>& row)=0;
+
     virtual void append_col(const std::vector<bool>& col) {
       if (col.size() != num_rows) {
         throw std::invalid_argument("Invalid column length.");

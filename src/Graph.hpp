@@ -1,7 +1,8 @@
 #pragma once
 
-#include <iostream>
+#include <fmt/format.h>
 
+#include <iostream>
 #include <vector>
 #include <iterator>
 #include <set>
@@ -273,6 +274,31 @@ class Graph {
       }
     }
 
+    size_t num_edges() const {
+      size_t n = 0;
+      for (size_t i = 0; i < num_vertices; i++) {
+        n += edges[i].size();
+      }
+      return n;
+    }
+
+    Graph<T, V> subgraph(const std::vector<uint32_t>& sites) const {
+      Graph<T, V> g(sites.size());
+      for (size_t i = 0; i < sites.size(); i++) {
+        size_t a = sites[i];
+        for (auto const [b, w] : edges[a]) {
+          for (size_t j = 0; j < sites.size(); j++) {
+            if (sites[j] == b) {
+              g.add_weighted_edge(i, j, w);
+              break;
+            }
+          }
+        }
+      }
+
+      return g;
+    }
+
     Graph<T, bool> partition(const std::vector<uint32_t> &nodes) const {
       std::set<uint32_t> nodess;
       std::copy(nodes.begin(), nodes.end(), std::inserter(nodess, nodess.end()));
@@ -314,6 +340,24 @@ class Graph {
       }
 
       return new_graph;
+    }
+
+    size_t num_loops() const {
+      auto components = component_partition();
+
+      size_t n = 0;
+      for (auto const &component : components) {
+        std::vector<uint32_t> sites(component.begin(), component.end());
+        auto graph = subgraph(sites);
+//std::cout << fmt::format("Component {} has {} edges and {} vertices\n", graph.to_string(), graph.num_edges()/2, graph.num_vertices);
+//std::cout << "Num loops = " << graph.num_edges()/2 - graph.num_vertices + 1 << "\n";
+        n += graph.num_edges()/2 - graph.num_vertices + 1;
+      }
+
+//std::cout << to_string() << "\nhas " << n << " loops\n";
+
+      
+      return n;
     }
 
     std::pair<bool, std::vector<uint32_t>> path(uint32_t s, uint32_t t) const {
@@ -532,6 +576,31 @@ class Graph {
         c += local_clustering_coefficient(i);
       }
       return c/num_vertices;
+    }
+
+    std::vector<std::set<uint32_t>> component_partition() const {
+      std::vector<std::set<uint32_t>> components;
+
+      std::set<uint32_t> to_check;
+      for (uint32_t i = 0; i < num_vertices; i++) {
+        to_check.insert(i);
+      }
+
+      while (!to_check.empty()) {
+        uint32_t i = *to_check.begin(); // pop
+        to_check.erase(to_check.begin());
+
+        auto new_component = component(i);
+        components.push_back(new_component);
+
+        for (auto v : new_component) {
+          if (to_check.count(v)) {
+            to_check.erase(v);
+          }
+        }
+      }
+
+      return components;
     }
 
     double percolation_probability() const {

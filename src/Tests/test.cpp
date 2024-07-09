@@ -195,6 +195,24 @@ bool test_mps() {
   return true;
 }
 
+#include "Drawable.h"
+#include "Display.h"
+
+class TestClass : public Drawable {
+  private:
+
+  public:
+    TestClass(dataframe::Params &params) : Drawable(params) {}
+
+    virtual void timesteps(uint32_t num_steps) override {
+    }
+    virtual Texture get_texture() const override {
+      return Texture(10, 10);
+    };
+
+
+};
+
 int main() {
   assert(test_solve_linear_system());
   assert(test_binary_polynomial());
@@ -204,4 +222,10 @@ int main() {
   assert(test_parity_check_reduction());
   assert(test_leaf_removal());
   assert(test_mps());
+
+  dataframe::Params params;
+  std::unique_ptr<TestClass> sim = std::make_unique<TestClass>(params);
+
+  SimulatorDisplay disp(std::move(sim));
+  disp.animate();
 }

@@ -83,6 +83,22 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
       num_rows++;
     }
 
+    virtual void set_row(size_t r, const std::vector<bool>& row) override {
+      if (row.size() != num_cols) {
+        throw std::invalid_argument("Invalid row length.");
+      }
+
+      std::set<size_t> new_row;
+
+      for (size_t i = 0; i < row.size(); i++) {
+        if (row[i]) {
+          new_row.insert(i);
+        }
+      }
+
+      inds[r] = new_row;
+    }
+
     virtual void remove_row(size_t r) override {
       if (r >= num_rows) {
         std::string error_message = "Cannot delete " + std::to_string(r) + "; outside of range.";
