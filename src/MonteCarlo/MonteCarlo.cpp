@@ -1,4 +1,6 @@
 #include "MonteCarlo.hpp"
+
+#ifdef BUILD_GLFW
 #include <GLFW/glfw3.h>
 
 void MonteCarloSimulator::callback(int key) {
@@ -10,3 +12,11 @@ void MonteCarloSimulator::callback(int key) {
     temperature = temperature + 0.1;
   }
 }
+
+#else
+
+void MonteCarloSimulator::callback(int key) {
+  return;
+}
+
+#endif

@@ -17,6 +17,8 @@ set(PFFFT_DIR $ENV{PFFFT_DIR})
 find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
+find_package(fmt)
+
 set(BLAS_DIR $ENV{BLAS_DIR})
 set(LAPACK_DIR $ENV{LAPACK_DIR})
 set(LAPACKBLAS lapack openblas)
@@ -84,18 +86,18 @@ set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/src/Samplers)
 set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 set(MISC_DIR ${PROJECT_SOURCE_DIR}/src/Misc)
 set(TEST_DIR ${PROJECT_SOURCE_DIR}/src/Tests)
-set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
+if (DEFINED BUILD_GLFW)
+    add_compile_definitions(BUILD_GLFW)
+    set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
+    add_subdirectory(${DISPLAY_DIR})
+endif()
 
 add_subdirectory(${QUANTUMSTATE_DIR})
 add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${MONTECARLO_DIR})
 add_subdirectory(${MISC_DIR})
 add_subdirectory(${SAMPLERS_DIR})
-add_subdirectory(${DISPLAY_DIR})
 add_subdirectory(${TEST_DIR})
-
-find_package(fmt)
-target_link_libraries(linear_code fmt::fmt)
 
 if (BUILDING_PYQTOOLS)
     find_package(Python 3.10 
