@@ -348,6 +348,8 @@ class MatrixProductState : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
+    double stabilizer_renyi_entropy(size_t n) const;
+
 		void print_mps() const;
 
 		std::complex<double> coefficients(uint32_t z) const;

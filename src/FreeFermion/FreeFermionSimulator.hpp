@@ -17,41 +17,40 @@ class FreeFermionState : public EntropyState {
   private:
     bool particles_conserved;
     size_t L;
-    Eigen::MatrixXcd amplitudes;
 
   public:
-    FreeFermionState(size_t L) : L(L), EntropyState(L) {
-      particles_conserved = true;
-      amplitudes = Eigen::MatrixXcd::Zero(L, L);
-      for (size_t i = 0; i < L; i++) {
-        amplitudes(i, i) = 1.0;
-      }
-    }
-
-    void particle_nonconserving() {
-      if (particles_conserved) {
-        particles_conserved = false;
-
-        amplitudes.conservativeResize(2*L, Eigen::NoChange_t());
-
-        for (size_t i = 0; i < L; i++) {
-          for (size_t j = 0; j < L; j++) {
-            amplitudes(i + L, j) = amplitudes(i, j);
-            amplitudes(i, j) = 0.0;
-          }
-        }
-      }
+    Eigen::MatrixXcd amplitudes;
+    FreeFermionState(size_t L, bool particles_conserved) : L(L), particles_conserved(particles_conserved), EntropyState(L) {
+      particles_at({});
     }
 
     void particles_at(const std::vector<size_t>& sites) {
-      particles_conserved = true;
-      amplitudes = Eigen::MatrixXcd::Zero(L, L);
+      std::cout << fmt::format("PARTICLES AT {}\n", sites);
       for (auto i : sites) {
         if (i > L) {
           throw std::invalid_argument(fmt::format("Invalid site. Must be within 0 < i < {}", L));
         }
+      }
 
-        amplitudes(i, i) = 1.0;
+      if (particles_conserved) {
+        amplitudes = Eigen::MatrixXcd::Zero(L, L);
+        for (auto i : sites) {
+          amplitudes(i, i) = 1.0;
+        }
+      } else {
+        amplitudes = Eigen::MatrixXcd::Zero(2*L, L);
+        std::vector<bool> included(L, false);
+        for (auto i : sites) {
+          included[i] = true;
+        }
+
+        for (size_t i = 0; i < L; i++) {
+          if (included[i]) {
+            amplitudes(i + L, i) = 1.0;
+          } else {
+            amplitudes(i, i) = 1.0;
+          }
+        }
       }
     }
 
@@ -67,13 +66,14 @@ class FreeFermionState : public EntropyState {
 
     void checkerboard_particles() {
       std::vector<size_t> sites;
-      for (size_t i = 0; i < L/2; i++) {
-        sites.push_back(2*i);
+      for (size_t i = 0; i < L; i++) {
+        sites.push_back(i);
       }
       particles_at(sites);
     }
 
     void swap(size_t i, size_t j) {
+      std::cout << "calling swap\n";
       amplitudes.row(i).swap(amplitudes.row(j));
       if (!particles_conserved) {
         amplitudes.row(i + L).swap(amplitudes.row(j + L));
@@ -120,7 +120,15 @@ class FreeFermionState : public EntropyState {
       }
 
       if (index == 1) {
-        Eigen::MatrixXcd Cn = CA1*CA1.log() + CA2*CA2.log();
+        Eigen::MatrixXcd Cn = Eigen::MatrixXcd::Zero(indices.size(), indices.size());
+        if (std::abs(CA1.determinant()) > 1e-6) {
+          Cn += CA1*CA1.log();
+        }
+
+        if (std::abs(CA2.determinant()) > 1e-6) {
+          Cn += CA2*CA2.log();
+        }
+
         return -Cn.trace().real();
       } else {
         Eigen::MatrixXcd Cn = (CA1.pow(index) + CA2.pow(index)).log();
@@ -151,7 +159,6 @@ class FreeFermionState : public EntropyState {
     }
 
     void orthogonalize() {
-      std::cout << "Before SVD: \n" << amplitudes << "\n";
       Eigen::JacobiSVD<Eigen::MatrixXcd> svd(amplitudes, Eigen::ComputeThinU);
       auto U = svd.matrixU();
       auto D = svd.singularValues();
@@ -171,7 +178,6 @@ class FreeFermionState : public EntropyState {
           amplitudes(k, i) = 0.0;
         }
       }
-      std::cout << "After SVD: \n" << amplitudes << "\n";
     }
 
     Eigen::MatrixXcd prepare_hamiltonian(const Eigen::MatrixXcd& H) const {
@@ -209,7 +215,7 @@ class FreeFermionState : public EntropyState {
 
     void evolve(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
       if (particles_conserved) {
-        particle_nonconserving();
+        throw std::invalid_argument("Cannot call evolve(A, B) for particle-conserving simulation.");
       }
 
       auto hamiltonian = prepare_hamiltonian(A, B);
@@ -225,7 +231,7 @@ class FreeFermionState : public EntropyState {
 
     void weak_measurement(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) {
       if (particles_conserved) {
-        particle_nonconserving();
+        throw std::invalid_argument("Cannot call weak_measurement(A, B) for particle-conserving simulation.");
       }
 
       auto hamiltonian = prepare_hamiltonian(A, B);
@@ -233,21 +239,18 @@ class FreeFermionState : public EntropyState {
     }
 
     void forced_projective_measurement(size_t i, bool outcome) {
-      particle_nonconserving();
-
       if (i < 0 || i > L) {
         throw std::invalid_argument(fmt::format("Invalid qubit measured: {}, L = {}", i, L));
       }
 
-      size_t k = outcome ? i : i + L;
+      size_t k = outcome ? i + L : i;
+      std::cout << "from forced_projective_measurement, amplitudes = \n" << amplitudes << "\n";
 
       size_t i0;
       double d = 0.0;
-      std::cout << fmt::format("n({}) = {}, outcome = {}\n", i, occupation(i), outcome);
-      std::cout << "amplitudes = \n" << amplitudes << "\n";
       for (size_t j = 0; j < L; j++) {
         double dj = std::abs(amplitudes(k, j));
-        std::cout << fmt::format("|amplitudes({}, {})| = {}\n", k, j, dj);
+        std::cout << fmt::format("a({}, {}) = {}\n", k, j, dj);
         if (dj > d) {
           d = dj;
           i0 = j;
@@ -255,17 +258,16 @@ class FreeFermionState : public EntropyState {
       }
 
       if (!(d > 0)) {
+        std::cout << amplitudes << "\n";
+        std::cout << fmt::format("called forced_projective_measurement({}, {}), c = {}\n", i, outcome, occupation());
         throw std::runtime_error("Found no positive amplitudes to determine i0.");
       }
-
-      std::cout << fmt::format("Largest dj found: {}\n", d);
 
       for (size_t j = 0; j < L; j++) {
         if (j == i0) {
           continue;
         }
 
-        std::cout << fmt::format("normalization constant: ({} + {}i)/({} + {}i) = ({} + {}i)\n", amplitudes(k, j).real(), amplitudes(k, j).imag(), amplitudes(k, i0).real(), amplitudes(k, i0).imag(), (amplitudes(k, j)/amplitudes(k, i0)).real(), (amplitudes(k, j)/amplitudes(k, i0)).imag());
         amplitudes(Eigen::indexing::all, j) = amplitudes(Eigen::indexing::all, j) - amplitudes(k, j)/amplitudes(k, i0) * amplitudes(Eigen::indexing::all, i0);
         amplitudes(i, j) = 0.0;
       }
@@ -282,6 +284,7 @@ class FreeFermionState : public EntropyState {
     bool projective_measurement(size_t i, double r) {
       double c = occupation(i);
       bool outcome = (r < c);
+      std::cout << fmt::format("calling projective measurement: {}, {}, {}\n", r, c, outcome);
 
       forced_projective_measurement(i, outcome);
 
@@ -298,19 +301,33 @@ class FreeFermionState : public EntropyState {
     }
 
     double occupation(size_t i) const {
-      auto p = amplitudes(Eigen::indexing::all, i).adjoint() * amplitudes(Eigen::indexing::all, i);
-      auto C = correlation_matrix();
-      std::cout << "correlation matrix = \n" << C << "\n";
-      return std::abs(C(i, i));
+      double d = 0.0;
+      for (size_t k = 0; k < amplitudes.cols(); k++) {
+        auto c = std::abs(amplitudes(i, k));
+        d += c*c;
+      }
+
+      return d;
+
+      //auto c = occupation();
+      //return c[i];
+      //size_t d = particles_conserved ? 0 : L;
+      //auto p = amplitudes(Eigen::indexing::all, i + d).adjoint() * amplitudes(Eigen::indexing::all, i + d);
+      //std::cout << fmt::format("{} vs {}", std::abs(p(0, 0)), c[i]);
+      //return std::abs(p(0, 0));
     }
 
     std::vector<double> occupation() const {
       auto C = correlation_matrix();
+      std::cout << "C = \n" << C << "\n";
       std::vector<double> n(L);
 
+      int d = particles_conserved ? 0 : L;
       for (size_t i = 0; i < L; i++) {
-        n[i] = std::abs(C(i, i));
+        n[i] = std::abs(C(i + d, i + d));
       }
+
+      //std::cout << fmt::format("c(n) = {}\n", n);
 
       return n;
     }
@@ -329,14 +346,17 @@ class FreeFermionSimulator : public Drawable {
     bool sample_correlations;
 
   protected:
-    std::shared_ptr<FreeFermionState> state;
     size_t L;
 
   public:
+    std::shared_ptr<FreeFermionState> state;
     FreeFermionSimulator(dataframe::Params& params, uint32_t num_threads) : Drawable(params), sampler(params) {
       L = dataframe::utils::get<int>(params, "system_size");
       sample_correlations = dataframe::utils::get<int>(params, "sample_correlations", 0);
-      state = std::make_shared<FreeFermionState>(L);
+    }
+
+    void init_fermion_state(bool particles_conserved) {
+      state = std::make_shared<FreeFermionState>(L, particles_conserved);
     }
 
     virtual Texture get_texture() const override {

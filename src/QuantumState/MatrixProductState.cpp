@@ -199,6 +199,86 @@ class MatrixProductStateImpl {
 
       return s;
     }
+    
+    enum Pauli {
+      I, X, Y, Z
+    };
+
+    struct PauliString {
+      std::vector<Pauli> paulis;
+    };
+
+    ITensor A(size_t i) const {
+      // TODO: CHECK RIGHT NORMALIZATION
+      if (i == num_qubits - 1) {
+        return tensors[i];
+      } else {
+        return tensors[i]*singular_values[i];
+      }
+    }
+
+    ITensor pauli_matrix(size_t i, Index i1, Index i2) const {
+      Eigen::Matrix2cd c;
+      if (i == 0) {
+        c << 1.0, 0.0,
+             0.0, 1.0;
+      } else if (i == 1) {
+        c << 0.0, 1.0,
+             1.0, 0.0;
+      } else if (i == 2) {
+        c << 0.0, std::complex<double>(0.0, -1.0),
+             std::complex<double>(0.0, 1.0), 0.0;
+      } else if (i == 3) {
+        c << 1.0, 0.0,
+             0.0, -1.0;
+      }
+
+      return matrix_to_tensor(c, i1, i2);
+    }
+
+    std::pair<PauliString, double> sample_pauli() const {
+      double P = 1.0;
+      auto i = internal_indices[0];
+      auto j = prime(internal_indices[0]);
+      ITensor L(i, j);
+      L.set(i=1, j=1, 1.0);
+
+      for (size_t k = 1; k < num_qubits; k++) {
+        double probs[4];
+
+        auto Ak = A(k);
+        for (size_t p = 0; p < 4; p++) {
+          auto sigma = pauli_matrix(p, external_indices[k], prime(external_indices[k]));
+
+
+          auto contraction = L;
+          contraction = contraction * Ak.conj(); // (1)
+          contraction = contraction * prime(Ak); // (2)
+          contraction = contraction * sigma; // (3)
+          contraction = contraction * prime(prime(Ak, external_indices[k], 2), internal_indices[k-1], 2); // (4)
+          contraction = contraction * prime(prime(prime(Ak.conj(), internal_indices[k], 1), internal_indices[k-1], 3), external_indices[k], 3); // (5)
+          contraction = contraction * prime(sigma.conj(), 2); // (6)
+          contraction = contraction * prime(L, 2); // (7)
+
+          std::cout << "contraction = " << contraction << "\n";
+        }
+
+
+        double pi = 1.0;
+      }
+
+      PauliString p{};
+    
+      return std::make_pair(p, P);
+    }
+
+    double stabilizer_renyi_entropy(size_t n) const {
+      for (size_t k = 0; k < 10; k++) {
+        auto [pauli, p] = sample_pauli();
+      }
+
+      return 0.0;
+    }
 
     ITensor coefficient_tensor() const {
       ITensor C = tensors[0];
@@ -210,7 +290,6 @@ class MatrixProductStateImpl {
       return C;
     }
 
-
     void print_mps() const {
       print(tensors[0]);
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
@@ -218,8 +297,6 @@ class MatrixProductStateImpl {
         print(tensors[i+1]);
       }
     }
-
-
 
     void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
       auto i = external_indices[qubit];
@@ -250,9 +327,9 @@ class MatrixProductStateImpl {
       auto i1 = external_indices[qubits[0]];
       auto i2 = external_indices[qubits[1]];
       ITensor gate_tensor = matrix_to_tensor(gate, 
-          prime(i1), prime(i2), 
-          i1, i2
-          );
+        prime(i1), prime(i2), 
+        i1, i2
+      );
 
       ITensor theta = noPrime(gate_tensor*tensors[q1]*singular_values[q1]*tensors[q2]);
 
@@ -378,6 +455,10 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	uint32_t q = sorted_qubits.back();
 
 	return impl->entropy(q);
+}
+
+double MatrixProductState::stabilizer_renyi_entropy(size_t n) const {
+  return impl->stabilizer_renyi_entropy(n);
 }
 
 void MatrixProductState::print_mps() const {
