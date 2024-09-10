@@ -37,9 +37,9 @@ std::string Statevector::to_string() const {
     if (std::abs(tmp.data(i)) > QS_ATOL) {
       std::string amplitude;
       if (std::abs(tmp.data(i).imag()) < QS_ATOL) {
-        amplitude = std::to_string(tmp.data(i).real());
+        amplitude = fmt::format("{}", tmp.data(i).real());
       } else {
-        amplitude = "(" + std::to_string(tmp.data(i).real()) + ", " + std::to_string(tmp.data(i).imag()) + ")";
+        amplitude = fmt::format("({}, {})", tmp.data(i).real(), tmp.data(i).imag());
       }
 
       std::string bin = quantumstate_utils::print_binary(i, tmp.num_qubits);

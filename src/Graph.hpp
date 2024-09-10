@@ -2,12 +2,10 @@
 
 #include <fmt/format.h>
 
-#include <iostream>
 #include <vector>
 #include <iterator>
 #include <set>
 #include <map>
-#include <assert.h>
 #include <algorithm>
 #include <cstdint>
 #include <random>
@@ -131,9 +129,9 @@ class Graph {
     std::string to_string() const {
       std::string s = "";
       for (uint32_t i = 0; i < num_vertices; i++) {
-        s += "[" + std::to_string(vals[i]) + "] " + std::to_string(i) + " -> ";
+        s += fmt::format("[{}] {} -> ", vals[i], i); 
         for (auto const&[v, w] : edges[i]) {
-          s += "(" + std::to_string(v) + ": "  + std::to_string(w) + ") ";
+          s += fmt::format("({}: {}) ", v, w);
         }
         if (i != num_vertices - 1) {
           s += "\n";
@@ -174,7 +172,9 @@ class Graph {
     }
 
     void set_val(uint32_t i, V val) {
-      assert(i < num_vertices);
+      if (i >= num_vertices) {
+        throw std::invalid_argument("Invalid index.");
+      }
       vals[i] = val;
     }
 
@@ -349,13 +349,8 @@ class Graph {
       for (auto const &component : components) {
         std::vector<uint32_t> sites(component.begin(), component.end());
         auto graph = subgraph(sites);
-//std::cout << fmt::format("Component {} has {} edges and {} vertices\n", graph.to_string(), graph.num_edges()/2, graph.num_vertices);
-//std::cout << "Num loops = " << graph.num_edges()/2 - graph.num_vertices + 1 << "\n";
         n += graph.num_edges()/2 - graph.num_vertices + 1;
       }
-
-//std::cout << to_string() << "\nhas " << n << " loops\n";
-
       
       return n;
     }

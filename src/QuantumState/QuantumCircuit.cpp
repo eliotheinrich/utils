@@ -8,7 +8,7 @@ std::string QuantumCircuit::to_string() const {
 			[](std::shared_ptr<Gate> gate) -> std::string {
 				std::string gate_str = gate->label() + " ";
 				for (auto const &q : gate->qbits) {
-					gate_str += std::to_string(q) + " ";
+					gate_str += fmt::format("{} ", q);
 				}
 
 				return gate_str;
@@ -16,7 +16,7 @@ std::string QuantumCircuit::to_string() const {
 			[](Measurement m) -> std::string {
 				std::string meas_str = "mzr ";
 				for (auto const &q : m.qbits) {
-					meas_str += std::to_string(q) + " ";
+					meas_str += fmt::format("{} ", q);
 				}
 
 				return meas_str;

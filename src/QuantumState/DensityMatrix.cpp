@@ -21,7 +21,7 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 std::string DensityMatrix::to_string() const {
 	std::stringstream ss;
 	ss << data;
-	return "DensityMatrix(" + std::to_string(num_qubits) + "):\n" + ss.str() + "\n";
+	return fmt::format("DensityMatrix({}):\n{}\n", num_qubits, ss.str());
 }
 
 DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_qubits) const {

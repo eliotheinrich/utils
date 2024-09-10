@@ -139,12 +139,12 @@ class MatrixProductStateImpl {
       }
 
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
-        internal_indices.push_back(Index(1, "Internal,Left,a" + std::to_string(i)));
-        internal_indices.push_back(Index(1, "Internal,Right,a" + std::to_string(i)));
+        internal_indices.push_back(Index(1, fmt::format("Internal,Left,a{}", i)));
+        internal_indices.push_back(Index(1, fmt::format("Internal,Right,a{}", i)));
       }
 
       for (uint32_t i = 0; i < num_qubits; i++) {
-        external_indices.push_back(Index(2, "External,i" + std::to_string(i)));
+        external_indices.push_back(Index(2, fmt::format("External,i{}", i)));
       }
 
       ITensor tensor;
@@ -273,8 +273,8 @@ class MatrixProductStateImpl {
 
       auto [U, D, V] = svd(theta, u_inds, v_inds, 
           {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-          "LeftTags=","Internal,Left,a" + std::to_string(q1),
-          "RightTags=","Internal,Right,a" + std::to_string(q1)});
+          "LeftTags=",fmt::format("Internal,Left,a{}", q1),
+          "RightTags=",fmt::format("Internal,Right,a{}", q1)});
 
       internal_indices[2*q1] = commonIndex(U, D);
       internal_indices[2*q2 - 1] = commonIndex(V, D);
