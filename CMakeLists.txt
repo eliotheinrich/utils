@@ -4,10 +4,12 @@ project(utils LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 
-set(CMAKE_CXX_FLAGS "-pthread")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
-set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # ---------------------------------- #
 # -- Manually installed libraries -- #
@@ -19,14 +21,10 @@ add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
 find_package(fmt)
 
-set(BLAS_DIR $ENV{BLAS_DIR})
-set(LAPACK_DIR $ENV{LAPACK_DIR})
 set(LAPACKBLAS lapack openblas)
-set(LAPACKBLAS_DIR ${LAPACK_DIR} ${BLAS_DIR})
 
-set(ITENSOR_DIR $ENV{ITENSOR_DIR})
-
-set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
+#set(ITENSOR_DIR $ENV{ITENSOR_DIR})
+#set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
 
 # -------------------------------- #
 # ------ Fetching externals ------ #
@@ -120,10 +118,9 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PUBLIC ${LAPACKBLAS} itensor)
-    target_include_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR})
-    target_link_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR}/lib ${BLAS_DIR} ${LAPACK_DIR})
-    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code ${LAPACKBLAS} itensor)
+    #target_include_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR})
+    target_link_directories(pyqtools_bindings PUBLIC "/home/heinriea/.local/lapack/lib64" "/home/heinriea/.local/openblas/lib64" "/home/heinriea/Builds/itensor/lib")
+    target_link_libraries(pyqtools_bindings PRIVATE gfortran quantum_state clifford_state linear_code ${LAPACKBLAS} itensor fmt::fmt)
 
     install(
         TARGETS pyqtools_bindings

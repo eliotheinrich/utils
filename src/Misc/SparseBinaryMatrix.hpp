@@ -27,7 +27,7 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
           if (!first) {
             s += ", ";
           }
-          s += "(" + std::to_string(i) + ", " + std::to_string(c) + ")";
+          s += fmt::format("({}, {})", i, c);
           first = false;
         }
       }

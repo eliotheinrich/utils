@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include <Eigen/Dense>
+#include <fmt/format.h>
 
 
 #define QS_ATOL 1e-8
