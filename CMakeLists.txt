@@ -20,8 +20,12 @@ find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE)
 
 find_package(fmt)
+find_package(openblas)
+find_package(lapack)
 
-set(LAPACKBLAS lapack openblas)
+link_directories("/Users/eliotheinrich/Projects/deps/itensor/lib", "/Users/eliotheinrich/.local/fmt/lib")
+
+set(LAPACKBLAS lapack blas)
 
 #set(ITENSOR_DIR $ENV{ITENSOR_DIR})
 #set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
@@ -118,9 +122,7 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    #target_include_directories(pyqtools_bindings PUBLIC ${ITENSOR_DIR})
-    target_link_directories(pyqtools_bindings PUBLIC "/home/heinriea/.local/lapack/lib64" "/home/heinriea/.local/openblas/lib64" "/home/heinriea/Builds/itensor/lib")
-    target_link_libraries(pyqtools_bindings PRIVATE gfortran quantum_state clifford_state linear_code ${LAPACKBLAS} itensor fmt::fmt)
+    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code ${LAPACKBLAS} itensor)
 
     install(
         TARGETS pyqtools_bindings

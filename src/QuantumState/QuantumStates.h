@@ -328,11 +328,6 @@ class UnitaryState : public QuantumState {
 		}
 };
 
-//itensor::ITensor tensor_slice(const itensor::ITensor& tensor, const itensor::Index& index, int i);
-//itensor::ITensor matrix_to_tensor(const Eigen::Matrix2cd& matrix, const itensor::Index i1, const itensor::Index i2);
-//itensor::ITensor matrix_to_tensor(const Eigen::Matrix4cd& matrix, const itensor::Index i1, const itensor::Index i2, const itensor::Index i3, const itensor::Index i4);
-//itensor::Index pad(itensor::ITensor& tensor, const itensor::Index& idx, uint32_t new_dim);
-
 class MatrixProductStateImpl;
 
 class MatrixProductState : public QuantumState {
@@ -349,7 +344,7 @@ class MatrixProductState : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
-    double stabilizer_renyi_entropy(size_t n) const;
+    double stabilizer_renyi_entropy(size_t n, size_t num_samples) const;
 
 		void print_mps() const;
 

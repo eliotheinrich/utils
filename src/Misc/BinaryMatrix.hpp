@@ -1,6 +1,8 @@
 #pragma once
 
 #include "BinaryMatrixBase.hpp"
+
+#define FMT_HEADER_ONLY
 #include <fmt/format.h>
 
 #define binary_word uint32_t

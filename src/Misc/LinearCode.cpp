@@ -1,5 +1,6 @@
 #include "LinearCode.h"
 
+#define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 

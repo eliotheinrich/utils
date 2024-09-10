@@ -1,3 +1,6 @@
+#define FMT_HEADER_ONLY
+#include <fmt/format.h>
+
 #include "QuantumState.h"
 #include "BinaryPolynomial.h"
 #include "Graph.hpp"
@@ -189,8 +192,13 @@ bool test_mps() {
   MatrixProductState mps(5, 5);
   mps.h(0);
   mps.h(1);
+
+  double d = mps.stabilizer_renyi_entropy(2, 1000);
+  std::cout << fmt::format("d = {}\n", d);
+
   Statevector s(mps);
   std::cout << s.to_string() << std::endl;
+
 
   return true;
 }
@@ -204,4 +212,7 @@ int main() {
   assert(test_parity_check_reduction());
   assert(test_leaf_removal());
   assert(test_mps());
+
+  MatrixProductState mps(1, 2);
+  std::cout << mps.to_string() << "\n";
 }

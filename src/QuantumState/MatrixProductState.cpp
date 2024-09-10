@@ -1,6 +1,9 @@
 #include "QuantumStates.h"
 #include <itensor/all.h>
 
+#include <fmt/ranges.h>
+#include <random>
+
 using namespace itensor;
 
 static ITensor tensor_slice(const ITensor& tensor, const Index& index, int i) {
@@ -104,6 +107,7 @@ static Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
 
 class MatrixProductStateImpl {
   private:
+    std::mt19937 rng;
     uint32_t num_qubits;
     uint32_t bond_dimension;
     double sv_threshold;
@@ -134,8 +138,15 @@ class MatrixProductStateImpl {
 
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
     : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold) {
+      std::random_device random_device;
+      rng.seed(random_device());
+
       if (bond_dimension > 1u << num_qubits) {
         throw std::invalid_argument("Bond dimension must be smaller than 2^num_qubits.");
+      }
+
+      if (num_qubits <= 1) {
+        throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
       }
 
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
@@ -206,6 +217,22 @@ class MatrixProductStateImpl {
 
     struct PauliString {
       std::vector<Pauli> paulis;
+      std::string to_string() const {
+        std::string s;
+        for (auto p : paulis) {
+          if (p == Pauli::I) {
+            s += "I";
+          } else if (p == Pauli::X) {
+            s += "X";
+          } else if (p == Pauli::Y) {
+            s += "Y";
+          } else if (p == Pauli::Z) {
+            s += "Z";
+          }
+        }
+
+        return s;
+      }
     };
 
     ITensor A(size_t i) const {
@@ -236,48 +263,77 @@ class MatrixProductStateImpl {
       return matrix_to_tensor(c, i1, i2);
     }
 
-    std::pair<PauliString, double> sample_pauli() const {
+    std::pair<PauliString, double> sample_pauli() {
+      std::vector<Pauli> p(num_qubits);
       double P = 1.0;
-      auto i = internal_indices[0];
-      auto j = prime(internal_indices[0]);
+
+      Index i = internal_indices[1];
+      Index j = prime(i);
+
       ITensor L(i, j);
       L.set(i=1, j=1, 1.0);
 
       for (size_t k = 1; k < num_qubits; k++) {
-        double probs[4];
+        std::vector<double> probs(4);
 
         auto Ak = A(k);
-        for (size_t p = 0; p < 4; p++) {
-          auto sigma = pauli_matrix(p, external_indices[k], prime(external_indices[k]));
+        Index alpha1 = internal_indices[2*k + 1];
+        Index alpha2 = internal_indices[2*(k-1) + 1];
+        Index s = external_indices[k];
 
+        for (size_t p = 0; p < 4; p++) {
+          auto sigma = pauli_matrix(p, s, prime(s));
 
           auto contraction = L;
-          contraction = contraction * Ak.conj(); // (1)
-          contraction = contraction * prime(Ak); // (2)
-          contraction = contraction * sigma; // (3)
-          contraction = contraction * prime(prime(Ak, external_indices[k], 2), internal_indices[k-1], 2); // (4)
-          contraction = contraction * prime(prime(prime(Ak.conj(), internal_indices[k], 1), internal_indices[k-1], 3), external_indices[k], 3); // (5)
-          contraction = contraction * prime(sigma.conj(), 2); // (6)
-          contraction = contraction * prime(L, 2); // (7)
-
-          std::cout << "contraction = " << contraction << "\n";
+          contraction *= conj(Ak); // (1)
+          contraction *= prime(Ak); // (2)
+          contraction *= sigma; // (3)
+          contraction *= prime(Ak, 2, s).prime(2, alpha2); // (4)
+          contraction *= conj(Ak).prime(1, alpha1).prime(3, alpha2).prime(3, s); // (5)
+          contraction *= prime(conj(sigma), 2); // (6)
+          contraction *= prime(L, 2); // (7)
+          
+          std::vector<size_t> inds;
+          probs[p] = std::abs(eltC(contraction, inds))/2.0;
         }
 
+        std::discrete_distribution<> dist(probs.begin(), probs.end());
+        size_t a = dist(rng);
+
+        p[k] = static_cast<Pauli>(a);
+        P *= probs[a];
+
+        // Update environment tensor
+        if (k != num_qubits - 1) {
+          L.replaceInds(inds(L), {alpha1, prime(alpha1)});
+          L /= std::sqrt(2.0 * probs[a]);
+        }
 
         double pi = 1.0;
       }
 
-      PauliString p{};
-    
-      return std::make_pair(p, P);
+      return std::make_pair(PauliString{p}, P);
     }
 
-    double stabilizer_renyi_entropy(size_t n) const {
-      for (size_t k = 0; k < 10; k++) {
-        auto [pauli, p] = sample_pauli();
+    double stabilizer_renyi_entropy(size_t n, size_t num_samples = 100) {
+      double q = 0.0;
+      if (n > 1) {
+        for (size_t k = 0; k < num_samples; k++) {
+          auto [pauli, p] = sample_pauli();
+          q += std::pow(p, n - 1.0);
+        }
+      } else if (n == 1) {
+        for (size_t k = 0; k < num_samples; k++) {
+          auto [pauli, p] = sample_pauli();
+          q += std::log(p);
+        }
+      } else {
+        throw std::runtime_error("n = 0 stabilizer renyi entropy not implemented.");
       }
 
-      return 0.0;
+      q /= num_samples;
+
+      return std::log(q)/(num_qubits*(1.0 - n)) - std::log(2);
     }
 
     ITensor coefficient_tensor() const {
@@ -457,8 +513,8 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
-double MatrixProductState::stabilizer_renyi_entropy(size_t n) const {
-  return impl->stabilizer_renyi_entropy(n);
+double MatrixProductState::stabilizer_renyi_entropy(size_t n, size_t num_samples=100) const {
+  return impl->stabilizer_renyi_entropy(n, num_samples);
 }
 
 void MatrixProductState::print_mps() const {
