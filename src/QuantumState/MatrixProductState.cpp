@@ -237,11 +237,34 @@ class MatrixProductStateImpl {
 
     ITensor A(size_t i) const {
       // TODO: CHECK RIGHT NORMALIZATION
-      if (i == num_qubits - 1) {
-        return tensors[i];
+      auto Ai = tensors[i];
+
+      Index right;
+      Index left;
+      if (i != 0) {
+        left = findInds(Ai, fmt::format("a{}", i-1))[0];
       } else {
-        return tensors[i]*singular_values[i];
+        left = Index(1, "a,Internal,Left");
+
+        ITensor one(left);
+        one.set(left=1, 1.0);
+        Ai *= one;
       }
+
+      if (i != num_qubits - 1) {
+        right = findInds(Ai, fmt::format("a{}", i))[0];
+      } else {
+        right = Index(1, "a,Internal,Right");
+
+        ITensor one(right);
+        one.set(right=1, 1.0);
+        Ai *= one*singular_values[i];
+      }
+
+      Index _left(dim(left), fmt::format("a{},Left,Internal", i));
+      Index _right(dim(right), fmt::format("a{},Right,Internal", i));
+
+      return Ai.swapInds(findInds(Ai, "Internal"), {_left, _right});
     }
 
     ITensor pauli_matrix(size_t i, Index i1, Index i2) const {
@@ -267,34 +290,32 @@ class MatrixProductStateImpl {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
-      Index i = internal_indices[1];
-      Index j = prime(i);
+      Index i(1, "i");
+      Index j(1, "j");
 
       ITensor L(i, j);
       L.set(i=1, j=1, 1.0);
 
-      for (size_t k = 1; k < num_qubits; k++) {
+      for (size_t k = 0; k < num_qubits-1; k++) {
         std::vector<double> probs(4);
+        std::vector<ITensor> tensors(4);
 
         auto Ak = A(k);
-        Index alpha1 = internal_indices[2*k + 1];
-        Index alpha2 = internal_indices[2*(k-1) + 1];
+        Index alpha_left = findInds(Ak, "Internal,Left")[0];
+        L.replaceInds(inds(L), {alpha_left, prime(alpha_left)});
+
         Index s = external_indices[k];
 
         for (size_t p = 0; p < 4; p++) {
           auto sigma = pauli_matrix(p, s, prime(s));
 
-          auto contraction = L;
-          contraction *= conj(Ak); // (1)
-          contraction *= prime(Ak); // (2)
-          contraction *= sigma; // (3)
-          contraction *= prime(Ak, 2, s).prime(2, alpha2); // (4)
-          contraction *= conj(Ak).prime(1, alpha1).prime(3, alpha2).prime(3, s); // (5)
-          contraction *= prime(conj(sigma), 2); // (6)
-          contraction *= prime(L, 2); // (7)
+          auto C = conj(Ak)*prime(Ak)*sigma;
+          auto contraction = conj(C)*prime(C, 2, "Left");
+          contraction = L * contraction * prime(L, 2);
           
           std::vector<size_t> inds;
           probs[p] = std::abs(eltC(contraction, inds))/2.0;
+          tensors[p] = C;
         }
 
         std::discrete_distribution<> dist(probs.begin(), probs.end());
@@ -302,29 +323,25 @@ class MatrixProductStateImpl {
 
         p[k] = static_cast<Pauli>(a);
         P *= probs[a];
-
-        // Update environment tensor
-        if (k != num_qubits - 1) {
-          L.replaceInds(inds(L), {alpha1, prime(alpha1)});
-          L /= std::sqrt(2.0 * probs[a]);
-        }
-
-        double pi = 1.0;
+        L = tensors[a] / std::sqrt(2.0 * probs[a]);
       }
 
       return std::make_pair(PauliString{p}, P);
     }
 
     double stabilizer_renyi_entropy(size_t n, size_t num_samples = 100) {
+      std::vector<double> samples(num_samples);
       double q = 0.0;
       if (n > 1) {
         for (size_t k = 0; k < num_samples; k++) {
           auto [pauli, p] = sample_pauli();
+          samples[k] = std::pow(p, n - 1.0);
           q += std::pow(p, n - 1.0);
         }
       } else if (n == 1) {
         for (size_t k = 0; k < num_samples; k++) {
           auto [pauli, p] = sample_pauli();
+          samples[k] = std::log(p);
           q += std::log(p);
         }
       } else {
