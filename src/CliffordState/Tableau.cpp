@@ -1,23 +1,23 @@
 #include "Tableau.hpp"
 
-tableau_utils::Circuit PauliString::reduce(bool z = true) const {
+QuantumCircuit PauliString::reduce(bool z = true) const {
   Tableau tableau = Tableau(num_qubits, std::vector<PauliString>{*this});
 
-  tableau_utils::Circuit circuit;
+  QuantumCircuit circuit;
 
   if (z) {
     tableau.h(0);
-    circuit.push_back(tableau_utils::hgate{0});
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("h", {0})));
   }
 
   for (uint32_t i = 0; i < num_qubits; i++) {
     if (tableau.z(0, i)) {
       if (tableau.x(0, i)) {
         tableau.s(i);
-        circuit.push_back(tableau_utils::sgate{i});
+        circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("s", {i})));
       } else {
         tableau.h(i);
-        circuit.push_back(tableau_utils::hgate{i});
+        circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("h", {i})));
       }
     }
   }
@@ -34,7 +34,7 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
       uint32_t q1 = nonzero_idx[2*j];
       uint32_t q2 = nonzero_idx[2*j+1];
       tableau.cx(q1, q2);
-      circuit.push_back(tableau_utils::cxgate{q1, q2});
+      circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("cx", {q1, q2})));
     }
 
     remove_even_indices(nonzero_idx);
@@ -49,9 +49,9 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
         tableau.cx(ql, 0);
         tableau.cx(0, ql);
 
-        circuit.push_back(tableau_utils::cxgate{0, ql});
-        circuit.push_back(tableau_utils::cxgate{ql, 0});
-        circuit.push_back(tableau_utils::cxgate{0, ql});
+        circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("cx", {0, ql})));
+        circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("cx", {ql, 0})));
+        circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("cx", {0, ql})));
 
         break;
       }
@@ -66,27 +66,28 @@ tableau_utils::Circuit PauliString::reduce(bool z = true) const {
     tableau.h(0);
     tableau.s(0);
     tableau.s(0);
-    circuit.push_back(tableau_utils::sgate{0});
-    circuit.push_back(tableau_utils::sgate{0});
-    circuit.push_back(tableau_utils::hgate{0});
-    circuit.push_back(tableau_utils::sgate{0});
-    circuit.push_back(tableau_utils::sgate{0});
-    circuit.push_back(tableau_utils::hgate{0});
+
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("s", {0})));
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("s", {0})));
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("h", {0})));
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("s", {0})));
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("s", {0})));
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("h", {0})));
   }
 
   if (z) {
     // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
-    circuit.push_back(tableau_utils::hgate{0});
+    circuit.add_gate(std::shared_ptr<Gate>(new SymbolicGate("h", {0})));
   }
 
   return circuit;
 }
 
-tableau_utils::Circuit PauliString::transform(PauliString const &p) const {
-  tableau_utils::Circuit c1 = reduce();
-  tableau_utils::Circuit c2 = conjugate_circuit(p.reduce());
+QuantumCircuit PauliString::transform(PauliString const &p) const {
+  QuantumCircuit c1 = reduce();
+  QuantumCircuit c2 = p.reduce().adjoint();
 
-  c1.insert(c1.end(), c2.begin(), c2.end());
+  c1.append(c2);
 
   return c1;
 }

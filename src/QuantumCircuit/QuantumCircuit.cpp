@@ -1,4 +1,5 @@
 #include "QuantumCircuit.h"
+#include "PauliString.hpp"
 #include <assert.h>
 
 std::string QuantumCircuit::to_string() const {
@@ -39,6 +40,21 @@ uint32_t QuantumCircuit::num_params() const {
 	return n;
 }
 
+bool QuantumCircuit::is_clifford() const {
+  for (auto const& inst : instructions) {
+    bool valid = std::visit(quantumcircuit_utils::overloaded{
+			[](std::shared_ptr<Gate> gate) -> uint32_t { return gate->is_clifford(); },
+			[](Measurement m) -> uint32_t { return true; }
+		}, inst);
+    
+    if (!valid) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 uint32_t QuantumCircuit::length() const {
   return instructions.size();
 }
@@ -52,6 +68,30 @@ bool QuantumCircuit::contains_measurement() const {
 
   return false;
 }
+
+void QuantumCircuit::apply_qubit_map(const std::vector<uint32_t>& qubits) {
+  for (auto inst : instructions) {
+		std::visit(quantumcircuit_utils::overloaded{
+			[&qubits](std::shared_ptr<Gate> gate) {
+        std::vector<uint32_t> _qbits(gate->num_qubits);
+        for (size_t q = 0; q < gate->num_qubits; q++) {
+          _qbits[q] = qubits[gate->qbits[q]];
+        }
+
+        gate->qbits = _qbits;
+			},
+			[&qubits](Measurement m) { 
+        std::vector<uint32_t> _qbits(m.qbits.size());
+        for (size_t q = 0; q < m.qbits.size(); q++) {
+          _qbits[q] = qubits[m.qbits[q]];
+        }
+
+        m.qbits = _qbits;
+      }
+		}, inst);
+  }
+}
+
 
 void QuantumCircuit::add_instruction(const Instruction& inst) {
 	instructions.push_back(inst);
@@ -70,9 +110,12 @@ void QuantumCircuit::add_measurement(const Measurement& m) {
 	add_instruction(m);
 }
 
-
 void QuantumCircuit::add_gate(const std::shared_ptr<Gate> &gate) {
 	add_instruction(gate);
+}
+
+void QuantumCircuit::add_gate(const std::string& name, const std::vector<uint32_t>& qbits) {
+  add_gate(std::shared_ptr<Gate>(new SymbolicGate(name, qbits)));
 }
 
 void QuantumCircuit::add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) {
@@ -95,6 +138,14 @@ void QuantumCircuit::append(const QuantumCircuit& other) {
 	for (auto const &inst : other.instructions) {
 		add_instruction(inst);
 	}
+}
+
+void QuantumCircuit::append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits) {
+  QuantumCircuit qc_extended(other);
+  qc_extended.resize(num_qubits);
+  qc_extended.apply_qubit_map(qbits);
+
+  append(qc_extended);
 }
 
 void QuantumCircuit::append(const Instruction& inst) {
@@ -144,7 +195,7 @@ QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>&
 
 		for (uint32_t i = 0; i < instructions.size(); i++) {
 			std::visit(quantumcircuit_utils::overloaded{
-				[&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate->adjoint(), gate->qbits); },
+				[&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate->adjoint()); },
 				[&qc](Measurement m) { qc.add_measurement(m); }
 			}, instructions[instructions.size() - i - 1]);
 		}
@@ -267,3 +318,144 @@ QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<std::vect
 	
 	return circuit;
 }
+
+// Returns the circuit which maps a PauliString to Z1 if z, otherwise to X1
+QuantumCircuit single_qubit_random_clifford(uint32_t r) {
+  QuantumCircuit qc(1);
+  // r == 0 is identity, so do nothing in this case
+  if (r == 1) {
+    qc.add_gate("x", {0});
+  } else if (r == 2) {
+    qc.add_gate("y", {0});
+  } else if (r == 3) {
+    qc.add_gate("z", {0});
+  } else if (r == 4) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+  } else if (r == 5) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("x", {0});
+  } else if (r == 6) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("y", {0});
+  } else if (r == 7) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("z", {0});
+  } else if (r == 8) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+  } else if (r == 9) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("x", {0});
+  } else if (r == 10) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("y", {0});
+  } else if (r == 11) {
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("z", {0});
+  } else if (r == 12) {
+    qc.add_gate("h", {0});
+  } else if (r == 13) {
+    qc.add_gate("h", {0});
+    qc.add_gate("x", {0});
+  } else if (r == 14) {
+    qc.add_gate("h", {0});
+    qc.add_gate("y", {0});
+  } else if (r == 15) {
+    qc.add_gate("h", {0});
+    qc.add_gate("z", {0});
+  } else if (r == 16) {
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+  } else if (r == 17) {
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("x", {0});
+  } else if (r == 18) {
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("y", {0});
+  } else if (r == 19) {
+    qc.add_gate("s", {0});
+    qc.add_gate("h", {0});
+    qc.add_gate("s", {0});
+    qc.add_gate("z", {0});
+  } else if (r == 20) {
+    qc.add_gate("s", {0});
+  } else if (r == 21) {
+    qc.add_gate("s", {0});
+    qc.add_gate("x", {0});
+  } else if (r == 22) {
+    qc.add_gate("s", {0});
+    qc.add_gate("y", {0});
+  } else if (r == 23) {
+    qc.add_gate("s", {0});
+    qc.add_gate("z", {0});
+  }
+
+  return qc;
+}
+
+// Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
+QuantumCircuit random_clifford_iteration(uint32_t num_qubits, std::minstd_rand& rng) {
+  QuantumCircuit qc(num_qubits);
+
+  // If only acting on one qubit, can easily lookup from a table
+  if (num_qubits == 1) {
+    return single_qubit_random_clifford(rng() % 24);
+  }
+
+  PauliString p1 = PauliString::rand(num_qubits, rng);
+  PauliString p2 = PauliString::rand(num_qubits, rng);
+  while (p1.commutes(p2)) {
+    p2 = PauliString::rand(num_qubits, rng);
+  }
+
+  QuantumCircuit qc1 = p1.reduce(false);
+
+  p2.evolve(qc1);
+
+  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
+  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
+
+  if (p2 != z1p && p2 != z1m) {
+    QuantumCircuit qc2 = p2.reduce(true);
+
+    qc1.append(qc2);
+  }
+
+  return qc1;
+}
+
+QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng) {
+  std::vector<uint32_t> qubits(num_qubits);
+  std::iota(qubits.begin(), qubits.end(), 0);
+
+  QuantumCircuit qc(num_qubits);
+
+  for (uint32_t i = 0; i < num_qubits; i++) {
+    QuantumCircuit qc_iter = random_clifford_iteration(qubits.size(), rng);
+    qc.append(qc_iter, qubits);
+    qubits.pop_back();
+  }
+
+  return qc;
+}
+

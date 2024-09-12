@@ -12,8 +12,11 @@ virtual std::shared_ptr<Gate> clone() override { 	\
 #define GATE_PI 3.14159265359
 
 class RxRotationGate : public Gate {
+  private:
+    bool adj;
+
   public:
-    RxRotationGate(const std::vector<uint32_t>& qbits) : Gate(qbits) {
+    RxRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
       if (qbits.size() != 1) {
         std::string error_message = "Rx gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
         throw std::invalid_argument(error_message);
@@ -25,7 +28,7 @@ class RxRotationGate : public Gate {
     }
 
     virtual std::string label() const override { 
-      return "Rx";
+      return adj ? "Rxd" : "Rx";
     }
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
@@ -40,15 +43,33 @@ class RxRotationGate : public Gate {
       double t = params[0];
       gate << std::complex<double>(std::cos(t/2), 0), std::complex<double>(0, -std::sin(t/2)), 
               std::complex<double>(0, -std::sin(t/2)), std::complex<double>(std::cos(t/2), 0);
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
       return gate;
     }
 
-    GATECLONE(RxRotationGate);
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RxRotationGate(qbits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RxRotationGate(qbits, adj));
+    }
 };
 
 class RyRotationGate : public Gate {
+  private:
+    bool adj;
+
   public:
-    RyRotationGate(const std::vector<uint32_t>& qbits) : Gate(qbits) {
+    RyRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
       if (qbits.size() != 1) {
         std::string error_message = "Ry gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
         throw std::invalid_argument(error_message);
@@ -60,7 +81,7 @@ class RyRotationGate : public Gate {
     }
     
     virtual std::string label() const override { 
-      return "Ry"; 
+      return adj ? "Ryd" : "Ry";
     }
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
@@ -75,15 +96,33 @@ class RyRotationGate : public Gate {
       double t = params[0];
       gate << std::complex<double>(std::cos(t/2), 0), std::complex<double>(-std::sin(t/2), 0), 
               std::complex<double>(std::sin(t/2), 0), std::complex<double>(std::cos(t/2), 0);
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
       return gate;
     }
 
-    GATECLONE(RyRotationGate);
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RyRotationGate(qbits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RyRotationGate(qbits, adj));
+    }
 };
 
 class RzRotationGate : public Gate {
+  private:
+    bool adj;
+
   public:
-    RzRotationGate(const std::vector<uint32_t>& qbits) : Gate(qbits) {
+    RzRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
       if (qbits.size() != 1) {
         std::string error_message = "Rz gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
         throw std::invalid_argument(error_message);
@@ -95,7 +134,7 @@ class RzRotationGate : public Gate {
     }
 
     virtual std::string label() const override { 
-      return "Rz"; 
+      return adj ? "Rzd" : "Rz"; 
     }
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
@@ -110,15 +149,32 @@ class RzRotationGate : public Gate {
       double t = params[0];
       gate << std::complex<double>(std::cos(t/2), -std::sin(t/2)), std::complex<double>(0.0, 0.0), 
               std::complex<double>(0.0, 0.0), std::complex<double>(std::cos(t/2), std::sin(t/2));
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
       return gate;
     }
 
-    GATECLONE(RzRotationGate);
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RzRotationGate(qbits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RzRotationGate(qbits, adj));
+    }
 };
 
 template <class GateType>
 class MemoizedGate : public GateType {
   private:
+    bool adj;
+
     static std::vector<Eigen::MatrixXcd> memoized_gates;
     static bool defined;
 
@@ -146,7 +202,7 @@ class MemoizedGate : public GateType {
     }
 
   public:
-    MemoizedGate(const std::vector<uint32_t>& qbits) : GateType(qbits) {}
+    MemoizedGate(const std::vector<uint32_t>& qbits, bool adj=false) : GateType(qbits), adj(adj) {}
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
       if (!MemoizedGate<GateType>::defined) {
@@ -161,10 +217,27 @@ class MemoizedGate : public GateType {
 
       double d = params[0];
       uint32_t idx = MemoizedGate<GateType>::get_idx(d, 200, 0, 2*GATE_PI);
-      return MemoizedGate<GateType>::memoized_gates[idx];
+
+      Eigen::MatrixXcd g = MemoizedGate<GateType>::memoized_gates[idx];
+
+      if (adj) {
+        g = g.adjoint();
+      }
+
+      return g;
     }
 
-    GATECLONE(MemoizedGate<GateType>);
+    virtual bool is_clifford() const override {
+      return false;
+    }
+    
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qbits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qbits, adj));
+    }
 };
 
 template <class GateType>

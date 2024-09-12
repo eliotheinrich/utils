@@ -189,9 +189,28 @@ bool test_leaf_removal() {
 }
 
 bool test_mps() {
-  MatrixProductState mps(5, 5);
-  mps.h(0);
-  mps.h(1);
+  size_t num_qubits = 6;
+  size_t bond_dimension = 12;
+
+  thread_local std::random_device gen;
+  std::minstd_rand rng(gen());
+
+  MatrixProductState mps(num_qubits, bond_dimension);
+  QuantumCircuit qc(num_qubits);
+  qc.add_gate("h", {0});
+  qc.add_gate("h", {1});
+  
+  qc.append(random_clifford(2, rng), {0, 1});
+  qc.append(random_clifford(2, rng), {2, 3});
+  qc.append(random_clifford(2, rng), {4, 5});
+
+  qc.append(random_clifford(2, rng), {1, 2});
+  qc.append(random_clifford(2, rng), {3, 4});
+
+  qc.append(random_clifford(2, rng), {0, 1});
+  qc.append(random_clifford(2, rng), {2, 3});
+  qc.append(random_clifford(2, rng), {4, 5});
+  mps.evolve(qc);
 
   double d = mps.stabilizer_renyi_entropy(2, 1000);
   std::cout << fmt::format("d = {}\n", d);
@@ -212,7 +231,4 @@ int main() {
   assert(test_parity_check_reduction());
   assert(test_leaf_removal());
   assert(test_mps());
-
-  MatrixProductState mps(1, 2);
-  std::cout << mps.to_string() << "\n";
 }

@@ -2,6 +2,8 @@
 
 #include "Frame.h"
 #include "Tableau.hpp"
+#include "QuantumCircuit.h"
+
 #include <deque>
 #include <algorithm>
 #include <Samplers.h>
@@ -43,6 +45,65 @@ class CliffordState : public EntropyState {
     uint32_t system_size() const { 
       return EntropyState::system_size; 
     }
+
+    void evolve(const QuantumCircuit& qc, const std::vector<uint32_t>& qubits) {
+      if (qubits.size() != qc.num_qubits) {
+        throw std::runtime_error("Provided qubits do not match size of circuit.");
+      }
+
+      QuantumCircuit qc_mapped(qc);
+      qc_mapped.resize(system_size());
+      qc_mapped.apply_qubit_map(qubits);
+      
+      evolve(qc_mapped);
+    }
+
+    void evolve(const QuantumCircuit& qc) {
+      if (!qc.is_clifford()) {
+        throw std::runtime_error("Provided circuit is not Clifford.");
+      }
+
+			for (auto const &inst : qc.instructions) {
+				evolve(inst);
+			}
+    }
+
+		void evolve(const Instruction& inst) {
+			std::visit(quantumcircuit_utils::overloaded{
+				[this](std::shared_ptr<Gate> gate) { 
+          std::string name = gate->label();
+
+          if (name == "H") {
+            h(gate->qbits[0]);
+          } else if (name == "S") {
+            s(gate->qbits[0]);
+          } else if (name == "Sd") {
+            sd(gate->qbits[0]);
+          } else if (name == "CX") {
+            cx(gate->qbits[0], gate->qbits[1]);
+          } else if (name == "X") {
+            x(gate->qbits[0]);
+          } else if (name == "Y") {
+            y(gate->qbits[0]);
+          } else if (name == "Z") {
+            z(gate->qbits[0]);
+          } else if (name == "CY") {
+            cy(gate->qbits[0], gate->qbits[1]);
+          } else if (name == "CZ") {
+            cz(gate->qbits[0], gate->qbits[1]);
+          } else if (name == "SWAP") {
+            swap(gate->qbits[0], gate->qbits[1]);
+          } else {
+            throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
+          }
+				},
+				[this](Measurement m) { 
+					for (auto const &q : m.qbits) {
+						mzr(q);
+					}
+				},
+			}, inst);
+		}
 
     virtual void h(uint32_t a)=0;
 
@@ -205,13 +266,8 @@ class CliffordState : public EntropyState {
     }
 
     void random_clifford(std::vector<uint32_t> &qubits) {
-      uint32_t num_qubits = qubits.size();
-      std::deque<uint32_t> dqubits(num_qubits);
-      std::copy(qubits.begin(), qubits.end(), dqubits.begin());
-      for (uint32_t i = 0; i < num_qubits; i++) {
-        random_clifford_iteration(dqubits);
-        dqubits.pop_front();
-      }
+      QuantumCircuit qc = ::random_clifford(qubits.size(), rng);
+      evolve(qc, qubits);
     }
 
     virtual std::string to_string() const { return ""; };
@@ -219,144 +275,5 @@ class CliffordState : public EntropyState {
     virtual double sparsity() const=0;
 
   protected:
-    std::minstd_rand rng;
-
-  private:
-    // Returns the circuit which maps a PauliString to Z1 if z, otherwise to X1
-    void single_qubit_random_clifford(uint32_t a, uint32_t r) {
-      // r == 0 is identity, so do nothing in thise case
-      if (r == 1) {
-        x(a);
-      } else if (r == 2) {
-        y(a);
-      } else if (r == 3) {
-        z(a);
-      } else if (r == 4) {
-        h(a);
-        s(a);
-        h(a);
-        s(a);
-      } else if (r == 5) {
-        h(a);
-        s(a);
-        h(a);
-        s(a);
-        x(a);
-      } else if (r == 6) {
-        h(a);
-        s(a);
-        h(a);
-        s(a);
-        y(a);
-      } else if (r == 7) {
-        h(a);
-        s(a);
-        h(a);
-        s(a);
-        z(a);
-      } else if (r == 8) {
-        h(a);
-        s(a);
-      } else if (r == 9) {
-        h(a);
-        s(a);
-        x(a);
-      } else if (r == 10) {
-        h(a);
-        s(a);
-        y(a);
-      } else if (r == 11) {
-        h(a);
-        s(a);
-        z(a);
-      } else if (r == 12) {
-        h(a);
-      } else if (r == 13) {
-        h(a);
-        x(a);
-      } else if (r == 14) {
-        h(a);
-        y(a);
-      } else if (r == 15) {
-        h(a);
-        z(a);
-      } else if (r == 16) {
-        s(a);
-        h(a);
-        s(a);
-      } else if (r == 17) {
-        s(a);
-        h(a);
-        s(a);
-        x(a);
-      } else if (r == 18) {
-        s(a);
-        h(a);
-        s(a);
-        y(a);
-      } else if (r == 19) {
-        s(a);
-        h(a);
-        s(a);
-        z(a);
-      } else if (r == 20) {
-        s(a);
-      } else if (r == 21) {
-        s(a);
-        x(a);
-      } else if (r == 22) {
-        s(a);
-        y(a);
-      } else if (r == 23) {
-        s(a);
-        z(a);
-      }
-    }
-
-    // Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
-    void random_clifford_iteration(std::deque<uint32_t> &qubits) {
-      uint32_t num_qubits = qubits.size();
-
-      // If only acting on one qubit, can easily lookup from a table
-      if (num_qubits == 1) {
-        single_qubit_random_clifford(qubits[0], rand() % 24);
-        return;
-      }
-
-      PauliString p1 = PauliString::rand(num_qubits, rng);
-      PauliString p2 = PauliString::rand(num_qubits, rng);
-      while (p1.commutes(p2)) {
-        p2 = PauliString::rand(num_qubits, rng);
-      }
-
-      tableau_utils::Circuit c1 = p1.reduce(false);
-
-      apply_circuit(c1, p2);
-
-      auto qubit_map_visitor = tableau_utils::overloaded{
-        [&qubits](tableau_utils::sgate s) ->  tableau_utils::Gate { return tableau_utils::sgate{qubits[s.q]}; },
-          [&qubits](tableau_utils::sdgate s) -> tableau_utils::Gate { return tableau_utils::sdgate{qubits[s.q]}; },
-          [&qubits](tableau_utils::hgate s) ->  tableau_utils::Gate { return tableau_utils::hgate{qubits[s.q]}; },
-          [&qubits](tableau_utils::cxgate s) -> tableau_utils::Gate { return tableau_utils::cxgate{qubits[s.q1], qubits[s.q2]}; }
-      };
-
-      for (auto &gate : c1) {
-        gate = std::visit(qubit_map_visitor, gate);
-      }
-
-      apply_circuit(c1, *this);
-
-      PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
-      PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
-
-      if (p2 != z1p && p2 != z1m) {
-        tableau_utils::Circuit c2 = p2.reduce(true);
-
-        for (auto &gate : c2) {
-          gate = std::visit(qubit_map_visitor, gate);
-        }
-
-        apply_circuit(c2, *this);
-      }
-    }
+    std::minstd_rand rng; 
 };

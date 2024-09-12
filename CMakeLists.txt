@@ -84,6 +84,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/src/CliffordState)
 set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/src/QuantumState)
+set(QUANTUMCIRCUIT_DIR ${PROJECT_SOURCE_DIR}/src/QuantumCircuit)
 set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/src/Samplers)
 set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 set(MISC_DIR ${PROJECT_SOURCE_DIR}/src/Misc)
@@ -94,6 +95,7 @@ if (DEFINED BUILD_GLFW)
     add_subdirectory(${DISPLAY_DIR})
 endif()
 
+add_subdirectory(${QUANTUMCIRCUIT_DIR})
 add_subdirectory(${QUANTUMSTATE_DIR})
 add_subdirectory(${CLIFFORD_DIR})
 add_subdirectory(${MONTECARLO_DIR})
@@ -122,7 +124,7 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PRIVATE quantum_state clifford_state linear_code ${LAPACKBLAS} itensor)
+    target_link_libraries(pyqtools_bindings PUBLIC quantum_state quantum_circuit clifford_state linear_code ${LAPACKBLAS} itensor)
 
     install(
         TARGETS pyqtools_bindings
