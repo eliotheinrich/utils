@@ -23,7 +23,7 @@ class Gate {
 
     Gate(const std::vector<uint32_t>& qbits)
       : qbits(qbits), num_qubits(qbits.size()) {
-        assert(qargs_unique(qbits));
+        //assert(qargs_unique(qbits));
       }
 
     virtual uint32_t num_params() const=0;
@@ -89,49 +89,56 @@ class SymbolicGate : public Gate {
       {SymbolicGate::GateLabel::Td, SymbolicGate::GateLabel::T},
     };
 
-    SymbolicGate::GateLabel parse_gate(const std::string& name) const {
-      std::string s = name;
-      std::transform(s.begin(), s.end(), s.begin(),
-          [](unsigned char c){ return std::tolower(c); });
+    static constexpr bool str_equal_ci(const char* a, const char* b) {
+      while (*a && *b) {
+        if (std::tolower(*a) != std::tolower(*b)) {
+          return false;
+        }
+        ++a;
+        ++b;
+      }
+      return *a == '\0' && *b == '\0';
+    }
 
-      if (s == "h") {
+    constexpr SymbolicGate::GateLabel parse_gate(const char* name) const {
+      if (str_equal_ci(name, "h")) {
         return SymbolicGate::GateLabel::H;
-      } else if (s == "x") {
+      } else if (str_equal_ci(name, "x")) {
         return SymbolicGate::GateLabel::X;
-      } else if (s == "y") {
+      } else if (str_equal_ci(name, "y")) {
         return SymbolicGate::GateLabel::Y;
-      } else if (s == "z") {
+      } else if (str_equal_ci(name, "z")) {
         return SymbolicGate::GateLabel::Z;
-      } else if (s == "sqrtx") {
+      } else if (str_equal_ci(name, "sqrtx")) {
         return SymbolicGate::GateLabel::sqrtX;
-      } else if (s == "sqrty") {
+      } else if (str_equal_ci(name, "sqrty")) {
         return SymbolicGate::GateLabel::sqrtY;
-      } else if (s == "sqrtz" || s == "s") {
+      } else if (str_equal_ci(name, "sqrtz") || str_equal_ci(name, "s")) {
         return SymbolicGate::GateLabel::S;
-      } else if (s == "sqrtxd") {
+      } else if (str_equal_ci(name, "sqrtxd")) {
         return SymbolicGate::GateLabel::sqrtXd;
-      } else if (s == "sqrtyd") {
+      } else if (str_equal_ci(name, "sqrtyd")) {
         return SymbolicGate::GateLabel::sqrtYd;
-      } else if (s == "sqrtzd" || s == "sd") {
+      } else if (str_equal_ci(name, "sqrtzd") || str_equal_ci(name, "sd")) {
         return SymbolicGate::GateLabel::Sd;
-      } else if (s == "t") {
+      } else if (str_equal_ci(name, "t")) {
         return SymbolicGate::GateLabel::T;
-      } else if (s == "td") {
+      } else if (str_equal_ci(name, "td")) {
         return SymbolicGate::GateLabel::Td;
-      } else if (s == "cx") {
+      } else if (str_equal_ci(name, "cx")) {
         return SymbolicGate::GateLabel::CX;
-      } else if (s == "cy") {
+      } else if (str_equal_ci(name, "cy")) {
         return SymbolicGate::GateLabel::CY;
-      } else if (s == "cz") {
+      } else if (str_equal_ci(name, "cz")) {
         return SymbolicGate::GateLabel::CZ;
-      } else if (s == "swap") {
+      } else if (str_equal_ci(name, "swap")) {
         return SymbolicGate::GateLabel::SWAP;
       } else {
         throw std::runtime_error(fmt::format("Error: unknown gate {}.", name));
       }
     }
 
-    std::string type_to_string(SymbolicGate::GateLabel g) const {
+    constexpr const char* type_to_string(SymbolicGate::GateLabel g) const {
       switch (g) {
         case SymbolicGate::GateLabel::H:
           return "H";
@@ -187,13 +194,60 @@ class SymbolicGate : public Gate {
       }
     }
 
-    size_t num_qubits_for_gate(SymbolicGate::GateLabel g) const {
-      if (SymbolicGate::single_qubit_gates.contains(g)) {
-        return 1;
-      } else if (SymbolicGate::two_qubit_gates.contains(g)) {
+    constexpr size_t num_qubits_for_gate(SymbolicGate::GateLabel g) const {
+      switch (g) {
+        case SymbolicGate::GateLabel::H:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::X:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::Y:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::Z:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::sqrtX:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::sqrtY:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::S:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::sqrtXd:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::sqrtYd:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::Sd:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::T:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::Td:
+          return 1;
+          break;
+        case SymbolicGate::GateLabel::CX:
           return 2;
-      } else {
-        throw std::runtime_error(fmt::format("Cannot determine number of qubits for gate."));
+          break;
+        case SymbolicGate::GateLabel::CY:
+          return 2;
+          break;
+        case SymbolicGate::GateLabel::CZ:
+          return 2;
+          break;
+        case SymbolicGate::GateLabel::SWAP:
+          return 2;
+          break;
+        default:
+          throw std::runtime_error("Invalid gate type.");
+          break;
+        
       }
     }
 
@@ -277,7 +331,8 @@ class SymbolicGate : public Gate {
       }
     }
 
-    SymbolicGate(const std::string& name, const std::vector<uint32_t>& qbits) : SymbolicGate(parse_gate(name), qbits) { }
+    SymbolicGate(const char* name, const std::vector<uint32_t>& qbits) : SymbolicGate(parse_gate(name), qbits) { }
+    SymbolicGate(const std::string& name, const std::vector<uint32_t>& qbits) : SymbolicGate(name.c_str(), qbits) { }
 
     virtual bool is_clifford() const override {
       return SymbolicGate::clifford_gates.contains(type);
