@@ -1,8 +1,8 @@
 add_library(clifford_state 
     CliffordState.hpp
-    Tableau.cpp
     QuantumCHPState.hpp
     QuantumGraphState.cpp
+    Tableau.hpp
 )
 set_target_properties(clifford_state PROPERTIES 
     LINKER_LANGUAGE CXX 

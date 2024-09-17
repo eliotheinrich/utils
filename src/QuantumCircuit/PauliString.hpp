@@ -2,6 +2,17 @@
 
 #include <unsupported/Eigen/KroneckerProduct>
 
+template <typename T>
+static void remove_even_indices(std::vector<T> &v) {
+  uint32_t vlen = v.size();
+  for (uint32_t i = 0; i < vlen; i++) {
+    uint32_t j = vlen - i - 1;
+    if ((j % 2)) {
+      v.erase(v.begin() + j);
+    }
+  }
+}
+
 
 class PauliString {
   public:
@@ -302,10 +313,98 @@ class PauliString {
     }
 
     // Returns the circuit which maps this PauliString onto ZII... if z or XII.. otherwise
-    QuantumCircuit reduce(bool z) const;
+    QuantumCircuit reduce(bool z = true) const {
+      PauliString p(*this);
+
+      QuantumCircuit circuit;
+
+      if (z) {
+        p.h(0);
+        circuit.add_gate("h", {0});
+      }
+
+      for (uint32_t i = 0; i < num_qubits; i++) {
+        if (p.z(i)) {
+          if (p.x(i)) {
+            p.s(i);
+            circuit.add_gate("s", {i});
+          } else {
+            p.h(i);
+            circuit.add_gate("h", {i});
+          }
+        }
+      }
+
+      // Step two
+      std::vector<uint32_t> nonzero_idx;
+      for (uint32_t i = 0; i < num_qubits; i++) {
+        if (p.x(i)) {
+          nonzero_idx.push_back(i);
+        }
+      }
+      while (nonzero_idx.size() > 1) {
+        for (uint32_t j = 0; j < nonzero_idx.size()/2; j++) {
+          uint32_t q1 = nonzero_idx[2*j];
+          uint32_t q2 = nonzero_idx[2*j+1];
+          p.cx(q1, q2);
+          circuit.add_gate("cx", {q1, q2});
+        }
+
+        remove_even_indices(nonzero_idx);
+      }
+
+      // Step three
+      uint32_t ql = nonzero_idx[0];
+      if (ql != 0) {
+        for (uint32_t i = 0; i < num_qubits; i++) {
+          if (p.x(i)) {
+            p.cx(0, ql);
+            p.cx(ql, 0);
+            p.cx(0, ql);
+
+            circuit.add_gate("cx", {0, ql});
+            circuit.add_gate("cx", {ql, 0});
+            circuit.add_gate("cx", {0, ql});
+
+            break;
+          }
+        }
+      }
+
+      if (p.r()) {
+        // Apply Y gate to tableau
+        p.h(0);
+        p.s(0);
+        p.s(0);
+        p.h(0);
+        p.s(0);
+        p.s(0);
+
+        circuit.add_gate("h", {0});
+        circuit.add_gate("s", {0});
+        circuit.add_gate("s", {0});
+        circuit.add_gate("h", {0});
+        circuit.add_gate("s", {0});
+        circuit.add_gate("s", {0});
+      }
+
+      if (z) {
+        // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
+        circuit.add_gate("h", {0});
+      }
+
+      return circuit;
+    }
 
     // Returns the circuit which maps this PauliString onto p
-    QuantumCircuit transform(PauliString const &p) const;
+    QuantumCircuit transform(PauliString const &p) const {
+      QuantumCircuit c1 = reduce();
+      QuantumCircuit c2 = p.reduce().adjoint();
+
+      c1.append(c2);
+
+      return c1;
+    }
 
     // It is slightly faster (~20-30%) to query both the x and z bits at a given site
     // at the same time, storing them in the first two bits of the return value.

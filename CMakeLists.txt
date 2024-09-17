@@ -23,9 +23,10 @@ find_package(fmt)
 find_package(openblas)
 find_package(lapack)
 
-link_directories("/Users/eliotheinrich/Projects/deps/itensor/lib", "/Users/eliotheinrich/.local/fmt/lib")
+link_directories("$ENV{ITENSOR_DIR}/lib" $ENV{BLAS_DIR})
+include_directories("$ENV{ITENSOR_DIR}")
 
-set(LAPACKBLAS lapack blas)
+set(ITENSOR_DEPS gfortran lapack openblas itensor)
 
 #set(ITENSOR_DIR $ENV{ITENSOR_DIR})
 #set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
@@ -124,7 +125,7 @@ if (BUILDING_PYQTOOLS)
         src/PyUtils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PUBLIC quantum_state quantum_circuit clifford_state linear_code ${LAPACKBLAS} itensor)
+    target_link_libraries(pyqtools_bindings PUBLIC quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS})
 
     install(
         TARGETS pyqtools_bindings

@@ -131,13 +131,69 @@ class SymbolicGate : public Gate {
       }
     }
 
+    std::string type_to_string(SymbolicGate::GateLabel g) const {
+      switch (g) {
+        case SymbolicGate::GateLabel::H:
+          return "H";
+          break;
+        case SymbolicGate::GateLabel::X:
+          return "X";
+          break;
+        case SymbolicGate::GateLabel::Y:
+          return "Y";
+          break;
+        case SymbolicGate::GateLabel::Z:
+          return "Z";
+          break;
+        case SymbolicGate::GateLabel::sqrtX:
+          return "sqrtX";
+          break;
+        case SymbolicGate::GateLabel::sqrtY:
+          return "sqrtY";
+          break;
+        case SymbolicGate::GateLabel::S:
+          return "S";
+          break;
+        case SymbolicGate::GateLabel::sqrtXd:
+          return "sqrtXd";
+          break;
+        case SymbolicGate::GateLabel::sqrtYd:
+          return "sqrtYd";
+          break;
+        case SymbolicGate::GateLabel::Sd:
+          return "Sd";
+          break;
+        case SymbolicGate::GateLabel::T:
+          return "T";
+          break;
+        case SymbolicGate::GateLabel::Td:
+          return "Td";
+          break;
+        case SymbolicGate::GateLabel::CX:
+          return "CX";
+          break;
+        case SymbolicGate::GateLabel::CY:
+          return "CY";
+          break;
+        case SymbolicGate::GateLabel::CZ:
+          return "CZ";
+          break;
+        case SymbolicGate::GateLabel::SWAP:
+          return "SWAP";
+          break;
+        default:
+          throw std::runtime_error("Invalid gate type.");
+          break;
+      }
+    }
+
     size_t num_qubits_for_gate(SymbolicGate::GateLabel g) const {
       if (SymbolicGate::single_qubit_gates.contains(g)) {
         return 1;
       } else if (SymbolicGate::two_qubit_gates.contains(g)) {
           return 2;
       } else {
-        throw std::runtime_error(fmt::format("Cannot determine number of qubits for gate {}", g));
+        throw std::runtime_error(fmt::format("Cannot determine number of qubits for gate."));
       }
     }
 
@@ -232,59 +288,7 @@ class SymbolicGate : public Gate {
     }
 
     virtual std::string label() const override {
-      switch (type) {
-        case SymbolicGate::GateLabel::H:
-          return "H";
-          break;
-        case SymbolicGate::GateLabel::X:
-          return "X";
-          break;
-        case SymbolicGate::GateLabel::Y:
-          return "Y";
-          break;
-        case SymbolicGate::GateLabel::Z:
-          return "Z";
-          break;
-        case SymbolicGate::GateLabel::sqrtX:
-          return "sqrtX";
-          break;
-        case SymbolicGate::GateLabel::sqrtY:
-          return "sqrtY";
-          break;
-        case SymbolicGate::GateLabel::S:
-          return "S";
-          break;
-        case SymbolicGate::GateLabel::sqrtXd:
-          return "sqrtXd";
-          break;
-        case SymbolicGate::GateLabel::sqrtYd:
-          return "sqrtYd";
-          break;
-        case SymbolicGate::GateLabel::Sd:
-          return "Sd";
-          break;
-        case SymbolicGate::GateLabel::T:
-          return "T";
-          break;
-        case SymbolicGate::GateLabel::Td:
-          return "Td";
-          break;
-        case SymbolicGate::GateLabel::CX:
-          return "CX";
-          break;
-        case SymbolicGate::GateLabel::CY:
-          return "CY";
-          break;
-        case SymbolicGate::GateLabel::CZ:
-          return "CZ";
-          break;
-        case SymbolicGate::GateLabel::SWAP:
-          return "SWAP";
-          break;
-        default:
-          throw std::runtime_error("Invalid gate type.");
-          break;
-      }
+      return type_to_string(type);
     }
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {

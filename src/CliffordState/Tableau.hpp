@@ -11,17 +11,6 @@
 
 #include <Eigen/Dense>
 
-template <typename T>
-static void remove_even_indices(std::vector<T> &v) {
-  uint32_t vlen = v.size();
-  for (uint32_t i = 0; i < vlen; i++) {
-    uint32_t j = vlen - i - 1;
-    if ((j % 2)) {
-      v.erase(v.begin() + j);
-    }
-  }
-}
-
 class Tableau {
   public:
     bool track_destabilizers;

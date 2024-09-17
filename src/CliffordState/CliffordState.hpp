@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Frame.h"
-#include "Tableau.hpp"
 #include "QuantumCircuit.h"
 
 #include <deque>
