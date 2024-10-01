@@ -13,6 +13,9 @@ static void remove_even_indices(std::vector<T> &v) {
   }
 }
 
+enum Pauli {
+  I, X, Y, Z
+};
 
 class PauliString {
   public:
@@ -33,6 +36,24 @@ class PauliString {
     PauliString(uint32_t num_qubits) : num_qubits(num_qubits), phase(false) {
       width = (2u*num_qubits) / 32 + static_cast<bool>((2u*num_qubits) % 32);
       bit_string = std::vector<uint32_t>(width, 0);
+    }
+
+    PauliString(const std::vector<Pauli>& paulis) : PauliString(paulis.size()) { 
+      for (size_t i = 0; i < paulis.size(); i++) {
+        if (paulis[i] == Pauli::I) {
+          set_x(i, false);
+          set_z(i, false);
+        } else if (paulis[i] == Pauli::X) {
+          set_x(i, true);
+          set_z(i, false);
+        } else if (paulis[i] == Pauli::Y) {
+          set_x(i, true);
+          set_z(i, true);
+        } else if (paulis[i] == Pauli::Z) {
+          set_x(i, false);
+          set_z(i, true);
+        }
+      }
     }
 
     static PauliString rand(uint32_t num_qubits, std::minstd_rand& r) {
@@ -73,6 +94,12 @@ class PauliString {
       return p;
     }
 
+    static PauliString from_bitstring(uint32_t num_qubits, uint32_t bits) {
+      PauliString p = PauliString(num_qubits);
+      p.bit_string = {bits};
+      return p;
+    }
+
     static PauliString basis(uint32_t num_qubits, const std::string& P, uint32_t q) {
       return PauliString::basis(num_qubits, P, q, false);
     }
@@ -84,10 +111,24 @@ class PauliString {
       return p;
     }
 
-    inline bool operator[](size_t i) const {
-      size_t word_ind = i / 32;
-      size_t bit_ind = i % 32;
-      return (bit_string[word_ind] >> bit_ind) & 1u;
+    PauliString substring(const std::vector<uint32_t>& sites, bool remove_qubits=false) const {
+      size_t n = remove_qubits ? sites.size() : num_qubits;
+      PauliString p(n);
+
+      if (remove_qubits) {
+        for (size_t i = 0; i < sites.size(); i++) {
+          p.set_x(i, x(sites[i]));
+          p.set_z(i, z(sites[i]));
+        }
+      } else {
+        for (size_t i = 0; i < sites.size(); i++) {
+          p.set_x(i, x(i));
+          p.set_z(i, z(i));
+        }
+      }
+
+      p.set_r(r());
+      return p;
     }
 
     bool operator==(const PauliString &rhs) const {
@@ -155,6 +196,21 @@ class PauliString {
       }
 
       return g;
+    }
+
+    Pauli to_pauli(uint32_t i) const {
+      bool xi = x(i);
+      bool zi = z(i);
+
+      if (xi && zi) {
+        return Pauli::Y;
+      } else if (!xi && zi) {
+        return Pauli::Z;
+      } else if (xi && !zi) {
+        return Pauli::X;
+      } else {
+        return Pauli::I;
+      }
     }
 
     std::string to_op(uint32_t i) const {
@@ -316,7 +372,7 @@ class PauliString {
     QuantumCircuit reduce(bool z = true) const {
       PauliString p(*this);
 
-      QuantumCircuit circuit;
+      QuantumCircuit circuit(num_qubits);
 
       if (z) {
         p.h(0);
@@ -429,6 +485,18 @@ class PauliString {
 
     inline bool r() const { 
       return phase; 
+    }
+
+    inline void set(size_t i, bool v) {
+      uint32_t word_ind = i / 32u;
+      uint32_t bit_ind = i % 32u;
+      bit_string[word_ind] = (bit_string[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
+    }
+
+    inline bool get(size_t i) const {
+      uint32_t word_ind = i / 32u;
+      uint32_t bit_ind = i % 32u;
+      return (bit_string[word_ind] >> bit_ind) & 1u;
     }
 
     inline void set_x(uint32_t i, bool v) { 

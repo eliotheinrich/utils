@@ -73,17 +73,19 @@ namespace quantumstate_utils {
 
 class EntropyState;
 
+using PauliAmplitude = std::pair<PauliString, double>;
+
 class QuantumState : public EntropyState {
 	protected:
-        std::minstd_rand rng;
+    std::minstd_rand rng;
 
-        uint32_t rand() { 
-			return this->rng(); 
-		}
+    uint32_t rand() { 
+      return this->rng(); 
+    }
 
-        double randf() { 
-			return double(rand())/double(RAND_MAX); 
-		}
+    double randf() { 
+      return double(rand())/double(RAND_MAX); 
+    }
 
 	public:
 		uint32_t num_qubits;
@@ -99,9 +101,68 @@ class QuantumState : public EntropyState {
 			}
 		}
 
-		void seed(int s) {
+		virtual void seed(int s) {
 			rng.seed(s);
 		}
+
+    virtual std::vector<double> magic_mutual_information(const std::vector<PauliAmplitude>& samples, const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
+      std::vector<double> s;
+      for (const auto &[PAB, p] : samples) {
+        PauliString PA = PAB.substring(qubitsA);
+        PauliString PB = PAB.substring(qubitsB);
+
+        double tAB = std::abs(expectation(PAB));
+        double tA = std::abs(expectation(PA));
+        double tB = std::abs(expectation(PB));
+
+        s.push_back(tA*tB/tAB);
+      }
+
+      return s;
+    }
+
+    virtual double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples) {
+      std::vector<double> amplitude_samples;
+      for (const auto &[P, p] : samples) {
+        amplitude_samples.push_back(p);
+      }
+
+      if (index == 1) {
+        double q = 0.0;
+        for (size_t i = 0; i < amplitude_samples.size(); i++) {
+          double p = amplitude_samples[i];
+          q += -std::log(p*p);
+        }
+
+        q = q/samples.size();
+        return -q;
+      } else {
+        double q = 0.0;
+        for (size_t i = 0; i < amplitude_samples.size(); i++) {
+          double p = amplitude_samples[i];
+          q += std::pow(p, 2*(index - 1));
+        }
+
+        q = q/amplitude_samples.size();
+        return 1.0/(1.0 - index) * std::log(q);
+      }
+    }
+
+    virtual double stabilizer_renyi_entropy(size_t index) {
+      // Default to 1000 samples
+      std::vector<PauliAmplitude> samples = stabilizer_renyi_entropy_samples(1000);
+
+      return stabilizer_renyi_entropy(index, samples);
+    }
+
+    std::vector<PauliAmplitude> stabilizer_renyi_entropy_montecarlo(size_t num_samples);
+    std::vector<PauliAmplitude> stabilizer_renyi_entropy_exhaustive();
+
+    virtual std::vector<PauliAmplitude> stabilizer_renyi_entropy_samples(size_t num_samples) {
+      return stabilizer_renyi_entropy_montecarlo(num_samples);
+    }
+
+    virtual std::complex<double> expectation(const PauliString& p) const=0;
 
 		virtual std::string to_string() const=0;
 
@@ -204,6 +265,10 @@ class DensityMatrix : public QuantumState {
 
 		DensityMatrix(const DensityMatrix& rho);
 
+    DensityMatrix(const UnitaryState& U);
+
+    DensityMatrix(const MatrixProductState& mps);
+
 		DensityMatrix(const Eigen::MatrixXcd& data);
 
 		virtual std::string to_string() const override;
@@ -211,6 +276,8 @@ class DensityMatrix : public QuantumState {
 		DensityMatrix partial_trace(const std::vector<uint32_t>& traced_qubits) const;
 
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
+
+    virtual std::complex<double> expectation(const PauliString& p) const override;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) override;
 
@@ -257,6 +324,13 @@ class Statevector : public QuantumState {
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
+    virtual double stabilizer_renyi_entropy(size_t index) override {
+      return DensityMatrix(*this).stabilizer_renyi_entropy(index);
+    }
+
+    virtual std::complex<double> expectation(const PauliString& p) const override {
+      return DensityMatrix(*this).expectation(p);
+    }
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
 
@@ -309,6 +383,14 @@ class UnitaryState : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override;
 
+    virtual double stabilizer_renyi_entropy(size_t index) override {
+      return DensityMatrix(*this).stabilizer_renyi_entropy(index);
+    }
+
+    virtual std::complex<double> expectation(const PauliString& p) const override {
+      return DensityMatrix(*this).expectation(p);
+    }
+
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate) override;
@@ -344,26 +426,30 @@ class MatrixProductState : public QuantumState {
     MatrixProductState()=default;
     ~MatrixProductState();
 
-		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-4);
+		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-8);
+    MatrixProductState(const MatrixProductState& other);
 
+    static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
+
+    virtual void seed(int i) override;
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
-    double stabilizer_renyi_entropy(size_t n, size_t num_samples) const;
+    virtual std::vector<PauliAmplitude> stabilizer_renyi_entropy_samples(size_t num_samples) override;
+
+    virtual std::complex<double> expectation(const PauliString& p) const override;
 
 		void print_mps() const;
 
+    DensityMatrix partial_trace(const std::vector<uint32_t>& qubits) const;
+
 		std::complex<double> coefficients(uint32_t z) const;
-
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
-
 		Eigen::VectorXcd coefficients() const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
-
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) override;
-
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
@@ -376,3 +462,4 @@ class MatrixProductState : public QuantumState {
 		}
 		virtual bool measure(uint32_t q) override;
 };
+

@@ -18,6 +18,28 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 	data = rho.data;
 }
 
+DensityMatrix::DensityMatrix(const UnitaryState& U) : DensityMatrix(U.num_qubits) {
+  evolve(U.unitary);
+}
+
+DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {
+}
+
+DensityMatrix::DensityMatrix(const Eigen::MatrixXcd& data) : data(data) {
+  size_t nrows = data.rows();
+  size_t ncols = data.cols();
+
+  if (nrows != ncols) {
+    throw std::runtime_error("Provided data is not square.");
+  }
+
+  if (!(nrows > 0 && ((nrows & (nrows - 1)) == 0))) {
+    throw std::runtime_error("Provided data does not have a dimension which is a power of 2.");
+  } 
+
+  num_qubits = std::bit_width(nrows) - 1;
+}
+
 std::string DensityMatrix::to_string() const {
 	std::stringstream ss;
 	ss << data;
@@ -118,6 +140,11 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 	} else {
 		return 1./(1. - index) * std::log(rho_a.data.pow(index).trace().real());
 	}
+}
+
+std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
+  Eigen::MatrixXcd P = p.to_matrix();
+  return (data*P).trace();
 }
 
 void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {

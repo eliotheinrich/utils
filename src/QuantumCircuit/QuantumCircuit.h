@@ -34,6 +34,7 @@ class QuantumCircuit {
     uint32_t length() const;
 
     bool contains_measurement() const;
+    bool is_clifford() const;
 
     void apply_qubit_map(const std::vector<uint32_t>& qubits);
 
@@ -49,8 +50,6 @@ class QuantumCircuit {
     void append(const QuantumCircuit& other);
     void append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits);
     void append(const Instruction& inst);
-
-    bool is_clifford() const;
 
     QuantumCircuit bind_params(const std::vector<double>& params) const;
 

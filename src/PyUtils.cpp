@@ -147,7 +147,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def_ro("num_qubits", &MatrixProductState::num_qubits)
     .def("__str__", &MatrixProductState::to_string)
     .def("entropy", &MatrixProductState::entropy, "qubits"_a, "index"_a)
-    .def("stabilizer_renyi_entropy", &MatrixProductState::stabilizer_renyi_entropy, "index"_a, "num_samples"_a=100)
+    .def("stabilizer_renyi_entropy", &MatrixProductState::stabilizer_renyi_entropy, "index"_a)
     .def("h", [H](MatrixProductState& self, uint32_t q) { self.evolve(H, q); })
     .def("x", [X](MatrixProductState& self, uint32_t q) { self.evolve(X, q); })
     .def("y", [Y](MatrixProductState& self, uint32_t q) { self.evolve(Y, q); })

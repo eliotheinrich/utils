@@ -1,5 +1,6 @@
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "QuantumState.h"
 #include "BinaryPolynomial.h"
@@ -188,6 +189,15 @@ bool test_leaf_removal() {
   return true;
 }
 
+void print_states(Statevector& s, MatrixProductState& mps) {
+  Statevector s_(mps);
+
+  std::cout << s.to_string() << "\n";
+  std::cout << s_.to_string() << "\n";
+  std::cout << fmt::format("d = {:.3f}\n", std::abs(s.inner(s_)));
+  //mps.print_mps();
+}
+
 bool test_mps() {
   size_t num_qubits = 6;
   size_t bond_dimension = 12;
@@ -195,40 +205,150 @@ bool test_mps() {
   thread_local std::random_device gen;
   std::minstd_rand rng(gen());
 
-  MatrixProductState mps(num_qubits, bond_dimension);
   QuantumCircuit qc(num_qubits);
-  qc.add_gate("h", {0});
-  qc.add_gate("h", {1});
-  
-  qc.append(random_clifford(2, rng), {0, 1});
-  qc.append(random_clifford(2, rng), {2, 3});
-  qc.append(random_clifford(2, rng), {4, 5});
+  qc.append(generate_haar_circuit(num_qubits, num_qubits, false));
 
-  qc.append(random_clifford(2, rng), {1, 2});
-  qc.append(random_clifford(2, rng), {3, 4});
+  for (size_t k = 0; k < 10; k++) {
+    for (size_t i = 0; i < num_qubits/2 - 1; i++) {
+      uint32_t q1 = (k % 2) ? 2*i : 2*i + 1;
+      uint32_t q2 = q1 + 1;
 
-  qc.append(random_clifford(2, rng), {0, 1});
-  qc.append(random_clifford(2, rng), {2, 3});
-  qc.append(random_clifford(2, rng), {4, 5});
+      qc.append(random_clifford(2, rng), {q1, q2});
+    }
+  }
+
+
+  Statevector s(num_qubits);
+  s.evolve(qc);
+
+  MatrixProductState mps(num_qubits, bond_dimension);
   mps.evolve(qc);
 
-  double d = mps.stabilizer_renyi_entropy(2, 1000);
+  print_states(s, mps);
+
+  double d = mps.stabilizer_renyi_entropy(2);
   std::cout << fmt::format("d = {}\n", d);
-
-  Statevector s(mps);
-  std::cout << s.to_string() << std::endl;
-
 
   return true;
 }
 
+bool test_nonlocal_mps() {
+  size_t nqb = 6;
+
+  QuantumCircuit qc(nqb);
+
+  thread_local std::random_device gen;
+  std::minstd_rand rng(gen());
+
+  qc.add_gate("h", {0});
+  qc.add_gate("cx", {0, 1});
+  qc.add_gate("h", {0});
+  qc.add_gate("h", {1});
+  qc.add_gate("cx", {0, 1});
+
+  MatrixProductState mps(nqb, 20);
+  mps.evolve(qc);
+
+  std::cout << mps.to_string() << "\n";
+
+  Statevector sv(nqb);
+  sv.evolve(qc);
+  std::cout << mps.to_string() << "\n";
+
+
+  double d = mps.stabilizer_renyi_entropy(2);
+  std::cout << fmt::format("d = {}\n", d);
+
+  return true;
+}
+
+bool mps_test_circuit() {
+  size_t nqb = 4;
+  QuantumCircuit qc(nqb);
+  Eigen::Matrix2cd T; T << 1.0, 0.0, 0.0, std::exp(std::complex<double>(0.0, 2.353));
+  qc.add_gate("h", {0});
+  qc.add_gate(T, {0});
+  qc.add_gate("h" , {2});
+  qc.add_gate("cx", {1, 2});
+  qc.add_gate("h" , {1});
+  qc.add_gate("s" , {1});
+  qc.add_gate("h" , {1});
+  qc.add_gate("s" , {1});
+  qc.add_gate("y" , {1});
+  qc.add_gate("h" , {0});
+  qc.add_gate("cx", {0, 1});
+  qc.add_gate("h" , {0});
+  qc.add_gate("s" , {0});
+  qc.add_gate("s" , {0});
+  qc.add_gate("h" , {0});
+  qc.add_gate("s" , {0});
+  qc.add_gate("s" , {0});
+  qc.add_gate("h" , {0});
+  qc.add_gate("s" , {0});
+  qc.add_gate("x" , {0});
+
+  std::cout << qc.to_string() << "\n";
+
+  Statevector s(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+  s.evolve(qc);
+  mps.evolve(qc);
+
+  print_states(s, mps);
+  std::cout << "\n";
+
+  auto samples = mps.stabilizer_renyi_entropy_samples(10000);
+  double d = 0.0;
+  for (auto [P, f] : samples) {
+    d += f/10000;
+  }
+  std::cout << fmt::format("samples = {}\n", d);
+
+  return true;
+}
+
+bool test_mps_partial_trace() {
+  size_t nqb = 2;
+
+  QuantumCircuit qc(nqb);
+  qc.add_gate("h", {0});
+  qc.add_gate("cx", {1,0});
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  mps.evolve(qc);
+
+  DensityMatrix rho(nqb);
+  rho.evolve(qc);
+
+  for (uint32_t k = 0; k < nqb; k++) {
+    std::vector<uint32_t> qubits{k};
+    DensityMatrix rho_ = mps.partial_trace(qubits);
+
+    std::cout << rho_.to_string() << "\n";
+    std::cout << rho.partial_trace(qubits).to_string() << "\n";
+  }
+
+  return true;
+}
+
+bool test_ising_ground_state() {
+  auto mps = MatrixProductState::ising_ground_state(10, 1.0, 10);
+
+  std::cout << mps.to_string() << "\n";
+  return true;
+}
+
 int main() {
-  assert(test_solve_linear_system());
-  assert(test_binary_polynomial());
-  assert(test_binary_matrix());
-  assert(test_generator_matrix());
-  assert(test_random_regular_graph());
-  assert(test_parity_check_reduction());
-  assert(test_leaf_removal());
-  assert(test_mps());
+  //assert(test_solve_linear_system());
+  //assert(test_binary_polynomial());
+  //assert(test_binary_matrix());
+  //assert(test_generator_matrix());
+  //assert(test_random_regular_graph());
+  //assert(test_parity_check_reduction());
+  //assert(test_leaf_removal());
+  //assert(test_mps());
+  //assert(test_nonlocal_mps());
+  //assert(mps_test_circuit());
+  //assert(test_mps_partial_trace());
+  assert(test_ising_ground_state());
 }

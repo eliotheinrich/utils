@@ -26,7 +26,10 @@ find_package(lapack)
 link_directories("$ENV{ITENSOR_DIR}/lib" $ENV{BLAS_DIR})
 include_directories("$ENV{ITENSOR_DIR}")
 
-set(ITENSOR_DEPS gfortran lapack openblas itensor)
+set(ITENSOR_DEPS lapack openblas itensor)
+if (gfortran)
+    set(ITENSOR_DEPS gfortran $ITENSOR_DEPS)
+endif()
 
 #set(ITENSOR_DIR $ENV{ITENSOR_DIR})
 #set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)

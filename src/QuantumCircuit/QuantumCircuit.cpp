@@ -141,6 +141,10 @@ void QuantumCircuit::append(const QuantumCircuit& other) {
 }
 
 void QuantumCircuit::append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits) {
+  if (qbits.size() != other.num_qubits) {
+    throw std::invalid_argument("Cannot append QuantumCircuits; numbers of qubits do not match.");
+  }
+
   QuantumCircuit qc_extended(other);
   qc_extended.resize(num_qubits);
   qc_extended.apply_qubit_map(qbits);
