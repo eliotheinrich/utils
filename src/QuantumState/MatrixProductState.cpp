@@ -159,7 +159,6 @@ class MatrixProductStateImpl {
 
   public:
     MatrixProductStateImpl()=default;
-
     ~MatrixProductStateImpl()=default;
 
     void seed(int i) {
@@ -686,8 +685,6 @@ MatrixProductState::MatrixProductState(const MatrixProductState& mps) : QuantumS
   impl = std::make_unique<MatrixProductStateImpl>(*mps.impl.get());
   impl->seed(rand());
 }
-
-MatrixProductState::~MatrixProductState()=default;
 
 MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, double h, size_t bond_dimension, double sv_threshold, size_t num_sweeps) {
   MatrixProductState mps(num_qubits, bond_dimension, 1.0);
