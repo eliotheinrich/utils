@@ -687,7 +687,6 @@ MatrixProductState::MatrixProductState(const MatrixProductState& mps) : QuantumS
 }
 
 MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, double h, size_t bond_dimension, double sv_threshold, size_t num_sweeps) {
-  MatrixProductState mps(num_qubits, bond_dimension, 1.0);
   SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
 
   auto ampo = AutoMPO(sites);
@@ -701,7 +700,6 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   auto H = toMPO(ampo);
 
   auto psi = randomMPS(sites);
-
   auto sweeps = Sweeps(num_sweeps);
   sweeps.maxdim() = bond_dimension;
   sweeps.cutoff() = sv_threshold;
@@ -709,9 +707,12 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
 
   auto [energy, psi0] = dmrg(H, psi, sweeps, {"Silent=",true});
 
-  mps.impl = std::make_unique<MatrixProductStateImpl>(psi0);
-  mps.impl->bond_dimension = bond_dimension;
-  mps.impl->sv_threshold = sv_threshold;
+  auto impl = std::make_unique<MatrixProductStateImpl>(psi0);
+  impl->bond_dimension = bond_dimension;
+  impl->sv_threshold = sv_threshold;
+
+  MatrixProductState mps(num_qubits, bond_dimension, sv_threshold);
+  mps.impl = std::move(impl);
 
   Eigen::Matrix4cd id;
   id.setIdentity();
