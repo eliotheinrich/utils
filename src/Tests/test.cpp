@@ -308,11 +308,10 @@ bool mps_test_circuit() {
 }
 
 bool test_mps_partial_trace() {
-  size_t nqb = 2;
+  size_t nqb = 3;
 
   QuantumCircuit qc(nqb);
-  qc.add_gate("h", {0});
-  qc.add_gate("cx", {1,0});
+  qc.append(generate_haar_circuit(nqb, 2, false));
 
   MatrixProductState mps(nqb, 1u << nqb);
   mps.evolve(qc);
@@ -322,10 +321,23 @@ bool test_mps_partial_trace() {
 
   for (uint32_t k = 0; k < nqb; k++) {
     std::vector<uint32_t> qubits{k};
-    DensityMatrix rho_ = mps.partial_trace(qubits);
+    MatrixProductOperator mps_ = mps.partial_trace(qubits);
 
-    std::cout << rho_.to_string() << "\n";
-    std::cout << rho.partial_trace(qubits).to_string() << "\n";
+    mps_.print_mps();
+    std::cout << "MPO: \n";
+    DensityMatrix rho1 = DensityMatrix(mps_.coefficients());
+    DensityMatrix rho2 = rho.partial_trace(qubits);
+    std::cout << rho1.to_string() << "\n";
+    std::cout << "DM: \n";
+    std::cout << rho2.to_string() << "\n";
+    std::random_device gen;
+    std::minstd_rand rng(gen());
+    for (size_t i = 0; i < 10; i++) {
+      PauliString p = PauliString::rand(2, rng);
+      auto c1 = mps_.expectation(p);
+      auto c2 = rho2.expectation(p);
+      std::cout << fmt::format("p = {} -> {:.3f} + {:.3f}i and {:.3f} + {:.3f}i\n", p.to_string(), c1.real(), c1.imag(), c2.real(), c2.imag());
+    }
   }
 
   return true;
@@ -349,6 +361,6 @@ int main() {
   //assert(test_mps());
   //assert(test_nonlocal_mps());
   //assert(mps_test_circuit());
-  //assert(test_mps_partial_trace());
-  assert(test_ising_ground_state());
+  assert(test_mps_partial_trace());
+  //assert(test_ising_ground_state());
 }

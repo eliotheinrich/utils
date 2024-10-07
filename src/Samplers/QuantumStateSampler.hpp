@@ -130,10 +130,6 @@ class QuantumStateSampler {
       }
 
       if (sample_magic_mutual_information) {
-        if (sre_samples.size() == 0) {
-          sre_samples = take_sre_samples(state);
-        }
-        
         std::vector<uint32_t> qubitsA(magic_mutual_information_subsystem_size);
         std::vector<uint32_t> qubitsB(magic_mutual_information_subsystem_size);
         for (size_t i = 0; i < magic_mutual_information_subsystem_size; i++) {
@@ -141,7 +137,7 @@ class QuantumStateSampler {
           qubitsB[i] = i + subsystem_offset_B;
         }
 
-        auto magic_samples = state->magic_mutual_information(sre_samples, qubitsA, qubitsB);
+        auto magic_samples = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
 
         dataframe::utils::emplace(samples, "magic_mutual_information", magic_samples);
       }

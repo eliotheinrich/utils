@@ -1,4 +1,3 @@
-#pragma once
 
 #include "QuantumCircuit.h"
 #include "EntropyState.hpp"
@@ -95,7 +94,8 @@ class QuantumState : public EntropyState {
 
 		QuantumState(uint32_t num_qubits, int s=-1) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {
 			if (s == -1) {
-				seed(std::rand());
+        thread_local std::random_device gen;
+				seed(gen());
 			} else {
 				seed(s);
 			}
@@ -105,21 +105,7 @@ class QuantumState : public EntropyState {
 			rng.seed(s);
 		}
 
-    virtual std::vector<double> magic_mutual_information(const std::vector<PauliAmplitude>& samples, const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
-      std::vector<double> s;
-      for (const auto &[PAB, p] : samples) {
-        PauliString PA = PAB.substring(qubitsA);
-        PauliString PB = PAB.substring(qubitsB);
-
-        double tAB = std::abs(expectation(PAB));
-        double tA = std::abs(expectation(PA));
-        double tB = std::abs(expectation(PB));
-
-        s.push_back(tA*tB/tAB);
-      }
-
-      return s;
-    }
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples)=0;
 
     virtual double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples) {
       std::vector<double> amplitude_samples;
@@ -250,6 +236,7 @@ class DensityMatrix;
 class Statevector;
 class UnitaryState;
 class MatrixProductState;
+class MatrixProductOperator;
 
 class DensityMatrix : public QuantumState {
 	public:
@@ -274,6 +261,8 @@ class DensityMatrix : public QuantumState {
 		virtual std::string to_string() const override;
 
 		DensityMatrix partial_trace(const std::vector<uint32_t>& traced_qubits) const;
+
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
 
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
 
@@ -326,6 +315,10 @@ class Statevector : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
     virtual double stabilizer_renyi_entropy(size_t index) override {
       return DensityMatrix(*this).stabilizer_renyi_entropy(index);
+    }
+
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override {
+      return DensityMatrix(*this).magic_mutual_information(qubitsA, qubitsB, num_samples);
     }
 
     virtual std::complex<double> expectation(const PauliString& p) const override {
@@ -387,6 +380,10 @@ class UnitaryState : public QuantumState {
       return DensityMatrix(*this).stabilizer_renyi_entropy(index);
     }
 
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override {
+      return DensityMatrix(*this).magic_mutual_information(qubitsA, qubitsB, num_samples);
+    }
+
     virtual std::complex<double> expectation(const PauliString& p) const override {
       return DensityMatrix(*this).expectation(p);
     }
@@ -419,6 +416,8 @@ class UnitaryState : public QuantumState {
 class MatrixProductStateImpl;
 
 class MatrixProductState : public QuantumState {
+  friend class MatrixProductOperator;
+
 	private:
     std::unique_ptr<MatrixProductStateImpl> impl;
 
@@ -437,12 +436,13 @@ class MatrixProductState : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
     virtual std::vector<PauliAmplitude> stabilizer_renyi_entropy_samples(size_t num_samples) override;
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
 
     virtual std::complex<double> expectation(const PauliString& p) const override;
 
 		void print_mps() const;
 
-    DensityMatrix partial_trace(const std::vector<uint32_t>& qubits) const;
+    MatrixProductOperator partial_trace(const std::vector<uint32_t>& qubits) const;
 
 		std::complex<double> coefficients(uint32_t z) const;
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
@@ -463,3 +463,45 @@ class MatrixProductState : public QuantumState {
 		virtual bool measure(uint32_t q) override;
 };
 
+class MatrixProductOperatorImpl;
+
+class MatrixProductOperator : public QuantumState {
+  private:
+    size_t num_qubits;
+    std::minstd_rand rng;
+    std::unique_ptr<MatrixProductOperatorImpl> impl;
+
+  public:
+    MatrixProductOperator()=default;
+    ~MatrixProductOperator();
+
+    MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits);
+    void print_mps() const;
+		Eigen::MatrixXcd coefficients() const;
+    virtual std::complex<double> expectation(const PauliString& p) const override;
+
+    virtual std::vector<double> probabilities() const override {
+      return DensityMatrix(coefficients()).probabilities();
+    }
+
+    virtual std::string to_string() const override {
+      return DensityMatrix(coefficients()).to_string();
+    }
+
+    virtual std::vector<double> magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override {
+      throw std::runtime_error("magic_mutual_information not implemented for MatrixProductOperator.");
+    }
+
+		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override {
+      throw std::runtime_error("entropy not implemented for MatrixProductOperator.");
+    }
+
+    virtual bool measure(uint32_t q) override {
+      throw std::runtime_error("measure not implemented for MatrixProductOperator.");
+    }
+
+    virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) override {
+      throw std::runtime_error("evolve not implemented for MatrixProductOperator.");
+    }
+
+};
