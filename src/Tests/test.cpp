@@ -308,7 +308,7 @@ bool mps_test_circuit() {
 }
 
 bool test_mps_partial_trace() {
-  size_t nqb = 3;
+  size_t nqb = 6;
 
   QuantumCircuit qc(nqb);
   qc.append(generate_haar_circuit(nqb, 2, false));
@@ -319,8 +319,8 @@ bool test_mps_partial_trace() {
   DensityMatrix rho(nqb);
   rho.evolve(qc);
 
-  for (uint32_t k = 0; k < nqb; k++) {
-    std::vector<uint32_t> qubits{k};
+  for (uint32_t k = 0; k < 1; k++) {
+    std::vector<uint32_t> qubits{0, 1, 4, 5};
     MatrixProductOperator mps_ = mps.partial_trace(qubits);
 
     mps_.print_mps();

@@ -692,7 +692,7 @@ class MatrixProductOperatorImpl {
 
     static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
       size_t L = A.size();
-      if (q == L - 1) {
+      if (q == L) {
         return delta(i_l, prime(i_l));
       }
 
@@ -794,7 +794,7 @@ class MatrixProductOperatorImpl {
         size_t q1 = external_qubits[i];
         size_t q2 = external_qubits[i + 1];
 
-        blocks.push_back(get_block(A, q1, q2, internal_idx(q1, InternalDir::Right), internal_idx(q2 - 1, InternalDir::Left)));
+        blocks.push_back(get_block(A, q1, q2, internal_idx(i, InternalDir::Right), internal_idx(i + 1, InternalDir::Left)));
       }
 
       blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits - 1, InternalDir::Right)));
