@@ -671,16 +671,16 @@ class MatrixProductOperatorImpl {
     std::vector<Index> internal_indices;
     std::vector<Index> external_indices;
 
-    static ITensor get_block_left(const MatrixProductStateImpl& mps, size_t q, const Index& i_r) {
+    static ITensor get_block_left(const std::vector<ITensor>& A, size_t q, const Index& i_r) {
       if (q == 0) {
         return delta(i_r, prime(i_r));
       }
 
-      auto Ak = mps.A(0, false);
+      auto Ak = A[0];
       auto a0 = findIndex(Ak, "alpha0");
       auto C = Ak*conj(prime(Ak, "Internal"))*delta(a0, prime(a0));
       for (size_t k = 1; k < q; k++) {
-        Ak = mps.A(k, false);
+        Ak = A[k];
         C *= Ak*conj(prime(Ak, "Internal"));
       }
 
@@ -690,18 +690,18 @@ class MatrixProductOperatorImpl {
       return C;
     }
 
-    static MPOBlock get_block_right(const MatrixProductStateImpl& mps, size_t q, const Index& i_l) {
-      size_t L = mps.num_qubits;
-      if (q == L - 1) {
+    static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
+      size_t L = A.size();
+      if (q == L) {
         return delta(i_l, prime(i_l));
       }
 
-      auto Ak = mps.A(L - 1, false);
+      auto Ak = A[L - 1];
       auto aL = findIndex(Ak, fmt::format("alpha{}", L));
       auto C = Ak*conj(prime(Ak, "Internal"))*delta(aL, prime(aL));
 
-      for (size_t k = L - 1; k > q + 1; k--) {
-        Ak = mps.A(k, false);
+      for (size_t k = L - 2; k > q; k--) {
+        Ak = A[k];
         C *= Ak*conj(prime(Ak, "Internal"));
       }
 
@@ -711,15 +711,15 @@ class MatrixProductOperatorImpl {
       return C;
     }
 
-    static MPOBlock get_block(const MatrixProductStateImpl& mps, size_t q1, size_t q2, const Index& i_l, const Index& i_r) {
+    static MPOBlock get_block(const std::vector<ITensor>& A, size_t q1, size_t q2, const Index& i_l, const Index& i_r) {
       if (q2 == q1 + 1) {
         return std::nullopt;
       }
 
-      auto Ak = mps.A(q1 + 1, false);
+      auto Ak = A[q1 + 1];
       auto C = Ak*conj(prime(Ak, "Internal"));
       for (size_t k = q1 + 2; k < q2; k++) {
-        Ak = mps.A(k, false);
+        Ak = A[k];
         C *= Ak*conj(prime(Ak, "Internal"));
       }
 
@@ -751,23 +751,35 @@ class MatrixProductOperatorImpl {
         mask[q] = true;
       }
 
+      // Generate all tensors
+      std::vector<ITensor> A;
+      for (size_t i = 0; i < mps.num_qubits; i++) {
+        A.push_back(mps.A(i, false));
+      }
+
+      // Align indices
+      for (size_t i = 1; i < mps.num_qubits; i++) {
+        std::string s = fmt::format("alpha{}", i);
+        auto ai = findInds(A[i - 1], s);
+        A[i].replaceInds(findInds(A[i], s), findInds(A[i - 1], s));
+      }
+
       std::vector<uint32_t> external_qubits;
       size_t k = 0;
       for (size_t i = 0; i < mps.num_qubits; i++) {
         if (!mask[i]) {
           external_qubits.push_back(i);
-          auto A = mps.A(i, false);
-          Index external_idx = findIndex(A, "External");
+          auto Ai = A[i];
+          Index external_idx = findIndex(Ai, "External");
           Index external_idx_(dim(external_idx), fmt::format("i{},External",k));
 
-          Index internal_idx1 = findIndex(A, fmt::format("alpha{}", i));
-          Index internal_idx2 = findIndex(A, fmt::format("alpha{}", i+1));
+          Index internal_idx1 = findIndex(Ai, fmt::format("alpha{}", i));
+          Index internal_idx2 = findIndex(Ai, fmt::format("alpha{}", i+1));
           Index internal_idx1_ = Index(dim(internal_idx1), fmt::format("a{},Internal,Left", k));
           Index internal_idx2_ = Index(dim(internal_idx2), fmt::format("a{},Internal,Right", k));
 
-          A.replaceInds({external_idx, internal_idx1, internal_idx2}, {external_idx_, internal_idx1_, internal_idx2_});
 
-          ops.push_back(A);
+          ops.push_back(replaceInds(Ai, {external_idx, internal_idx1, internal_idx2}, {external_idx_, internal_idx1_, internal_idx2_}));
 
           external_indices.push_back(external_idx_);
           internal_indices.push_back(internal_idx1_);
@@ -777,16 +789,16 @@ class MatrixProductOperatorImpl {
       }
 
       blocks = std::vector<MPOBlock>();
-      left_block = get_block_left(mps, external_qubits[0], internal_idx(0, InternalDir::Left));
+      left_block = get_block_left(A, external_qubits[0], internal_idx(0, InternalDir::Left));
 
       for (size_t i = 0; i < num_qubits - 1; i++) {
         size_t q1 = external_qubits[i];
         size_t q2 = external_qubits[i + 1];
 
-        blocks.push_back(get_block(mps, q1, q2, internal_idx(q1, InternalDir::Right), internal_idx(q2 - 1, InternalDir::Left)));
+        blocks.push_back(get_block(A, q1, q2, internal_idx(q1, InternalDir::Right), internal_idx(q2 - 1, InternalDir::Left)));
       }
 
-      blocks.push_back(get_block_right(mps, external_qubits[num_qubits - 1], internal_idx(num_qubits-1, InternalDir::Right)));
+      blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits-1, InternalDir::Right)));
     }
 
     void print_mps() const {
@@ -993,8 +1005,8 @@ std::vector<double> MatrixProductState::magic_mutual_information(const std::vect
   auto samples = mpsAB.stabilizer_renyi_entropy_samples(num_samples);
   std::vector<double> magic_samples;
   for (const auto& [P, p] : samples) {
-    PauliString PA = P.substring(qubitsA_);
-    PauliString PB = P.substring(qubitsB_);
+    PauliString PA = P.substring(qubitsA_, false);
+    PauliString PB = P.substring(qubitsB_, false);
 
     double tAB = std::abs(mpsAB.expectation(P));
     double tA = std::abs(mpsAB.expectation(PA));
@@ -1075,10 +1087,8 @@ bool MatrixProductState::measure(uint32_t q) {
   return impl->measure(q, r);
 }
 
-MatrixProductOperator::MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : num_qubits(mps.num_qubits) {
+MatrixProductOperator::MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : QuantumState(mps.num_qubits - traced_qubits.size()) {
   impl = std::make_unique<MatrixProductOperatorImpl>(*mps.impl.get(), traced_qubits);
-  thread_local std::random_device r;
-  rng.seed(r());
 }
 
 MatrixProductOperator::~MatrixProductOperator()=default;

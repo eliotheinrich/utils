@@ -467,8 +467,6 @@ class MatrixProductOperatorImpl;
 
 class MatrixProductOperator : public QuantumState {
   private:
-    size_t num_qubits;
-    std::minstd_rand rng;
     std::unique_ptr<MatrixProductOperatorImpl> impl;
 
   public:
