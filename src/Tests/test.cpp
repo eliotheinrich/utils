@@ -330,6 +330,7 @@ bool test_mps_partial_trace() {
     std::cout << rho1.to_string() << "\n";
     std::cout << "DM: \n";
     std::cout << rho2.to_string() << "\n";
+    std::cout << rho1.data - rho2.data << "\n";
     std::random_device gen;
     std::minstd_rand rng(gen());
     for (size_t i = 0; i < 10; i++) {

@@ -692,7 +692,7 @@ class MatrixProductOperatorImpl {
 
     static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
       size_t L = A.size();
-      if (q == L) {
+      if (q == L - 1) {
         return delta(i_l, prime(i_l));
       }
 
@@ -745,7 +745,7 @@ class MatrixProductOperatorImpl {
 
     MatrixProductOperatorImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
       : num_qubits(mps.num_qubits - traced_qubits.size()), bond_dimension(mps.bond_dimension), sv_threshold(mps.sv_threshold) {
-      
+
       std::vector<bool> mask(mps.num_qubits, false);
       for (auto const q : traced_qubits) {
         mask[q] = true;
@@ -756,7 +756,7 @@ class MatrixProductOperatorImpl {
       for (size_t i = 0; i < mps.num_qubits; i++) {
         A.push_back(mps.A(i, false));
       }
-
+      
       // Align indices
       for (size_t i = 1; i < mps.num_qubits; i++) {
         std::string s = fmt::format("alpha{}", i);
@@ -778,7 +778,6 @@ class MatrixProductOperatorImpl {
           Index internal_idx1_ = Index(dim(internal_idx1), fmt::format("a{},Internal,Left", k));
           Index internal_idx2_ = Index(dim(internal_idx2), fmt::format("a{},Internal,Right", k));
 
-
           ops.push_back(replaceInds(Ai, {external_idx, internal_idx1, internal_idx2}, {external_idx_, internal_idx1_, internal_idx2_}));
 
           external_indices.push_back(external_idx_);
@@ -798,7 +797,7 @@ class MatrixProductOperatorImpl {
         blocks.push_back(get_block(A, q1, q2, internal_idx(q1, InternalDir::Right), internal_idx(q2 - 1, InternalDir::Left)));
       }
 
-      blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits-1, InternalDir::Right)));
+      blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits - 1, InternalDir::Right)));
     }
 
     void print_mps() const {
@@ -884,7 +883,7 @@ class MatrixProductOperatorImpl {
         }
       }
 
-      return data.conjugate();
+      return data;
     }
 
   private:
