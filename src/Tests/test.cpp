@@ -351,6 +351,22 @@ bool test_ising_ground_state() {
   return true;
 }
 
+bool test_magic_mutual_information() {
+  size_t nqb = 6;
+  QuantumCircuit qc(nqb);
+  qc.append(generate_haar_circuit(nqb, 2, false));
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  mps.evolve(qc);
+
+  std::vector<uint32_t> qubitsA{0, 4};
+  std::vector<uint32_t> qubitsB{1, 5};
+
+  auto samples = mps.magic_mutual_information(qubitsA, qubitsB, 100);
+
+  return true;
+}
+
 int main() {
   //assert(test_solve_linear_system());
   //assert(test_binary_polynomial());
@@ -364,4 +380,5 @@ int main() {
   //assert(mps_test_circuit());
   assert(test_mps_partial_trace());
   //assert(test_ising_ground_state());
+  assert(test_magic_mutual_information());
 }

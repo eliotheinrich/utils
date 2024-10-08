@@ -692,7 +692,7 @@ class MatrixProductOperatorImpl {
 
     static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
       size_t L = A.size();
-      if (q == L) {
+      if (q == L - 1) {
         return delta(i_l, prime(i_l));
       }
 
@@ -991,16 +991,50 @@ std::vector<PauliAmplitude> MatrixProductState::stabilizer_renyi_entropy_samples
 
 
 std::vector<double> MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  std::vector<uint32_t> qubitsAB;
+  std::vector<bool> mask(num_qubits, false);
 
-  qubitsAB.insert(qubitsAB.end(), qubitsA.begin(), qubitsA.end());
-  qubitsAB.insert(qubitsAB.end(), qubitsB.begin(), qubitsB.end());
-  std::vector<uint32_t> qubitsA_(qubitsA.size());
-  std::vector<uint32_t> qubitsB_(qubitsB.size());
-  std::iota(qubitsA_.begin(), qubitsA_.end(), 0);
-  std::iota(qubitsB_.begin(), qubitsB_.end(), 0);
+  for (const auto q : qubitsA) {
+    mask[q] = true;
+  }
 
-  MatrixProductOperator mpsAB = partial_trace(qubitsAB);
+  for (const auto q : qubitsB) {
+    mask[q] = true;
+  }
+
+  // Trace out qubits not in A or B
+  std::vector<uint32_t> _qubits;
+  for (size_t i = 0; i < num_qubits; i++) {
+    if (!mask[i]) {
+      _qubits.push_back(i);
+    }
+  }
+
+  MatrixProductOperator mpsAB = partial_trace(_qubits);
+
+  std::vector<size_t> offset(num_qubits);
+  size_t k = 0;
+  for (size_t i = 0; i < num_qubits; i++) {
+    if (!mask[i]) {
+      k++;
+    }
+    
+    offset[i] = k;
+  }
+
+  std::vector<uint32_t> qubitsA_(qubitsA.begin(), qubitsA.end());
+  for (size_t i = 0; i < qubitsA.size(); i++) {
+    qubitsA_[i] -= offset[qubitsA_[i]];
+  }
+
+  std::vector<uint32_t> qubitsB_(qubitsB.begin(), qubitsB.end());
+  for (size_t i = 0; i < qubitsB.size(); i++) {
+    qubitsB_[i] -= offset[qubitsB_[i]];
+  }
+
+  std::cout << fmt::format("qubitsA, qubitsB = {}, {}\n", qubitsA, qubitsB);
+  std::cout << fmt::format("offset = {}\n", offset);
+  std::cout << fmt::format("qubitsA_, qubitsB_ = {}, {}\n", qubitsA_, qubitsB_);
+
   auto samples = mpsAB.stabilizer_renyi_entropy_samples(num_samples);
   std::vector<double> magic_samples;
   for (const auto& [P, p] : samples) {
