@@ -93,31 +93,12 @@ DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_q
 	return reduced_rho;
 }
 
-std::vector<double> DensityMatrix::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  std::vector<uint32_t> qubitsAB;
+magic_t DensityMatrix::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
+  return magic_mutual_information_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+}
 
-  qubitsAB.insert(qubitsAB.end(), qubitsA.begin(), qubitsA.end());
-  qubitsAB.insert(qubitsAB.end(), qubitsB.begin(), qubitsB.end());
-  std::vector<uint32_t> qubitsA_(qubitsA.size());
-  std::vector<uint32_t> qubitsB_(qubitsB.size());
-  std::iota(qubitsA_.begin(), qubitsA_.end(), 0);
-  std::iota(qubitsB_.begin(), qubitsB_.end(), 0);
-
-  DensityMatrix rhoAB = partial_trace(qubitsAB);
-  auto samples = rhoAB.stabilizer_renyi_entropy_samples(num_samples);
-  std::vector<double> magic_samples;
-  for (const auto& [P, p] : samples) {
-    PauliString PA = P.substring(qubitsA_);
-    PauliString PB = P.substring(qubitsB_);
-
-    double tAB = std::abs(rhoAB.expectation(P));
-    double tA = std::abs(rhoAB.expectation(PA));
-    double tB = std::abs(rhoAB.expectation(PB));
-
-    magic_samples.push_back(tAB/(tA*tB));
-  }
-
-  return magic_samples;
+magic_t DensityMatrix::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
+  return magic_mutual_information_exhaustive_impl<DensityMatrix>(*this, qubitsA, qubitsB);
 }
 
 double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
@@ -170,6 +151,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 }
 
 std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
+  std::cout << "Calling densitymatrix.expectation\n";
   Eigen::MatrixXcd P = p.to_matrix();
   return (data*P).trace();
 }

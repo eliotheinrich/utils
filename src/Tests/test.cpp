@@ -297,7 +297,7 @@ bool mps_test_circuit() {
   print_states(s, mps);
   std::cout << "\n";
 
-  auto samples = mps.stabilizer_renyi_entropy_samples(10000);
+  auto samples = mps.sample_paulis(10000);
   double d = 0.0;
   for (auto [P, f] : samples) {
     d += f/10000;
@@ -367,6 +367,42 @@ bool test_magic_mutual_information() {
   return true;
 }
 
+bool test_partial_trace() {
+  size_t nqb = 6;
+  QuantumCircuit qc(nqb);
+  qc.append(generate_haar_circuit(nqb, 2, false));
+
+  MatrixProductState rho(nqb, 1u << nqb);
+  rho.evolve(qc);
+
+  thread_local std::random_device gen;
+  std::minstd_rand rng(gen());
+  PauliString P = PauliString::rand(nqb, rng);
+
+  std::vector<uint32_t> qubitsA{0, 1, 2};
+  std::vector<uint32_t> qubitsB{3, 4, 5};
+  PauliString PA = P.substring(qubitsA, false);
+  PauliString PB = P.substring(qubitsB, false);
+
+  std::cout << fmt::format("P = {}, PA = {}, PB = {}\n", P.to_string_ops(), PA.to_string_ops(), PB.to_string_ops());
+
+  auto rhoA = rho.partial_trace(qubitsB);
+  auto rhoB = rho.partial_trace(qubitsA);
+  
+  auto c1 = rho.expectation(P);
+  auto c2 = rho.expectation(PA);
+  auto c3 = rho.expectation(PB);
+  std::cout << fmt::format("<P> = {:.3f} + i{:.3f}, <PA> = {:.3f} + i{:.3f}, <PB> = {:.3f} + i{:.3f}\n", c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag());
+
+  PA = P.substring(qubitsA, true);
+  PB = P.substring(qubitsB, true);
+  c2 = rhoA.expectation(PA);
+  c3 = rhoB.expectation(PB);
+  std::cout << fmt::format("<P> = {:.3f} + i{:.3f}, <PA> = {:.3f} + i{:.3f}, <PB> = {:.3f} + i{:.3f}\n", c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag());
+
+  return true;
+}
+
 int main() {
   //assert(test_solve_linear_system());
   //assert(test_binary_polynomial());
@@ -378,7 +414,8 @@ int main() {
   //assert(test_mps());
   //assert(test_nonlocal_mps());
   //assert(mps_test_circuit());
-  assert(test_mps_partial_trace());
+  //assert(test_mps_partial_trace());
   //assert(test_ising_ground_state());
-  assert(test_magic_mutual_information());
+  //assert(test_magic_mutual_information());
+  assert(test_partial_trace());
 }

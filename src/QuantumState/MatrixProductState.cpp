@@ -432,7 +432,7 @@ class MatrixProductStateImpl {
       return std::make_pair(PauliString(p), t);
     }
 
-    std::vector<PauliAmplitude> stabilizer_renyi_entropy_samples(size_t num_samples) {
+    std::vector<PauliAmplitude> sample_paulis(size_t num_samples) {
       std::vector<PauliAmplitude> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
@@ -924,13 +924,14 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   }
   auto H = toMPO(ampo);
 
-  auto psi = randomMPS(sites);
+  auto psi = randomMPS(sites, bond_dimension);
   auto sweeps = Sweeps(num_sweeps);
   sweeps.maxdim() = bond_dimension;
   sweeps.cutoff() = sv_threshold;
   sweeps.noise() = 1E-8;
 
   auto [energy, psi0] = dmrg(H, psi, sweeps, {"Silent=",true});
+  psi0.normalize();
 
   auto impl = std::make_unique<MatrixProductStateImpl>(psi0);
   impl->bond_dimension = bond_dimension;
@@ -985,73 +986,20 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
-std::vector<PauliAmplitude> MatrixProductState::stabilizer_renyi_entropy_samples(size_t num_samples) {
-  return impl->stabilizer_renyi_entropy_samples(num_samples);
+magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
+  return magic_mutual_information_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
 }
 
+magic_t MatrixProductState::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
+  return magic_mutual_information_exhaustive_impl<MatrixProductState>(*this, qubitsA, qubitsB);
+}
 
-std::vector<double> MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  std::vector<bool> mask(num_qubits, false);
-
-  for (const auto q : qubitsA) {
-    mask[q] = true;
-  }
-
-  for (const auto q : qubitsB) {
-    mask[q] = true;
-  }
-
-  // Trace out qubits not in A or B
-  std::vector<uint32_t> _qubits;
-  for (size_t i = 0; i < num_qubits; i++) {
-    if (!mask[i]) {
-      _qubits.push_back(i);
-    }
-  }
-
-  MatrixProductOperator mpsAB = partial_trace(_qubits);
-
-  std::vector<size_t> offset(num_qubits);
-  size_t k = 0;
-  for (size_t i = 0; i < num_qubits; i++) {
-    if (!mask[i]) {
-      k++;
-    }
-    
-    offset[i] = k;
-  }
-
-  std::vector<uint32_t> qubitsA_(qubitsA.begin(), qubitsA.end());
-  for (size_t i = 0; i < qubitsA.size(); i++) {
-    qubitsA_[i] -= offset[qubitsA_[i]];
-  }
-
-  std::vector<uint32_t> qubitsB_(qubitsB.begin(), qubitsB.end());
-  for (size_t i = 0; i < qubitsB.size(); i++) {
-    qubitsB_[i] -= offset[qubitsB_[i]];
-  }
-
-  std::cout << fmt::format("qubitsA, qubitsB = {}, {}\n", qubitsA, qubitsB);
-  std::cout << fmt::format("offset = {}\n", offset);
-  std::cout << fmt::format("qubitsA_, qubitsB_ = {}, {}\n", qubitsA_, qubitsB_);
-
-  auto samples = mpsAB.stabilizer_renyi_entropy_samples(num_samples);
-  std::vector<double> magic_samples;
-  for (const auto& [P, p] : samples) {
-    PauliString PA = P.substring(qubitsA_, false);
-    PauliString PB = P.substring(qubitsB_, false);
-
-    double tAB = std::abs(mpsAB.expectation(P));
-    double tA = std::abs(mpsAB.expectation(PA));
-    double tB = std::abs(mpsAB.expectation(PB));
-
-    magic_samples.push_back(tAB/(tA*tB));
-  }
-
-  return magic_samples;
+std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
+  return impl->sample_paulis(num_samples);
 }
 
 std::complex<double> MatrixProductState::expectation(const PauliString& p) const {
+  std::cout << "Calling mps.expectation\n";
   return impl->expectation(p);
 }
 

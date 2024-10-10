@@ -121,9 +121,9 @@ class PauliString {
           p.set_z(i, z(sites[i]));
         }
       } else {
-        for (size_t i = 0; i < sites.size(); i++) {
-          p.set_x(i, x(i));
-          p.set_z(i, z(i));
+        for (const auto q : sites) {
+          p.set_x(q, x(q));
+          p.set_z(q, z(q));
         }
       }
 

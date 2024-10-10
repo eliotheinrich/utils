@@ -38,9 +38,11 @@ class QuantumStateSampler {
 
       sample_stabilizer_renyi_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_renyi_entropy", false);
       sre_num_samples = dataframe::utils::get<int>(params, "sre_num_samples", 1000);
+      sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "montecarlo"));
+      sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps", 5*system_size);
+
       if (sample_stabilizer_renyi_entropy) {
         renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "stabilizer_renyi_indices", "1"));
-        sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "montecarlo"));
       }
 
       sample_magic_mutual_information = dataframe::utils::get<int>(params, "sample_magic_mutual_information", false);
@@ -93,11 +95,12 @@ class QuantumStateSampler {
 
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
         if (sre_method == sre_method_t::MonteCarlo) {
-          return state->stabilizer_renyi_entropy_montecarlo(sre_num_samples);
+          std::function<double(double)> prob = [](double t) -> double { return std::pow(t, 2.0); };
+          return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob);
         } else if (sre_method == sre_method_t::Exhaustive) {
-          return state->stabilizer_renyi_entropy_exhaustive();
+          return state->sample_paulis_exhaustive();
         } else {
-          return state->stabilizer_renyi_entropy_samples(sre_num_samples);
+          return state->sample_paulis(sre_num_samples);
         }
     }
 
@@ -113,9 +116,7 @@ class QuantumStateSampler {
       std::vector<PauliAmplitude> sre_samples;
 
       if (sample_stabilizer_renyi_entropy) {
-        if (sre_samples.size() == 0) {
-          sre_samples = take_sre_samples(state);
-        }
+        std::vector<PauliAmplitude> sre_samples = take_sre_samples(state);
 
         std::vector<double> sre_amplitude_samples;
         for (const auto [P, p] : sre_samples) {
@@ -137,9 +138,20 @@ class QuantumStateSampler {
           qubitsB[i] = i + subsystem_offset_B;
         }
 
-        auto magic_samples = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
+        magic_t magic_sample;
+        if (sre_method == sre_method_t::Exhaustive) {
+          magic_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
+        } else {
+          magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps);
+        }
 
-        dataframe::utils::emplace(samples, "magic_mutual_information", magic_samples);
+        dataframe::utils::emplace(samples, "magic_mutual_information", std::get<0>(magic_sample));
+        dataframe::utils::emplace(samples, "I1", std::get<1>(magic_sample));
+        dataframe::utils::emplace(samples, "I2", std::get<2>(magic_sample));
+        dataframe::utils::emplace(samples, "I3", std::get<3>(magic_sample));
+        dataframe::utils::emplace(samples, "W1", std::get<4>(magic_sample));
+        dataframe::utils::emplace(samples, "W2", std::get<5>(magic_sample));
+        dataframe::utils::emplace(samples, "W3", std::get<6>(magic_sample));
       }
     }
 
@@ -158,6 +170,7 @@ class QuantumStateSampler {
 
     sre_method_t sre_method;
     size_t sre_num_samples;
+    size_t sre_mc_equilibration_timesteps;
 
     bool sample_magic_mutual_information;
     size_t magic_mutual_information_subsystem_size;
