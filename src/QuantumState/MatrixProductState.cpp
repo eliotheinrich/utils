@@ -481,18 +481,6 @@ class MatrixProductStateImpl {
         C *= singular_values[i]*tensors[i+1];
       }
 
-      //ITensor C = A(0, false);
-      //for (uint32_t i = 1; i < num_qubits; i++) {
-      //  auto Ai = A(i, false);
-      //  auto s = fmt::format("alpha{}", i);
-      //  Ai.replaceInds(findInds(Ai, s), findInds(C, s));
-      //  C *= Ai;
-      //}
-
-      //C *= delta(findInds(C, "Internal"));
-
-  
-
       return C;
     }
 
@@ -673,7 +661,8 @@ class MatrixProductOperatorImpl {
 
     static ITensor get_block_left(const std::vector<ITensor>& A, size_t q, const Index& i_r) {
       if (q == 0) {
-        return delta(i_r, prime(i_r));
+        // TODO see if toDense can be removed
+        return toDense(delta(i_r, prime(i_r)));
       }
 
       auto Ak = A[0];
@@ -693,7 +682,8 @@ class MatrixProductOperatorImpl {
     static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
       size_t L = A.size();
       if (q == L - 1) {
-        return delta(i_l, prime(i_l));
+        // TODO see if toDense can be removed
+        return toDense(delta(i_l, prime(i_l)));
       }
 
       auto Ak = A[L - 1];
@@ -743,8 +733,13 @@ class MatrixProductOperatorImpl {
       } 
     }
 
+    MatrixProductOperatorImpl()=default;
+
     MatrixProductOperatorImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
       : num_qubits(mps.num_qubits - traced_qubits.size()), bond_dimension(mps.bond_dimension), sv_threshold(mps.sv_threshold) {
+      if (traced_qubits.size() >= mps.num_qubits) {
+        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductState with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mps.num_qubits));
+      }
 
       std::vector<bool> mask(mps.num_qubits, false);
       for (auto const q : traced_qubits) {
@@ -800,6 +795,104 @@ class MatrixProductOperatorImpl {
       blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits - 1, InternalDir::Right)));
     }
 
+    MatrixProductOperatorImpl(const MatrixProductOperatorImpl& mpo, const std::vector<uint32_t>& traced_qubits)
+      : num_qubits(mpo.num_qubits - traced_qubits.size()), bond_dimension(mpo.bond_dimension), sv_threshold(mpo.sv_threshold) {
+      if (traced_qubits.size() >= mpo.num_qubits) {
+        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductOperator with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mpo.num_qubits));
+      }
+
+      std::vector<uint32_t> sorted_qubits(traced_qubits.begin(), traced_qubits.end());
+      std::sort(sorted_qubits.begin(), sorted_qubits.end());
+
+      size_t num_traced_qubits = traced_qubits.size();
+      size_t num_physical_qubits = mpo.num_qubits - num_traced_qubits;
+
+      // Mask of physical qubits vs traced qubits
+      std::vector<bool> mask(mpo.num_qubits, true);
+      for (auto q : sorted_qubits) {
+        mask[q] = false;
+      }
+
+      std::vector<uint32_t> physical_qubits;
+      for (size_t i = 0; i < mpo.num_qubits; i++) {
+        if (mask[i]) {
+          physical_qubits.push_back(i);
+        }
+      }
+
+      std::vector<ITensor> deltas;
+      for (size_t i = 0; i < physical_qubits[0]; i++) {
+        Index e = mpo.external_idx(i);
+        deltas.push_back(delta(e, prime(e)));
+      }
+
+      if (physical_qubits[0] == 0) {
+        left_block = mpo.left_block;
+      } else {
+        left_block = mpo.partial_contraction(0, physical_qubits[0], deltas);
+      }
+
+      for (size_t k = 0; k < physical_qubits.size(); k++) {
+        uint32_t q = physical_qubits[k];
+        ITensor new_op = mpo.ops[q];
+        Index i1 = findIndex(new_op, "External");
+        Index i2 = Index(dim(i1), fmt::format("i{},External", k));
+        new_op.replaceInds({i1}, {i2}); 
+        external_indices.push_back(i2);
+        ops.push_back(new_op);
+
+
+        if (q == mpo.num_qubits - 1 || mask[q + 1]) {
+          // If end of chain or next block is physical, next block is unchanged
+          blocks.push_back(mpo.blocks[q]);
+        } else { 
+          // Otherwise, next qubit is traced over; perform partial contraction
+          size_t q1 = q + 1;
+          size_t q2 = q1;
+          while (!mask[q2] && q2 < mpo.num_qubits) {
+            q2++;
+          }
+
+          deltas = std::vector<ITensor>();
+          for (size_t i = q1; i < q2; i++) {
+            Index e = mpo.external_idx(i);
+            deltas.push_back(delta(e, prime(e)));
+          }
+
+          auto new_block = mpo.partial_contraction(q1, q2, deltas);
+          
+          blocks.push_back(mpo.partial_contraction(q1, q2, deltas));
+        }
+      }
+
+      for (size_t i = 0; i < ops.size(); i++) {
+        Index aL = noPrime(findInds(ops[i], "Internal,Left")[0]);
+        Index aR = noPrime(findInds(ops[i], "Internal,Right")[0]);
+        Index aL_ = Index(dim(aL), fmt::format("a{},Internal,Left", i));
+        Index aR_ = Index(dim(aR), fmt::format("a{},Internal,Right", i));
+
+        ops[i].replaceInds({aL, aR}, {aL_, aR_});
+
+        if (i == 0) {
+          // TODO see if toDense can be removed
+          left_block.replaceInds({aL, prime(aL)}, {aL_, prime(aL_)});
+        } else {
+          if (blocks[i - 1]) {
+            blocks[i - 1] = blocks[i - 1].value() * delta(aL, aL_) * delta(prime(aL), prime(aL_));
+          }
+        }
+
+        if (i == ops.size() - 1) {
+          blocks[i] = toDense(delta(aR_, prime(aR_)));
+        } else if (blocks[i]) {
+          blocks[i] = blocks[i].value().replaceInds({aR, prime(aR)}, {aR_, prime(aR_)});
+        }
+
+        internal_indices.push_back(aL_);
+        internal_indices.push_back(aR_);
+      }
+    }
+
     void print_mps() const {
       std::cout << "left_block: " << block_to_string(left_block) << "\n";
       for (size_t i = 0; i < num_qubits; i++) {
@@ -833,18 +926,55 @@ class MatrixProductOperatorImpl {
         }
       }
 
-      ITensor contraction = left_block;
-
-      for (size_t i = 0; i < num_qubits; i++) {
-        contraction = apply_block(contraction*ops[i]*paulis[i]*conj(prime(ops[i])), i);
-      }
+      auto contraction = partial_contraction(0, num_qubits, paulis);
 
       std::vector<int> _inds;
       double sign = p.r() ? -1.0 : 1.0;
       return sign*eltC(contraction, _inds);
     }
 
-    ITensor apply_block(const ITensor& tensor, size_t i) const {
+    ITensor partial_contraction(size_t _q1, size_t _q2, std::optional<std::vector<ITensor>> contraction_ops_opt=std::nullopt) const {
+      std::vector<ITensor> contraction_ops;
+      bool has_ops = contraction_ops_opt.has_value();
+      if (has_ops) {
+        contraction_ops = contraction_ops_opt.value();
+      }
+      size_t q1 = std::min(_q1, _q2);
+      size_t q2 = std::max(_q1, _q2);
+      
+      ITensor contraction;
+      if (q1 == 0) {
+        if (has_ops) {
+          contraction = apply_block_r(left_block * ops[0] * contraction_ops[0] * conj(prime(ops[0])), 0);
+        } else {
+          contraction = apply_block_r(left_block * ops[0] * conj(prime(ops[0])), 0);
+        }
+      } else {
+        if (has_ops) {
+          contraction = apply_block_r(ops[q1] * contraction_ops[0] * conj(prime(ops[q1])), q1);
+        } else {
+          contraction = apply_block_r(ops[q1] * conj(prime(ops[q1])), q1);
+        }
+
+        contraction = apply_block_l(contraction, q1);
+      }
+
+      size_t k = 1;
+      for (size_t q = q1 + 1; q < q2; q++) {
+        if (has_ops) {
+          contraction *= ops[q] * contraction_ops[k] * conj(prime(ops[q]));
+          contraction = apply_block_r(contraction, q);
+          k++;
+        } else {
+          contraction *= ops[q] * conj(prime(ops[q]));
+          contraction = apply_block_r(contraction, q);
+        }
+      }
+
+      return contraction;
+    }
+
+    ITensor apply_block_r(const ITensor& tensor, size_t i) const {
       if (blocks[i]) {
         return tensor*blocks[i].value();
       } else {
@@ -854,17 +984,26 @@ class MatrixProductOperatorImpl {
       }
     }
 
+    ITensor apply_block_l(const ITensor& tensor, size_t i) const {
+      if (i == 0) {
+        return tensor*left_block;
+      } else if (blocks[i-1]) {
+        return tensor*blocks[i-1].value();
+      } else {
+        Index i1 = internal_idx(i, InternalDir::Left);
+        Index i2 = internal_idx(i-1, InternalDir::Right);
+
+        return replaceInds(tensor, {i1, prime(i1)}, {i2, prime(i2)});
+      }
+
+    }
+
     Eigen::MatrixXcd coefficients() const {
       if (num_qubits > 31) {
         throw std::runtime_error("Cannot generate coefficients for n > 31 qubits.");
       }
 
-      ITensor contraction = left_block;
-
-      for (size_t i = 0; i < num_qubits; i++) {
-        contraction *= ops[i]*prime(conj(ops[i]));
-        contraction = apply_block(contraction, i);
-      }
+      auto contraction = partial_contraction(0, num_qubits);
 
       size_t s = 1u << num_qubits; 
       Eigen::MatrixXcd data = Eigen::MatrixXcd::Zero(s, s);
@@ -916,11 +1055,11 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
 
   auto ampo = AutoMPO(sites);
   for(int j = 1; j < num_qubits; ++j) {
-    ampo += -2.0, "Sz", j, "Sz", j + 1;
+    ampo += -2.0, "Sx", j, "Sx", j + 1;
   }
 
   for(int j = 1; j <= num_qubits; ++j) {
-    ampo += -h, "Sx", j;
+    ampo += -h, "Sz", j;
   }
   auto H = toMPO(ampo);
 
@@ -999,7 +1138,6 @@ std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples
 }
 
 std::complex<double> MatrixProductState::expectation(const PauliString& p) const {
-  std::cout << "Calling mps.expectation\n";
   return impl->expectation(p);
 }
 
@@ -1072,6 +1210,10 @@ MatrixProductOperator::MatrixProductOperator(const MatrixProductState& mps, cons
   impl = std::make_unique<MatrixProductOperatorImpl>(*mps.impl.get(), traced_qubits);
 }
 
+MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& mpo, const std::vector<uint32_t>& traced_qubits) : QuantumState(mpo.num_qubits - traced_qubits.size()) {
+  impl = std::make_unique<MatrixProductOperatorImpl>(*mpo.impl.get(), traced_qubits);
+}
+
 MatrixProductOperator::~MatrixProductOperator()=default;
 
 void MatrixProductOperator::print_mps() const {
@@ -1084,5 +1226,17 @@ Eigen::MatrixXcd MatrixProductOperator::coefficients() const {
 
 std::complex<double> MatrixProductOperator::expectation(const PauliString& p) const {
   return impl->expectation(p);
+}
+
+magic_t MatrixProductOperator::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
+  return magic_mutual_information_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+}
+
+magic_t MatrixProductOperator::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
+  return magic_mutual_information_exhaustive_impl<MatrixProductOperator>(*this, qubitsA, qubitsB);
+}
+
+MatrixProductOperator MatrixProductOperator::partial_trace(const std::vector<uint32_t>& qubits) const {
+  return MatrixProductOperator(*this, qubits);
 }
 

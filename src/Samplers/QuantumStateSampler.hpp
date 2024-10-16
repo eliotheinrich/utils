@@ -95,7 +95,7 @@ class QuantumStateSampler {
 
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
         if (sre_method == sre_method_t::MonteCarlo) {
-          std::function<double(double)> prob = [](double t) -> double { return std::pow(t, 2.0); };
+          ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
           return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob);
         } else if (sre_method == sre_method_t::Exhaustive) {
           return state->sample_paulis_exhaustive();

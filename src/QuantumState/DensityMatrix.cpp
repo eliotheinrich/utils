@@ -151,7 +151,6 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 }
 
 std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
-  std::cout << "Calling densitymatrix.expectation\n";
   Eigen::MatrixXcd P = p.to_matrix();
   return (data*P).trace();
 }

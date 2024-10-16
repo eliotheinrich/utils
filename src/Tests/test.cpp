@@ -320,7 +320,7 @@ bool test_mps_partial_trace() {
   rho.evolve(qc);
 
   for (uint32_t k = 0; k < 1; k++) {
-    std::vector<uint32_t> qubits{0, 1, 4, 5};
+    std::vector<uint32_t> qubits{1, 2, 4, 5};
     MatrixProductOperator mps_ = mps.partial_trace(qubits);
 
     mps_.print_mps();
@@ -362,7 +362,7 @@ bool test_magic_mutual_information() {
   std::vector<uint32_t> qubitsA{0, 4};
   std::vector<uint32_t> qubitsB{1, 5};
 
-  auto samples = mps.magic_mutual_information(qubitsA, qubitsB, 100);
+  auto samples = mps.magic_mutual_information(qubitsA, qubitsB, 100, 100);
 
   return true;
 }
@@ -403,6 +403,49 @@ bool test_partial_trace() {
   return true;
 }
 
+bool test_mpo_partial_trace() {
+  size_t nqb = 6;
+  QuantumCircuit qc(nqb);
+  qc.append(generate_haar_circuit(nqb, 2, false));
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  mps.evolve(qc);
+
+  DensityMatrix rho(qc);
+
+  thread_local std::random_device gen;
+  std::minstd_rand rng(gen());
+
+  std::vector<uint32_t> qubits(nqb);
+  std::iota(qubits.begin(), qubits.end(), 0);
+  std::shuffle(qubits.begin(), qubits.end(), rng);
+  std::vector<uint32_t> qubits1(qubits.begin(), qubits.begin() + 2);
+
+  qubits = std::vector<uint32_t>(nqb - 2);
+  std::iota(qubits.begin(), qubits.end(), 0);
+  std::shuffle(qubits.begin(), qubits.end(), rng);
+  std::vector<uint32_t> qubits2(qubits.begin(), qubits.begin() + 2);
+
+  qubits1 = {0, 3};
+  qubits2 = {2, 1};
+
+  std::cout << fmt::format("qubits1 = {}, qubits2 = {}\n", qubits1, qubits2);
+
+  auto mpo1 = mps.partial_trace(qubits1);
+  auto mpo2 = mpo1.partial_trace(qubits2);
+
+  auto rho1 = rho.partial_trace(qubits1);
+  auto rho2 = rho1.partial_trace(qubits2);
+
+  std::cout << "MPO: \n";
+  std::cout << mpo2.to_string() << "\n";
+
+  std::cout << "DM: \n";
+  std::cout << rho2.to_string() << "\n";
+
+  return true;
+}
+
 int main() {
   //assert(test_solve_linear_system());
   //assert(test_binary_polynomial());
@@ -417,5 +460,6 @@ int main() {
   //assert(test_mps_partial_trace());
   //assert(test_ising_ground_state());
   //assert(test_magic_mutual_information());
-  assert(test_partial_trace());
+  //assert(test_partial_trace());
+  assert(test_mpo_partial_trace());
 }

@@ -60,6 +60,40 @@ void random_mutation(PauliString& p, std::minstd_rand& rng) {
   }
 }
 
+void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
+  bool r = rng() % 2;
+  PauliString pnew(p);
+  if (r || (p.num_qubits == 1)) {
+    // Do single-qubit mutation
+    size_t j = rng() % p.num_qubits;
+    PauliString Zj = PauliString(p.num_qubits);
+    Zj.set_z(j, 1); 
+
+    pnew *= Zj;
+  } else {
+    // Do double-qubit mutation
+    size_t j1 = rng() % p.num_qubits;
+    size_t j2 = rng() % p.num_qubits;
+    while (j2 == j1) {
+      j2 = rng() % p.num_qubits;
+    }
+
+    PauliString Xij = PauliString(p.num_qubits);
+    Xij.set_x(j1, 1); 
+    Xij.set_x(j2, 1); 
+    pnew *= Xij;
+  }
+
+  std::string s = pnew.to_string_ops();
+  if (std::count(s.begin(), s.end(), 'Y') % 2 == 0) {
+    // New state respects TRS; accept it
+    p = pnew;
+  } else {
+    // New state does not respect TRS; try again
+    xxz_random_mutation(p, rng);
+  }
+}
+
 void global_random_mutation(PauliString& p, std::minstd_rand& rng) {
   p = PauliString::rand(p.num_qubits, rng);
 }
@@ -69,50 +103,41 @@ void random_bit_mutation(PauliString& p, std::minstd_rand& rng) {
   p.set(j, !p.get(j));
 }
 
-std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::function<double(double)>& prob) {
-  PauliString P1 = PauliString::rand(num_qubits, rng);
+std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
+  PauliMutationFunc mutation = xxz_random_mutation;
+  if (mutation_opt) {
+    mutation = mutation_opt.value();
+  }
 
-  std::vector<PauliAmplitude> samples;
+  auto perform_mutation = [this, &prob, &mutation](PauliString& p) {
+    double t1 = std::abs(expectation(p));
+    double p1 = prob(t1);
+
+    PauliString q = p.copy();
+    mutation(q, rng);
+
+    double t2 = std::abs(expectation(q));
+    double p2 = prob(t2);
+
+    if (randf() < p2 / p1) {
+      p = q.copy();
+    }
+
+    return t1;
+  };
+
+  PauliString P(num_qubits);
 
   for (size_t i = 0; i < equilibration_timesteps; i++) {
-    double t1 = std::abs(expectation(P1));
-    double p1 = prob(t1);
-
-    PauliString P2 = P1.copy();
-    random_mutation(P2, rng);
-
-    double t2 = std::abs(expectation(P2));
-    double p2 = prob(t2);
-
-    if (randf() < std::min(1.0, p2/p1)) {
-      P1 = P2.copy();
-    }
+    double t = perform_mutation(P);
   }
 
-  double a = 0.0;
+  std::vector<PauliAmplitude> samples;
   for (size_t i = 0; i < num_samples; i++) {
-    double t1 = std::abs(expectation(P1));
-    double p1 = prob(t1);
+    double t = perform_mutation(P);
 
-    PauliString P2 = P1.copy();
-    random_mutation(P2, rng);
-
-    double t2 = std::abs(expectation(P2));
-    double p2 = prob(t2);
-
-    double r = randf();
-    if (r < std::min(1.0, p2/p1)) {
-      a += 1.0;
-      P1 = P2.copy();
-      if (p1 > p2 && p2 < 0.01) {
-        //std::cout << fmt::format("Decreased from t = ({}, {}) to p = ({}, {}). r = {}\n", t1, t2, p1, p2, r);
-      }
-    }
-
-    samples.push_back({P1, t1});
+    samples.push_back({P, t});
   }
-
-  //std::cout << fmt::format("Accepted: {}\n", a/num_samples);
 
   return samples;
 }

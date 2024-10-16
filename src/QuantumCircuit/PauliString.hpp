@@ -26,7 +26,7 @@ class PauliString {
     // The bits are formatted as:
     // x0 z0 x1 z1 ... x15 z15
     // x16 z16 x17 z17 ... etc
-    // This is slightly more efficient than the originally format originally described
+    // This appears to be slightly more efficient than the originally format originally described
     // by Aaronson and Gottesman (https://arxiv.org/abs/quant-ph/0406196) as it 
     // is more cache-friendly; most operations only act on a single word.
     std::vector<uint32_t> bit_string;
@@ -129,6 +129,94 @@ class PauliString {
 
       p.set_r(r());
       return p;
+    }
+
+    static int g(uint8_t xz1, uint8_t xz2) {
+      bool x1 = (xz1 >> 0u) & 1u;
+      bool z1 = (xz1 >> 1u) & 1u;
+      bool x2 = (xz2 >> 0u) & 1u;
+      bool z2 = (xz2 >> 1u) & 1u;
+      if (!x1 && !z1) { 
+        return 0; 
+      } else if (x1 && z1) {
+        if (z2) { 
+          return x2 ? 0 : 1;
+        } else { 
+          return x2 ? -1 : 0;
+        }
+      } else if (x1 && !z1) {
+        if (z2) { 
+          return x2 ? 1 : -1;
+        } else { 
+          return 0; 
+        }
+      } else {
+        if (x2) {
+          return z2 ? -1 : 1;
+        } else { 
+          return 0; 
+        }
+      }
+    }
+
+    static int get_multiplication_phase(const PauliString& p1, const PauliString& p2) {
+      int s = 0;
+
+      if (p1.r()) { 
+        s += 2; 
+      }
+
+      if (p2.r()) { 
+        s += 2; 
+      }
+
+      for (uint32_t j = 0; j < p1.num_qubits; j++) {
+        s += PauliString::g(p1.xz(j), p2.xz(j));
+      }
+
+      return s;
+    }
+
+    PauliString operator*(const PauliString& other) const {
+      if (num_qubits != other.num_qubits) {
+        throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
+      }
+
+      int s = PauliString::get_multiplication_phase(*this, other);
+      PauliString p(num_qubits);
+      if (s % 4 == 0) {
+        p.set_r(false);
+      } else if (std::abs(s % 4) == 2) {
+        p.set_r(true);
+      }
+
+      uint32_t width = other.width;
+      for (uint32_t j = 0; j < width; j++) {
+        p.bit_string[j] = bit_string[j] ^ other.bit_string[j];
+      }
+
+      return p;
+    }
+
+    PauliString& operator*=(const PauliString& other) {
+      if (num_qubits != other.num_qubits) {
+        throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
+      }
+
+      int s = PauliString::get_multiplication_phase(*this, other);
+      if (s % 4 == 0) {
+        set_r(false);
+      } else if (std::abs(s % 4) == 2) {
+        set_r(true);
+      }
+
+      PauliString tmp = copy();
+      uint32_t width = other.width;
+      for (uint32_t j = 0; j < width; j++) {
+        bit_string[j] ^= other.bit_string[j];
+      }
+
+      return *this;
     }
 
     bool operator==(const PauliString &rhs) const {
