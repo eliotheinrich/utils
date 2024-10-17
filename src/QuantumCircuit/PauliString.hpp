@@ -210,7 +210,6 @@ class PauliString {
         set_r(true);
       }
 
-      PauliString tmp = copy();
       uint32_t width = other.width;
       for (uint32_t j = 0; j < width; j++) {
         bit_string[j] ^= other.bit_string[j];

@@ -39,6 +39,15 @@ class Tableau {
       }
     }
 
+    //Eigen::MatrixXi to_matrix() const {
+    //  Eigen::MatrixXi M(num_rows(), 2*num_rows());
+    //  for (size_t i = 0; i < num_rows(); i++) {
+    //    for (size_t j = 0; j < 2*num_rows(); j++) {
+    //      M(i, j) = 
+    //    }
+    //  }
+    //}
+
     Statevector to_statevector() const {
       if (num_qubits > 15) {
         throw std::runtime_error("Cannot create a Statevector with more than 31 qubits.");
@@ -188,62 +197,8 @@ class Tableau {
       return s + "]";
     }
 
-    //static int g(uint8_t xz1, uint8_t xz2) {
-    //  bool x1 = (xz1 >> 0u) & 1u;
-    //  bool z1 = (xz1 >> 1u) & 1u;
-    //  bool x2 = (xz2 >> 0u) & 1u;
-    //  bool z2 = (xz2 >> 1u) & 1u;
-    //  if (!x1 && !z1) { 
-    //    return 0; 
-    //  } else if (x1 && z1) {
-    //    if (z2) { 
-    //      return x2 ? 0 : 1;
-    //    } else { 
-    //      return x2 ? -1 : 0;
-    //    }
-    //  } else if (x1 && !z1) {
-    //    if (z2) { 
-    //      return x2 ? 1 : -1;
-    //    } else { 
-    //      return 0; 
-    //    }
-    //  } else {
-    //    if (x2) {
-    //      return z2 ? -1 : 1;
-    //    } else { 
-    //      return 0; 
-    //    }
-    //  }
-    //}
-
     void rowsum(uint32_t h, uint32_t i) {
-      // TODO check if operator* is slower
       rows[h] *= rows[i];
-
-      //int s = 0;
-
-      //if (r(i)) { 
-      //  s += 2; 
-      //}
-
-      //if (r(h)) { 
-      //  s += 2; 
-      //}
-
-      //for (uint32_t j = 0; j < num_qubits; j++) {
-      //  s += Tableau::g(rows[i].xz(j), rows[h].xz(j));
-      //}
-
-      //if (s % 4 == 0) {
-      //  set_r(h, false);
-      //} else if (std::abs(s % 4) == 2) {
-      //  set_r(h, true);
-      //}
-
-      //uint32_t width = rows[h].width;
-      //for (uint32_t j = 0; j < width; j++) {
-      //  rows[h].bit_string[j] ^= rows[i].bit_string[j];
-      //}
     }
 
     void evolve(const QuantumCircuit& qc, std::minstd_rand& rng) {

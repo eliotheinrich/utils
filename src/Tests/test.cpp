@@ -362,7 +362,7 @@ bool test_magic_mutual_information() {
   std::vector<uint32_t> qubitsA{0, 4};
   std::vector<uint32_t> qubitsB{1, 5};
 
-  auto samples = mps.magic_mutual_information(qubitsA, qubitsB, 100, 100);
+  auto samples = mps.magic_mutual_information(qubitsA, qubitsB, 100);
 
   return true;
 }
@@ -426,9 +426,6 @@ bool test_mpo_partial_trace() {
   std::shuffle(qubits.begin(), qubits.end(), rng);
   std::vector<uint32_t> qubits2(qubits.begin(), qubits.begin() + 2);
 
-  qubits1 = {0, 3};
-  qubits2 = {2, 1};
-
   std::cout << fmt::format("qubits1 = {}, qubits2 = {}\n", qubits1, qubits2);
 
   auto mpo1 = mps.partial_trace(qubits1);
@@ -442,6 +439,89 @@ bool test_mpo_partial_trace() {
 
   std::cout << "DM: \n";
   std::cout << rho2.to_string() << "\n";
+
+  return true;
+}
+
+double compute_magic_exhaustive(const std::vector<PauliAmplitude>& v) {
+  double d4 = 0.0;
+  double d2 = 0.0;
+  for (size_t i = 0; i < v.size(); i++) {
+    d2 += std::pow(v[i].second, 2.0);
+    d4 += std::pow(v[i].second, 4.0);
+  }
+
+  return -std::log(d4/d2);
+}
+
+double compute_magic_montecarlo(const std::vector<PauliAmplitude>& v) {
+  double d = 0.0;
+  for (size_t i = 0; i < v.size(); i++) {
+    d += std::pow(v[i].second, 2.0);
+  }
+
+  return -std::log(d/v.size());
+}
+
+bool test_mpo_vs_mps() {
+  size_t nqb = 8;
+
+  MatrixProductState mps = MatrixProductState::ising_ground_state(nqb, 1.0, 32, 1e-8, 50);
+  MatrixProductOperator mpo(mps, {});
+
+  thread_local std::random_device gen;
+  std::minstd_rand rng(gen());
+
+  //auto rho1 = DensityMatrix(mps);
+  //auto rho2 = DensityMatrix(mpo.coefficients());
+
+  //double d = (rho1.data - rho2.data).norm();
+
+  //std::cout << fmt::format("d = {}\n", d);
+
+  //for (size_t i = 0; i < 100; i++) {
+  //  PauliString p = PauliString::rand(nqb, rng);
+  //  double t1 = std::abs(mps.expectation(p));
+  //  double t2 = std::abs(mpo.expectation(p));
+
+  //  std::cout << fmt::format("P = {}, |P| = {:.5f}, {:.5f}, {}\n", p.to_string_ops(), t1, t2, std::abs(t2 - t1));
+  //}
+
+  //std::vector<uint32_t> qubitsA{0, 1};
+  //std::vector<uint32_t> qubitsB{6, 7};
+  //std::vector<uint32_t> qubitsAB{0, 1, 6, 7};
+  
+
+  auto prob = [](double t) -> double { return t*t; };
+  size_t num_samples = 10;
+  auto samples_mc_mps = mps.sample_paulis_montecarlo(1000, 0, prob);
+  auto samples_e_mps = mps.sample_paulis_exhaustive();
+  auto samples_mc_mpo = mpo.sample_paulis_montecarlo(1000, 0, prob);
+  auto samples_e_mpo = mpo.sample_paulis_exhaustive();
+
+
+  std::cout << fmt::format("lengths = {}, {}, {}, {}\n", samples_e_mps.size(), samples_e_mps.size(), samples_mc_mpo.size(), samples_mc_mpo.size());
+
+  double m_e_mps = compute_magic_exhaustive(samples_e_mps);
+  double m_e_mpo = compute_magic_exhaustive(samples_e_mpo);
+  double m_mc_mps = compute_magic_montecarlo(samples_mc_mps);
+  double m_mc_mpo = compute_magic_montecarlo(samples_mc_mpo);
+
+  std::cout << fmt::format("m_mps = {}, {}, m_mpo = {}, {}\n", m_e_mps, m_mc_mps, m_e_mpo, m_mc_mpo);
+
+
+
+  //auto m1 = std::get<1>(mps.magic_mutual_information_montecarlo(qubitsA, qubitsB, 10, 0));
+  //auto m2 = std::get<1>(mpo.magic_mutual_information_montecarlo(qubitsA, qubitsB, 10, 0));
+
+  //std::cout << fmt::format("mps.num_qubits = {}, mpo.num_qubits = {}\n", mps.num_qubits, mpo.num_qubits);
+  //auto m1_e = std::get<1>(mps.magic_mutual_information_exhaustive(qubitsA, qubitsB));
+  //auto m2_e = std::get<1>(mpo.magic_mutual_information_exhaustive(qubitsA, qubitsB));
+
+  //std::cout << fmt::format("|m1| = {}, |m1_e| = {}\n", m1.size(), m1_e.size());
+
+  //std::cout << fmt::format("m = {}, {}\n", compute_magic_montecarlo(m1), compute_magic_montecarlo(m2));
+  //std::cout << fmt::format("m = {}, {}\n", compute_magic_exhaustive(m1_e), compute_magic_exhaustive(m2_e));
 
   return true;
 }
@@ -461,5 +541,6 @@ int main() {
   //assert(test_ising_ground_state());
   //assert(test_magic_mutual_information());
   //assert(test_partial_trace());
-  assert(test_mpo_partial_trace());
+  //assert(test_mpo_partial_trace());
+  assert(test_mpo_vs_mps());
 }

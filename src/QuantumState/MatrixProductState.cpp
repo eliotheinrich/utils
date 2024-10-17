@@ -245,7 +245,10 @@ class MatrixProductStateImpl {
       external_indices = other.external_indices;
     }
 
-    MatrixProductStateImpl(const MPS& mps_) : MatrixProductStateImpl(mps_.length(), 32u, 1e-8) {
+    static MatrixProductStateImpl from_mps(const MPS& mps_, size_t bond_dimension, double sv_threshold) {
+      size_t num_qubits = mps_.length();
+      MatrixProductStateImpl vidal_mps(num_qubits, bond_dimension, sv_threshold);
+
       MPS mps(mps_);
       mps.position(0);
 
@@ -253,11 +256,10 @@ class MatrixProductStateImpl {
       ITensor V = mps(1);
       ITensor S;
       for (size_t i = 1; i < num_qubits; i++) {
-
         std::vector<Index> u_inds{siteIndex(mps, i)};
         std::vector<Index> v_inds{siteIndex(mps, i+1)};
         if (i != 1) {
-          u_inds.push_back(internal_idx(i - 2, InternalDir::Right));
+          u_inds.push_back(vidal_mps.internal_idx(i - 2, InternalDir::Right));
         }
 
         if (i != mps.length() - 1) {
@@ -273,26 +275,28 @@ class MatrixProductStateImpl {
              "RightTags=",fmt::format("a{},Internal,Right",i-1)});
 
         auto ext = siteIndex(mps, i);
-        U.replaceTags(ext.tags(), external_idx(i - 1).tags());
+        U.replaceTags(ext.tags(), vidal_mps.external_idx(i - 1).tags());
         if (i != 1) {
-          U.replaceTags(linkIndex(mps, i-1).tags(), tags(internal_idx(i-1, InternalDir::Left)));
+          U.replaceTags(linkIndex(mps, i-1).tags(), tags(vidal_mps.internal_idx(i-1, InternalDir::Left)));
         }
 
         if (i != num_qubits-1) {
-          U.replaceTags(linkIndex(mps, i).tags(), tags(internal_idx(i, InternalDir::Right)));
+          U.replaceTags(linkIndex(mps, i).tags(), tags(vidal_mps.internal_idx(i, InternalDir::Right)));
         }
 
-        tensors[i-1] = U;
-        singular_values[i-1] = S;
+        vidal_mps.tensors[i-1] = U;
+        vidal_mps.singular_values[i-1] = S;
 
-        external_indices[i-1] = findInds(U, "External")[0];
-        internal_indices[2*(i-1)] = findInds(S, "Internal,Left")[0];
-        internal_indices[2*(i-1)+1] = findInds(S, "Internal,Right")[0];
+        vidal_mps.external_indices[i-1] = findInds(U, "External")[0];
+        vidal_mps.internal_indices[2*(i-1)] = findInds(S, "Internal,Left")[0];
+        vidal_mps.internal_indices[2*(i-1)+1] = findInds(S, "Internal,Right")[0];
       }
 
-      V.replaceTags(siteIndex(mps, num_qubits).tags(), external_idx(num_qubits - 1).tags());
-      external_indices[num_qubits - 1] = findInds(V, "External")[0];
-      tensors[num_qubits - 1] = V;
+      V.replaceTags(siteIndex(mps, num_qubits).tags(), vidal_mps.external_idx(num_qubits - 1).tags());
+      vidal_mps.external_indices[num_qubits - 1] = findInds(V, "External")[0];
+      vidal_mps.tensors[num_qubits - 1] = V;
+
+      return vidal_mps;
     }
 
     Index external_idx(size_t i) const {
@@ -735,6 +739,19 @@ class MatrixProductOperatorImpl {
 
     MatrixProductOperatorImpl()=default;
 
+    MatrixProductOperatorImpl(const MatrixProductOperatorImpl& other) {
+      num_qubits = other.num_qubits;
+      bond_dimension = other.bond_dimension;
+      sv_threshold = other.sv_threshold;
+
+      left_block = other.left_block;
+      ops = other.ops;
+      blocks = other.blocks;
+
+      internal_indices = other.internal_indices;
+      external_indices = other.external_indices;
+    }
+
     MatrixProductOperatorImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
       : num_qubits(mps.num_qubits - traced_qubits.size()), bond_dimension(mps.bond_dimension), sv_threshold(mps.sv_threshold) {
       if (traced_qubits.size() >= mps.num_qubits) {
@@ -1043,8 +1060,8 @@ MatrixProductState::MatrixProductState(uint32_t num_qubits, uint32_t bond_dimens
   impl->seed(rand());
 }
 
-MatrixProductState::MatrixProductState(const MatrixProductState& mps) : QuantumState(mps.num_qubits) {
-  impl = std::make_unique<MatrixProductStateImpl>(*mps.impl.get());
+MatrixProductState::MatrixProductState(const MatrixProductState& other) : QuantumState(other.num_qubits) {
+  impl = std::make_unique<MatrixProductStateImpl>(*other.impl.get());
   impl->seed(rand());
 }
 
@@ -1072,7 +1089,7 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   auto [energy, psi0] = dmrg(H, psi, sweeps, {"Silent=",true});
   psi0.normalize();
 
-  auto impl = std::make_unique<MatrixProductStateImpl>(psi0);
+  auto impl = std::make_unique<MatrixProductStateImpl>(MatrixProductStateImpl::from_mps(psi0, bond_dimension, sv_threshold));
   impl->bond_dimension = bond_dimension;
   impl->sv_threshold = sv_threshold;
 
@@ -1125,8 +1142,12 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
-magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
-  return magic_mutual_information_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  return magic_mutual_information_direct_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples);
+}
+
+magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
+  return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
 }
 
 magic_t MatrixProductState::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
@@ -1214,6 +1235,10 @@ MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& mpo, c
   impl = std::make_unique<MatrixProductOperatorImpl>(*mpo.impl.get(), traced_qubits);
 }
 
+MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& other) : QuantumState(other.num_qubits) {
+  impl = std::make_unique<MatrixProductOperatorImpl>(*other.impl.get());
+}
+
 MatrixProductOperator::~MatrixProductOperator()=default;
 
 void MatrixProductOperator::print_mps() const {
@@ -1228,8 +1253,12 @@ std::complex<double> MatrixProductOperator::expectation(const PauliString& p) co
   return impl->expectation(p);
 }
 
-magic_t MatrixProductOperator::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
-  return magic_mutual_information_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+magic_t MatrixProductOperator::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  return magic_mutual_information_direct_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples);
+}
+
+magic_t MatrixProductOperator::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
+  return magic_mutual_information_montecarlo_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
 }
 
 magic_t MatrixProductOperator::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {

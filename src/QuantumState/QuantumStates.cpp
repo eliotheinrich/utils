@@ -61,9 +61,8 @@ void random_mutation(PauliString& p, std::minstd_rand& rng) {
 }
 
 void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
-  bool r = rng() % 2;
   PauliString pnew(p);
-  if (r || (p.num_qubits == 1)) {
+  if ((rng() % 2) || (p.num_qubits == 1)) {
     // Do single-qubit mutation
     size_t j = rng() % p.num_qubits;
     PauliString Zj = PauliString(p.num_qubits);
@@ -84,14 +83,16 @@ void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
     pnew *= Xij;
   }
 
-  std::string s = pnew.to_string_ops();
-  if (std::count(s.begin(), s.end(), 'Y') % 2 == 0) {
-    // New state respects TRS; accept it
-    p = pnew;
-  } else {
-    // New state does not respect TRS; try again
-    xxz_random_mutation(p, rng);
-  }
+  p = pnew;
+
+  //std::string s = pnew.to_string_ops();
+  //if (std::count(s.begin(), s.end(), 'Y') % 2 == 0) {
+  //  // New state respects TRS; accept it
+  //  p = pnew;
+  //} else {
+  //  // New state does not respect TRS; try again
+  //  xxz_random_mutation(p, rng);
+  //}
 }
 
 void global_random_mutation(PauliString& p, std::minstd_rand& rng) {

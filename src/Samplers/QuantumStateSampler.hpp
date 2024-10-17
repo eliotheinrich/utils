@@ -94,14 +94,14 @@ class QuantumStateSampler {
     }
 
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
-        if (sre_method == sre_method_t::MonteCarlo) {
-          ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
-          return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob);
-        } else if (sre_method == sre_method_t::Exhaustive) {
-          return state->sample_paulis_exhaustive();
-        } else {
-          return state->sample_paulis(sre_num_samples);
-        }
+      if (sre_method == sre_method_t::MonteCarlo) {
+        ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
+        return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob);
+      } else if (sre_method == sre_method_t::Exhaustive) {
+        return state->sample_paulis_exhaustive();
+      } else {
+        return state->sample_paulis(sre_num_samples);
+      }
     }
 
     void add_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
@@ -141,8 +141,10 @@ class QuantumStateSampler {
         magic_t magic_sample;
         if (sre_method == sre_method_t::Exhaustive) {
           magic_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
+        } else if (sre_method == sre_method_t::MonteCarlo) {
+          magic_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps);
         } else {
-          magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps);
+          magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
         }
 
         dataframe::utils::emplace(samples, "magic_mutual_information", std::get<0>(magic_sample));
