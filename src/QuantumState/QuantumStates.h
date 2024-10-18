@@ -643,6 +643,8 @@ magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::ve
   auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, state.num_qubits);
 
   auto stateAB = state.partial_trace(_qubits);
+  auto stateA = stateAB.partial_trace(_qubitsB);
+  auto stateB = stateAB.partial_trace(_qubitsA);
 
   ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
   ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
@@ -658,11 +660,11 @@ magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::ve
 
   double I = 0.0;
   for (const auto &[P, t] : samples1) {
-    PauliString PA = P.substring(_qubitsA, false);
-    PauliString PB = P.substring(_qubitsB, false);
+    PauliString PA = P.substring(_qubitsA, true);
+    PauliString PB = P.substring(_qubitsB, true);
 
-    double tA = std::abs(stateAB.expectation(PA));
-    double tB = std::abs(stateAB.expectation(PB));
+    double tA = std::abs(stateA.expectation(PA));
+    double tB = std::abs(stateB.expectation(PB));
 
     I1.push_back(t);
     I2.push_back(tA);
@@ -674,11 +676,11 @@ magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::ve
 
   double W = 0.0;
   for (const auto &[P, t] : samples2) {
-    PauliString PA = P.substring(_qubitsA, false);
-    PauliString PB = P.substring(_qubitsB, false);
+    PauliString PA = P.substring(_qubitsA, true);
+    PauliString PB = P.substring(_qubitsB, true);
 
-    double tA = std::abs(stateAB.expectation(PA));
-    double tB = std::abs(stateAB.expectation(PB));
+    double tA = std::abs(stateA.expectation(PA));
+    double tB = std::abs(stateB.expectation(PB));
 
     W1.push_back(t);
     W2.push_back(tA);
