@@ -147,7 +147,6 @@ NB_MODULE(pyqtools_bindings, m) {
     .def_ro("num_qubits", &MatrixProductState::num_qubits)
     .def("__str__", &MatrixProductState::to_string)
     .def("entropy", &MatrixProductState::entropy, "qubits"_a, "index"_a)
-    .def("stabilizer_renyi_entropy", &MatrixProductState::stabilizer_renyi_entropy, "index"_a)
     .def("h", [H](MatrixProductState& self, uint32_t q) { self.evolve(H, q); })
     .def("x", [X](MatrixProductState& self, uint32_t q) { self.evolve(X, q); })
     .def("y", [Y](MatrixProductState& self, uint32_t q) { self.evolve(Y, q); })
@@ -180,6 +179,9 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("set_x", [](QuantumCHPState& self, size_t i, size_t j, size_t v) { self.set_x(i, j, static_cast<bool>(v)); })
     .def("set_z", &QuantumCHPState::set_z)
     .def("set_z", [](QuantumCHPState& self, size_t i, size_t j, size_t v) { self.set_z(i, j, static_cast<bool>(v)); })
+    .def("get_x", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.x(i, j); })
+    .def("get_z", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.z(i, j); })
+    .def("tableau", [](QuantumCHPState& self) { return self.tableau.to_matrix(); })
     .def("partial_rank", &QuantumCHPState::partial_rank)
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
     .def("s", [](QuantumCHPState& self, uint32_t q) { self.s(q); })
@@ -204,7 +206,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("myr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.myr_expectation(q); })
     .def("mzr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.mzr_expectation(q); })
     .def("to_statevector", &QuantumCHPState::to_statevector)
-    .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2.0)
+    .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
     .def("random_clifford", &QuantumCHPState::random_clifford);
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")

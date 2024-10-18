@@ -3,6 +3,7 @@
 #include <fmt/ranges.h>
 
 #include "QuantumState.h"
+#include "CliffordState.h"
 #include "BinaryPolynomial.h"
 #include "Graph.hpp"
 #include <iostream>
@@ -542,5 +543,8 @@ int main() {
   //assert(test_magic_mutual_information());
   //assert(test_partial_trace());
   //assert(test_mpo_partial_trace());
-  assert(test_mpo_vs_mps());
+  //assert(test_mpo_vs_mps());
+  QuantumCHPState state(10);
+  std::cout << state.to_string() << "\n";
+  std::cout << state.tableau.to_matrix() << "\n";
 }

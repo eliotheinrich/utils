@@ -39,14 +39,19 @@ class Tableau {
       }
     }
 
-    //Eigen::MatrixXi to_matrix() const {
-    //  Eigen::MatrixXi M(num_rows(), 2*num_rows());
-    //  for (size_t i = 0; i < num_rows(); i++) {
-    //    for (size_t j = 0; j < 2*num_rows(); j++) {
-    //      M(i, j) = 
-    //    }
-    //  }
-    //}
+    Eigen::MatrixXi to_matrix() const {
+      Eigen::MatrixXi M(num_qubits, 2*num_qubits);
+      size_t offset = track_destabilizers ? num_qubits : 0;
+      
+      for (size_t i = 0; i < num_qubits; i++) {
+        for (size_t j = 0; j < num_qubits; j++) {
+          M(i, 2*j) = z(i + offset, j);
+          M(i, 2*j + 1) = x(i + offset, j);
+        }
+      }
+
+      return M;
+    }
 
     Statevector to_statevector() const {
       if (num_qubits > 15) {
