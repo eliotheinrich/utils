@@ -46,7 +46,7 @@ class InterfaceSampler {
     InterfaceSampler(dataframe::Params& params) {
       system_size = dataframe::utils::get<int>(params, "system_size");
 
-      sample_surface = dataframe::utils::get<int>(params, "sample_surface", true);
+      sample_surface = dataframe::utils::get<int>(params, "sample_surface", false);
       sample_surface_avg = dataframe::utils::get<int>(params, "sample_surface_avg", false);
 
       max_width = dataframe::utils::get<int>(params, "max_width", system_size/2);

@@ -2,7 +2,7 @@
 
 std::vector<PauliAmplitude> QuantumState::sample_paulis_exhaustive() {
   if (num_qubits > 15) {
-    throw std::runtime_error("Cannot do exhaustive calculation of renyi entropy for n > 15 qubits.");
+    throw std::runtime_error("Cannot do exhaustive Pauli sampling for n > 15 qubits.");
   }
   size_t N = 1u << (2*num_qubits);
   std::vector<PauliAmplitude> samples(N);
@@ -10,6 +10,36 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_exhaustive() {
   for (size_t i = 0; i < N; i++) {
     PauliString P = PauliString::from_bitstring(num_qubits, i);
     samples[i] = {P, std::abs(expectation(P))};
+  }
+
+  return samples;
+}
+
+std::vector<PauliAmplitude> QuantumState::sample_paulis_exact(size_t num_samples, ProbabilityFunc prob) {
+  std::vector<PauliAmplitude> ps = sample_paulis_exhaustive();
+  size_t s = ps.size();
+
+  std::vector<double> pauli_pdf(s);
+
+  for (size_t i = 0; i < s; i++) {
+    pauli_pdf[i] = prob(ps[i].second);
+  }
+
+  double d = 0.0;
+  for (size_t i = 0; i < s; i++) {
+    d += pauli_pdf[i];
+  }
+
+  for (size_t i = 0; i < s; i++) {
+    pauli_pdf[i] /= d;
+  }
+
+  std::discrete_distribution<> dist(pauli_pdf.begin(), pauli_pdf.end()); 
+
+  std::vector<PauliAmplitude> samples;
+  for (size_t i = 0; i < num_samples; i++) {
+    size_t bitstring = dist(rng);
+    samples.push_back(ps[bitstring]);
   }
 
   return samples;
@@ -122,6 +152,7 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_sa
 
     if (randf() < p2 / p1) {
       p = q.copy();
+      return t2;
     }
 
     return t1;

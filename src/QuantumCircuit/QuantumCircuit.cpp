@@ -242,7 +242,6 @@ Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<doubl
 }
 
 // --- Library for building common circuits --- //
-#include <iostream>
 QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc, std::optional<int> seed) {
 	thread_local std::random_device rd;
 	std::mt19937 rng;

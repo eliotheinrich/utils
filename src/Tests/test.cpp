@@ -527,6 +527,29 @@ bool test_mpo_vs_mps() {
   return true;
 }
 
+bool test_mps_measure() {
+  size_t nqb = 4;
+  MatrixProductState mps(nqb, 1u << nqb);
+  auto qc = generate_haar_circuit(nqb, nqb, false);
+  qc = QuantumCircuit(nqb);
+  mps.evolve(qc);
+
+  PauliString XX(2);
+  XX.set_x(0, 1);
+  XX.set_x(1, 1);
+
+  //PauliString Z(1);
+  //Z.set_z(0, 1);
+
+  std::cout << "Before: " << mps.to_string() << "\n";
+  bool b = mps.measure(XX, {0, 1});
+  //bool b = mps.measure(0);
+  std::cout << "b = " << b << "\n";
+  std::cout << "After: " << mps.to_string() << "\n";
+
+  return true;
+}
+
 int main() {
   //assert(test_solve_linear_system());
   //assert(test_binary_polynomial());
@@ -544,7 +567,5 @@ int main() {
   //assert(test_partial_trace());
   //assert(test_mpo_partial_trace());
   //assert(test_mpo_vs_mps());
-  QuantumCHPState state(10);
-  std::cout << state.to_string() << "\n";
-  std::cout << state.tableau.to_matrix() << "\n";
+  assert(test_mps_measure());
 }

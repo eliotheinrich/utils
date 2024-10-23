@@ -478,6 +478,74 @@ class MatrixProductStateImpl {
       return sign*eltC(contraction, _inds);
     }
 
+    std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
+      size_t r = m.rows();
+      size_t c = m.cols();
+      size_t n = sites.size();
+      if (r != c || (1u << n != r)) {
+        throw std::runtime_error(fmt::format("Passed observable has dimension {}x{}, provided {} sites.", r, c, n));
+      }
+
+      std::vector<uint32_t> sites_(sites.begin(), sites.end());
+      std::sort(sites_.begin(), sites_.end());
+
+      for (size_t i = 1; i < n; i++) {
+        if (sites_[i] != sites[i - 1] + 1) {
+          throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", sites_));
+        }
+      }
+
+      size_t q1 = sites_[0];
+      size_t q2 = sites_[n - 1];
+
+      ITensor m_tensor;
+      if (n == 1) {
+        Index i = external_idx(q1);
+        m_tensor = matrix_to_tensor(m, i, prime(i));
+      } else if (n == 2) {
+        Index i = external_idx(q1);
+        Index j = external_idx(q2);
+        m_tensor = matrix_to_tensor(m, i, j, prime(i), prime(j));
+      } else {
+        throw std::runtime_error("Currectly only support 1- and 2- qubit expectations.");
+      }
+
+      ITensor C = tensors[0];
+      ITensor contraction;
+      bool contracted_m;
+      if (q1 != 0) {
+        Index i = external_idx(0);
+        contraction = C*delta(i, prime(i))*prime(conj(C));
+        contracted_m = false;
+      } else {
+        contraction = C*m_tensor*prime(conj(C));
+        contracted_m = true;
+      }
+
+      for (size_t k = 1; k < num_qubits; k++) {
+        C = tensors[k]*singular_values[k-1];
+        if (k >= q1 && k <= q2) {
+          if (!contracted_m) {
+            contraction *= C*m_tensor*prime(conj(C));
+            contracted_m = true;
+          } else {
+            Index i = external_idx(k);
+            contraction *= C*prime(conj(C));
+          }
+        } else {
+          Index i = external_idx(k);
+          contraction *= C*delta(i, prime(i))*prime(conj(C));
+        }
+      }
+
+      if (!contracted_m) {
+        throw std::runtime_error("Never contracted m!\n");
+      }
+
+      std::vector<int> _inds;
+      return eltC(contraction, _inds);
+    }
+
     ITensor coefficient_tensor() const {
       ITensor C = tensors[0];
 
@@ -582,7 +650,7 @@ class MatrixProductStateImpl {
       singular_values[q1] = D;
     }
 
-    double measure_probability(uint32_t q, bool outcome) const {
+    double mzr_prob(uint32_t q, bool outcome) const {
       int i = static_cast<int>(outcome) + 1;
       auto idx = external_indices[q];
       auto qtensor = tensor_slice(tensors[q], idx, i);
@@ -613,16 +681,34 @@ class MatrixProductStateImpl {
       return true;
     }
 
-    bool measure(uint32_t q, double r) {
-      double prob_zero = measure_probability(q, 0);
+    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+      }
+
+      auto pm = p.to_matrix();
+
+      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+
+      double prob_zero = std::abs(expectation((id + pm)/2.0, qubits));
       bool outcome = r >= prob_zero;
 
-      Eigen::Matrix2cd proj = outcome ? 
-        MatrixProductStateImpl::one_projector()/std::sqrt(1.0 - prob_zero) :
-        MatrixProductStateImpl::zero_projector()/std::sqrt(prob_zero);
+      Eigen::MatrixXcd proj0 = (id + pm)/(2.0*std::sqrt(prob_zero));
+      Eigen::MatrixXcd proj1 = (id - pm)/(2.0*std::sqrt(1.0 - prob_zero));
+      Eigen::MatrixXcd proj = outcome ? proj0 : proj1;
 
-      evolve(proj, q);
+      evolve(proj, qubits);
 
+      uint32_t q1 = *std::ranges::min_element(qubits);
+      uint32_t q2 = *std::ranges::max_element(qubits);
+
+      propogate_normalization_left(q1);
+      propogate_normalization_right(q1);
+
+      return outcome;
+    }
+
+    void propogate_normalization_right(size_t q) {
       Eigen::Matrix4cd id;
       id.setIdentity();
 
@@ -633,8 +719,12 @@ class MatrixProductStateImpl {
 
         evolve(id, {i, i+1});
       }
+    }
 
-      // Propagate left
+    void propogate_normalization_left(size_t q) {
+      Eigen::Matrix4cd id;
+      id.setIdentity();
+
       for (uint32_t i = q; i > 1; i--) {
         if (dim(internal_idx(i-1, InternalDir::Left)) == 1) {
           break;
@@ -642,6 +732,20 @@ class MatrixProductStateImpl {
 
         evolve(id, {i-1, i});
       }
+    }
+
+    bool measure(uint32_t q, double r) {
+      double prob_zero = mzr_prob(q, 0);
+      bool outcome = r >= prob_zero;
+
+      Eigen::Matrix2cd proj = outcome ? 
+        MatrixProductStateImpl::one_projector()/std::sqrt(1.0 - prob_zero) :
+        MatrixProductStateImpl::zero_projector()/std::sqrt(prob_zero);
+
+      evolve(proj, q);
+
+      propogate_normalization_left(q);
+      propogate_normalization_right(q);
 
       return outcome;
     }
@@ -1142,10 +1246,6 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
-magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  return magic_mutual_information_direct_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples);
-}
-
 magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
   return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
 }
@@ -1154,12 +1254,20 @@ magic_t MatrixProductState::magic_mutual_information_exhaustive(const std::vecto
   return magic_mutual_information_exhaustive_impl<MatrixProductState>(*this, qubitsA, qubitsB);
 }
 
+magic_t MatrixProductState::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  return magic_mutual_information_exact_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples);
+}
+
 std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
   return impl->sample_paulis(num_samples);
 }
 
 std::complex<double> MatrixProductState::expectation(const PauliString& p) const {
   return impl->expectation(p);
+}
+
+std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
+  return impl->expectation(m, sites);
 }
 
 void MatrixProductState::print_mps() const {
@@ -1218,13 +1326,16 @@ void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const std::vector<
   impl->evolve(gate, qubits);
 }
 
-double MatrixProductState::measure_probability(uint32_t q, bool outcome) const {
-  return impl->measure_probability(q, outcome);
+double MatrixProductState::mzr_prob(uint32_t q, bool outcome) const {
+  return impl->mzr_prob(q, outcome);
 }
 
-bool MatrixProductState::measure(uint32_t q) {
-  double r = randf();
-  return impl->measure(q, r);
+bool MatrixProductState::mzr(uint32_t q) {
+  return impl->measure(q, randf());
+}
+
+bool MatrixProductState::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+  return impl->measure(p, qubits, randf());
 }
 
 MatrixProductOperator::MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : QuantumState(mps.num_qubits - traced_qubits.size()) {
@@ -1253,16 +1364,16 @@ std::complex<double> MatrixProductOperator::expectation(const PauliString& p) co
   return impl->expectation(p);
 }
 
-magic_t MatrixProductOperator::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  return magic_mutual_information_direct_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples);
-}
-
 magic_t MatrixProductOperator::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
   return magic_mutual_information_montecarlo_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
 }
 
 magic_t MatrixProductOperator::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
   return magic_mutual_information_exhaustive_impl<MatrixProductOperator>(*this, qubitsA, qubitsB);
+}
+
+magic_t MatrixProductOperator::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  return magic_mutual_information_exact_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples);
 }
 
 MatrixProductOperator MatrixProductOperator::partial_trace(const std::vector<uint32_t>& qubits) const {

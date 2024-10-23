@@ -45,8 +45,8 @@ class Tableau {
       
       for (size_t i = 0; i < num_qubits; i++) {
         for (size_t j = 0; j < num_qubits; j++) {
-          M(i, 2*j) = z(i + offset, j);
-          M(i, 2*j + 1) = x(i + offset, j);
+          M(i, j) = z(i + offset, j);
+          M(i, j + num_qubits) = x(i + offset, j);
         }
       }
 

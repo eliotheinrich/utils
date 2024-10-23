@@ -3,7 +3,9 @@
 #include "BinaryPolynomial.h"
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/bind_map.h>
@@ -47,6 +49,41 @@ NB_MODULE(pyqtools_bindings, m) {
                                  0, 1, 0, 0,
                                  0, 0, 0, 1;
 
+  nanobind::class_<PauliString>(m, "PauliString")
+    .def(nanobind::init<uint32_t>())
+    .def("__str__", &PauliString::to_string_ops)
+    .def("__mul__", &PauliString::operator*)
+    .def("__rmul__", &PauliString::operator*)
+    .def("__eq__", &PauliString::operator==)
+    .def("__neq__", &PauliString::operator!=)
+    .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
+    .def("copy", &PauliString::copy)
+    .def("substring", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, true); })
+    .def("substring_retain", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, false); })
+    .def("s", [](PauliString& self, uint32_t q) { self.s(q); })
+    .def("sd", [](PauliString& self, uint32_t q) { self.sd(q); })
+    .def("h", [](PauliString& self, uint32_t q) { self.h(q); })
+    .def("cx", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cx(q1, q2); })
+    .def("cz", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cz(q1, q2); })
+    .def("commutes", &PauliString::commutes)
+    .def("set_x", &PauliString::set_x)
+    .def("set_x", [](PauliString& self, size_t i, size_t v) { self.set_x(i, static_cast<bool>(v)); })
+    .def("set_z", &PauliString::set_z)
+    .def("set_z", [](PauliString& self, size_t i, size_t v) { self.set_z(i, static_cast<bool>(v)); })
+    .def("x", &PauliString::x)
+    .def("z", &PauliString::z)
+    .def("reduce", &PauliString::reduce);
+
+  m.def("random_paulistring", [](uint32_t num_qubits) {
+    thread_local std::random_device gen;
+    std::minstd_rand rng(gen());
+    return PauliString::rand(num_qubits, rng);
+  });
+
+  m.def("bitstring_paulistring", [](uint32_t num_qubits, uint32_t bitstring) {
+    return PauliString::from_bitstring(num_qubits, bitstring);
+  });
+
   nanobind::class_<QuantumCircuit>(m, "QuantumCircuit")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit&>())
@@ -84,6 +121,8 @@ NB_MODULE(pyqtools_bindings, m) {
 
   nanobind::class_<Statevector>(m, "Statevector")
     .def(nanobind::init<uint32_t>())
+    .def(nanobind::init<QuantumCircuit>())
+    .def(nanobind::init<MatrixProductState>())
     .def_ro("num_qubits", &Statevector::num_qubits)
     .def("__str__", &Statevector::to_string)
     .def("entropy", &Statevector::entropy, "qubits"_a, "index"_a)
@@ -105,16 +144,18 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", [CY](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
     .def("cz", [CZ](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
     .def("swap", [SWAP](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("measure", [](Statevector& self, uint32_t q) { return self.measure(q); })
-    .def("measure", [](Statevector& self, uint32_t q, bool outcome) { return self.measure(q, outcome); })
+    .def("mzr", [](Statevector& self, uint32_t q) { return self.measure(q); })
+    .def("mzr", [](Statevector& self, uint32_t q, bool outcome) { return self.measure(q, outcome); })
     .def("probabilities", [](Statevector& self) { return self.probabilities(); })
     .def("inner", &Statevector::inner)
+    .def("expectation", &Statevector::expectation)
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
   nanobind::class_<DensityMatrix>(m, "DensityMatrix")
     .def(nanobind::init<uint32_t>())
+    .def(nanobind::init<QuantumCircuit>())
     .def_ro("num_qubits", &DensityMatrix::num_qubits)
     .def("__str__", &DensityMatrix::to_string)
     .def("entropy", &DensityMatrix::entropy, "qubits"_a, "index"_a)
@@ -136,8 +177,16 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", [CY](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
     .def("cz", [CZ](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
     .def("swap", [SWAP](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("measure", &DensityMatrix::measure)
+    .def("mzr", &DensityMatrix::measure)
     .def("probabilities", &DensityMatrix::probabilities)
+    .def("expectation", [](DensityMatrix& self, const PauliString& p) { return self.expectation(p); })
+    .def("expectation", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("sample_paulis_exact", &DensityMatrix::sample_paulis_exact)
+    .def("sample_paulis_exhaustive", &DensityMatrix::sample_paulis_exhaustive)
+    .def("sample_paulis_montecarlo", &DensityMatrix::sample_paulis_montecarlo)
+    .def("magic_mutual_information_exact", &DensityMatrix::magic_mutual_information_exact)
+    .def("magic_mutual_information_montecarlo", &DensityMatrix::magic_mutual_information_montecarlo)
+    .def("magic_mutual_information_exhaustive", &DensityMatrix::magic_mutual_information_exhaustive)
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -165,11 +214,37 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", [CY](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
     .def("cz", [CZ](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
     .def("swap", [SWAP](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("measure", &MatrixProductState::measure)
+    .def("mzr", [](MatrixProductState& self, uint32_t q) { return self.measure(q); })
+    .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("probabilities", &MatrixProductState::probabilities)
+    .def("mzr_prob", &MatrixProductState::mzr_prob)
+    .def("expectation", [](MatrixProductState& self, const PauliString& p) { return self.expectation(p); })
+    .def("expectation", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("partial_trace", &MatrixProductState::partial_trace)
+    .def("sample_paulis_exhaustive", &MatrixProductState::sample_paulis_exhaustive)
+    .def("sample_paulis_montecarlo", &MatrixProductState::sample_paulis_montecarlo)
+    .def("magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
+    .def("magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
+    .def("magic_mutual_information_montecarlo", &MatrixProductState::magic_mutual_information_montecarlo)
+    .def("magic_mutual_information_exhaustive", &MatrixProductState::magic_mutual_information_exhaustive)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
+
+  nanobind::class_<MatrixProductOperator>(m, "MatrixProductOperator")
+    .def(nanobind::init<const MatrixProductState&, const std::vector<uint32_t>&>())
+    .def_ro("num_qubits", &MatrixProductOperator::num_qubits)
+    .def("partial_trace", &MatrixProductOperator::partial_trace)
+    .def("expectation", &MatrixProductOperator::expectation)
+    .def("sample_paulis_exhaustive", &MatrixProductOperator::sample_paulis_exhaustive)
+    .def("sample_paulis_montecarlo", &MatrixProductOperator::sample_paulis_montecarlo)
+    .def("magic_mutual_information_exact", &MatrixProductOperator::magic_mutual_information_exact)
+    .def("magic_mutual_information_exact", &MatrixProductOperator::magic_mutual_information_exact)
+    .def("magic_mutual_information_montecarlo", &MatrixProductOperator::magic_mutual_information_montecarlo)
+    .def("magic_mutual_information_exhaustive", &MatrixProductOperator::magic_mutual_information_exhaustive)
+    .def("__str__", &MatrixProductOperator::to_string);
+
+  m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
 
   nanobind::class_<QuantumCHPState>(m, "QuantumCHPState")
     .def(nanobind::init<uint32_t>())

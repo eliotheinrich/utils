@@ -60,7 +60,7 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
   return rho.entropy(qubits, index);
 }
 
-double Statevector::measure_probability(uint32_t q, bool outcome) const {
+double Statevector::mzr_prob(uint32_t q, bool outcome) const {
   uint32_t s = 1u << num_qubits;
 
   double prob_zero = 0.0;
@@ -77,7 +77,7 @@ double Statevector::measure_probability(uint32_t q, bool outcome) const {
   }
 }
 
-bool Statevector::measure(uint32_t q, bool outcome) {
+bool Statevector::mzr(uint32_t q, bool outcome) {
   uint32_t s = 1u << num_qubits;
   for (uint32_t i = 0; i < s; i++) {
     if (((i >> q) & 1u) != outcome) {
@@ -90,10 +90,10 @@ bool Statevector::measure(uint32_t q, bool outcome) {
   return outcome;
 }
 
-bool Statevector::measure(uint32_t q) {
+bool Statevector::mzr(uint32_t q) {
   uint32_t s = 1u << num_qubits;
 
-  double prob_zero = measure_probability(q, 0);
+  double prob_zero = mzr_prob(q, 0);
   uint32_t outcome = !(randf() < prob_zero);
 
   for (uint32_t i = 0; i < s; i++) {
@@ -180,7 +180,7 @@ void Statevector::evolve(const QuantumCircuit& circuit, const std::vector<bool>&
     } else {
       Measurement m = std::get<Measurement>(inst);
       for (auto const& q : m.qbits) {
-        measure(q, outcomes[d]);
+        mzr(q, outcomes[d]);
         d++;
       }
     }

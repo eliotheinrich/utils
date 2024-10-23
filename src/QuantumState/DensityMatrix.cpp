@@ -101,15 +101,24 @@ magic_t DensityMatrix::magic_mutual_information_exhaustive(const std::vector<uin
   return magic_mutual_information_exhaustive_impl<DensityMatrix>(*this, qubitsA, qubitsB);
 }
 
+magic_t DensityMatrix::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  return magic_mutual_information_exact_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples);
+}
+
 double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
 	// If number of qubits is larger than half the system, take advantage of the fact that 
 	// S_A = S_\bar{A} to compute entropy for the smaller of A and \bar{A}
-	if (qubits.size() > num_qubits) {
+	if (qubits.size() > num_qubits/2) {
 		std::vector<uint32_t> qubits_complement;
+    std::vector<bool> mask(true, num_qubits);
+    for (const auto q : qubits) {
+      mask[q] = false;
+    }
+
 		for (uint32_t q = 0; q < num_qubits; q++) {
-			if (!std::count(qubits.begin(), qubits.end(), q)) {
-				qubits_complement.push_back(q);
-			}
+      if (mask[q]) {
+        qubits_complement.push_back(q);
+      }
 		}
 
 		return entropy(qubits_complement, index);
@@ -150,7 +159,23 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 
 std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
   Eigen::MatrixXcd P = p.to_matrix();
-  return (data*P).trace();
+  return expectation(P);
+}
+
+std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) const {
+  Eigen::MatrixXcd M = full_circuit_unitary(m, qubits, num_qubits);
+  return expectation(M);
+}
+
+std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m) const {
+  size_t r = m.rows();
+  size_t c = m.cols();
+
+  if ((r != c) || (1u << num_qubits != r)) {
+    throw std::runtime_error(fmt::format("Provided {}x{} cannot be multiplied by DensityMatrix of {} qubits.", r, c, num_qubits));
+  }
+
+  return (data * m).trace();
 }
 
 void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {
@@ -197,7 +222,7 @@ void DensityMatrix::evolve_diagonal(const Eigen::VectorXcd& gate) {
 	}
 }
 
-bool DensityMatrix::measure(uint32_t q) {
+bool DensityMatrix::mzr(uint32_t q) {
 	for (uint32_t i = 0; i < basis; i++) {
 		for (uint32_t j = 0; j < basis; j++) {
 			uint32_t q1 = (i >> q) & 1u;
@@ -212,7 +237,7 @@ bool DensityMatrix::measure(uint32_t q) {
 	return 0;
 }
 
-std::vector<bool> DensityMatrix::measure_all() {
+std::vector<bool> DensityMatrix::mzr_all() {
 	for (uint32_t i = 0; i < basis; i++) {
 		for (uint32_t j = 0; j < basis; j++) {
 			if (i != j) {
@@ -222,6 +247,26 @@ std::vector<bool> DensityMatrix::measure_all() {
 	}
 
 	return std::vector<bool>(num_qubits, 0);
+}
+
+bool DensityMatrix::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+  std::vector<Pauli> paulis(num_qubits, Pauli::I);
+  for (size_t i = 0; i < qubits.size(); i++) {
+    paulis[i] = p.to_pauli(i);
+  }
+
+  PauliString p_(paulis);
+  Eigen::MatrixXcd matrix = p_.to_matrix();
+  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
+
+  Eigen::MatrixXcd P0 = (id - matrix)/2.0;
+  Eigen::MatrixXcd P1 = (id + matrix)/2.0;
+
+  double p0 = std::abs(expectation(P0));
+
+
+  data = P0*data*P0.adjoint()/std::sqrt(p0) + P1*data*P1.adjoint()/std::sqrt(1.0 - p0);
+  return 0;
 }
 
 
