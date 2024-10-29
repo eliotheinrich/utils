@@ -60,6 +60,24 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
   return rho.entropy(qubits, index);
 }
 
+
+std::complex<double> Statevector::expectation(const PauliString& p) const {
+  Eigen::MatrixXcd pm = p.to_matrix();
+  return expectation(pm);
+}
+
+std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
+  Eigen::MatrixXcd M = full_circuit_unitary(m, sites, num_qubits);
+  return expectation(M);
+}
+
+std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m) const {
+  Statevector other(num_qubits);
+  other.evolve(m);
+
+  return inner(other);
+}
+
 double Statevector::mzr_prob(uint32_t q, bool outcome) const {
   uint32_t s = 1u << num_qubits;
 
@@ -102,6 +120,61 @@ bool Statevector::mzr(uint32_t q) {
     }
   }
 
+  normalize();
+
+  return outcome;
+}
+
+bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+  if (qubits.size() != p.num_qubits) {
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+  }
+
+  std::vector<Pauli> paulis(num_qubits, Pauli::I);
+  for (size_t i = 0; i < qubits.size(); i++) {
+    paulis[i] = p.to_pauli(i);
+  }
+
+  PauliString p_(paulis);
+  Eigen::MatrixXcd matrix = p_.to_matrix();
+  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
+
+  double prob_zero = std::abs(expectation((id + matrix)/2.0));
+
+  bool outcome = randf() >= prob_zero;
+
+  Eigen::MatrixXcd proj0 = (id + matrix)/(2.0*std::sqrt(prob_zero));
+  Eigen::MatrixXcd proj1 = (id - matrix)/(2.0*std::sqrt(1.0 - prob_zero));
+  Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
+
+  evolve(proj);
+  normalize();
+
+  return outcome;
+}
+
+bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+  std::vector<Pauli> paulis(num_qubits, Pauli::I);
+  for (size_t i = 0; i < qubits.size(); i++) {
+    paulis[i] = p.to_pauli(i);
+  }
+
+  PauliString p_(paulis);
+  Eigen::MatrixXcd matrix = p_.to_matrix();
+  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
+
+  double prob_zero = std::abs(expectation((id + matrix)/2.0));
+
+  bool outcome = randf() >= prob_zero;
+
+  Eigen::MatrixXcd t = matrix;
+  if (outcome) {
+    t = -t;
+  }
+
+  Eigen::MatrixXcd proj = (beta*t).exp();
+
+  evolve(proj);
   normalize();
 
   return outcome;

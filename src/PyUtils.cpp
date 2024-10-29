@@ -146,9 +146,11 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("swap", [SWAP](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
     .def("mzr", [](Statevector& self, uint32_t q) { return self.mzr(q); })
     .def("mzr", [](Statevector& self, uint32_t q, bool outcome) { return self.mzr(q, outcome); })
+    .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("probabilities", [](Statevector& self) { return self.probabilities(); })
     .def("inner", &Statevector::inner)
-    .def("expectation", &Statevector::expectation)
+    .def("expectation", [](Statevector& self, const PauliString& p) { return self.expectation(p); })
+    .def("expectation", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });

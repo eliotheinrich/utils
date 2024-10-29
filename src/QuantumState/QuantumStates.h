@@ -342,9 +342,9 @@ class Statevector : public QuantumState {
       return DensityMatrix(*this).magic_mutual_information_exact(qubitsA, qubitsB, num_samples);
     }
 
-    virtual std::complex<double> expectation(const PauliString& p) const override {
-      return DensityMatrix(*this).expectation(p);
-    }
+    virtual std::complex<double> expectation(const PauliString& p) const override;
+    std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
+    std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) override;
 
@@ -367,6 +367,9 @@ class Statevector : public QuantumState {
 		virtual bool mzr(uint32_t q) override;
 
     bool mzr(uint32_t q, bool outcome);
+
+    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
+    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
 
 		double norm() const;
 
@@ -493,6 +496,7 @@ class MatrixProductState : public QuantumState {
 		}
 		virtual bool mzr(uint32_t q) override;
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
+    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
 };
 
 class MatrixProductOperatorImpl;
