@@ -268,7 +268,7 @@ bool mps_test_circuit() {
   QuantumCircuit qc(nqb);
   Eigen::Matrix2cd T; T << 1.0, 0.0, 0.0, std::exp(std::complex<double>(0.0, 2.353));
   qc.add_gate("h", {0});
-  qc.add_gate(T, {0});
+  qc.add_gate(T, 0);
   qc.add_gate("h" , {2});
   qc.add_gate("cx", {1, 2});
   qc.add_gate("h" , {1});
@@ -528,24 +528,36 @@ bool test_mpo_vs_mps() {
 }
 
 bool test_mps_measure() {
-  size_t nqb = 4;
+  size_t nqb = 2;
   MatrixProductState mps(nqb, 1u << nqb);
-  auto qc = generate_haar_circuit(nqb, nqb, false);
-  qc = QuantumCircuit(nqb);
-  mps.evolve(qc);
+
+  std::minstd_rand rng;
+  thread_local std::random_device gen;
+  int seed = gen();
+  std::cout << fmt::format("seed = {}\n", seed);
+  rng.seed(seed);
+  mps.seed(rng());
 
   PauliString XX(2);
   XX.set_x(0, 1);
   XX.set_x(1, 1);
 
-  //PauliString Z(1);
-  //Z.set_z(0, 1);
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc(nqb);
+    auto gate = haar_unitary(2, rng);
+    qc.add_gate(gate, {0, 1});
 
-  std::cout << "Before: " << mps.to_string() << "\n";
-  bool b = mps.measure(XX, {0, 1});
-  //bool b = mps.measure(0);
-  std::cout << "b = " << b << "\n";
-  std::cout << "After: " << mps.to_string() << "\n";
+    mps.evolve(qc);
+
+
+    Statevector s(mps);
+    std::cout << fmt::format("Before: {}, \nnorm = {}\n", s.to_string(), std::abs(s.inner(s)));
+    bool b = mps.measure(XX, {0, 1});
+    //bool b = mps.measure(0);
+    std::cout << "b = " << b << "\n";
+    s = Statevector(mps);
+    std::cout << fmt::format("Before: {}, \nnorm = {}\n", s.to_string(), std::abs(s.inner(s)));
+  }
 
   return true;
 }

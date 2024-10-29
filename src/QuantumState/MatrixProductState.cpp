@@ -556,6 +556,50 @@ class MatrixProductStateImpl {
       return C;
     }
 
+    std::complex<double> coefficients(size_t z) const {
+      auto C = coefficient_tensor();
+
+      std::vector<int> assignments(num_qubits);
+      for (uint32_t j = 0; j < num_qubits; j++) {
+        assignments[j] = ((z >> j) & 1u) + 1;
+      }
+
+      return eltC(C, assignments);
+    }
+
+    Eigen::VectorXcd coefficients() const {
+      if (num_qubits > 31) {
+        throw std::runtime_error("Cannot generate coefficients for n > 31 qubits.");
+      }
+
+      std::vector<uint32_t> indices(1u << num_qubits);
+      std::iota(indices.begin(), indices.end(), 0);
+
+      return coefficients(indices);
+    }
+
+    Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const {
+      auto C = coefficient_tensor();
+
+      Eigen::VectorXcd vals(1u << num_qubits);
+      for (uint32_t i = 0; i < indices.size(); i++) {
+        uint32_t z = indices[i];
+        std::vector<int> assignments(num_qubits);
+        for (uint32_t j = 0; j < num_qubits; j++) {
+          assignments[j] = ((z >> j) & 1u) + 1;
+        }
+
+        vals[i] = eltC(C, assignments);
+      }
+
+      return vals;
+    }
+
+    std::string to_string() const {
+      Statevector sv(coefficients());
+      return sv.to_string();
+    }
+
     void print_mps() const {
       print(tensors[0]);
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
@@ -692,12 +736,16 @@ class MatrixProductStateImpl {
 
       double prob_zero = std::abs(expectation((id + pm)/2.0, qubits));
       bool outcome = r >= prob_zero;
+      //std::cout << fmt::format("prob_zero = {}\n", prob_zero);
+      //std::cout << fmt::format("outcome = {}\n", outcome);
 
       Eigen::MatrixXcd proj0 = (id + pm)/(2.0*std::sqrt(prob_zero));
       Eigen::MatrixXcd proj1 = (id - pm)/(2.0*std::sqrt(1.0 - prob_zero));
-      Eigen::MatrixXcd proj = outcome ? proj0 : proj1;
+      Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
 
       evolve(proj, qubits);
+
+      //std::cout << fmt::format("Before normalization: \n{}\n", to_string());
 
       uint32_t q1 = *std::ranges::min_element(qubits);
       uint32_t q2 = *std::ranges::max_element(qubits);
@@ -1215,8 +1263,7 @@ void MatrixProductState::seed(int i) {
 }
 
 std::string MatrixProductState::to_string() const {
-	Statevector state(*this);
-	return state.to_string();
+  return impl->to_string();
 }
 
 double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
@@ -1279,48 +1326,20 @@ MatrixProductOperator MatrixProductState::partial_trace(const std::vector<uint32
 }
 
 std::complex<double> MatrixProductState::coefficients(uint32_t z) const {
-	auto C = impl->coefficient_tensor();
-
-	std::vector<int> assignments(num_qubits);
-	for (uint32_t j = 0; j < num_qubits; j++) {
-		assignments[j] = ((z >> j) & 1u) + 1;
-	}
-
-	return eltC(C, assignments);
+  return impl->coefficients(z);
 }
 
 Eigen::VectorXcd MatrixProductState::coefficients(const std::vector<uint32_t>& indices) const {
-  if (num_qubits > 31) {
-    throw std::runtime_error("Cannot generate coefficients for n > 31 qubits.");
-  }
-
-  auto C = impl->coefficient_tensor();
-
-  Eigen::VectorXcd vals(1u << num_qubits);
-  for (uint32_t i = 0; i < indices.size(); i++) {
-    uint32_t z = indices[i];
-    std::vector<int> assignments(num_qubits);
-    for (uint32_t j = 0; j < num_qubits; j++) {
-      assignments[j] = ((z >> j) & 1u) + 1;
-    }
-
-    vals[i] = eltC(C, assignments);
-  }
-
-  return vals;
+  return impl->coefficients(indices);
 }
 
 Eigen::VectorXcd MatrixProductState::coefficients() const {
-	std::vector<uint32_t> indices(1u << num_qubits);
-	std::iota(indices.begin(), indices.end(), 0);
-	
-	return coefficients(indices);
+  return impl->coefficients();
 }
 
 void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
   impl->evolve(gate, qubit);
 }
-
 
 void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) {
   impl->evolve(gate, qubits);
