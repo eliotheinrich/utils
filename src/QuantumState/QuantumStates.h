@@ -633,7 +633,7 @@ magic_t magic_mutual_information_exhaustive_impl(StateType& state, const std::ve
   return I - W;
 }
 
-void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng, size_t j) {
+static void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng, size_t j) {
   size_t g = rng() % 4;
 
   bool b1 = g % 2;
@@ -654,12 +654,12 @@ void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng, size_t 
   }
 }
 
-void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
+static void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
   size_t j = rng() % p.num_qubits;
   single_qubit_random_mutation(p, rng, j);
 }
 
-void random_mutation(PauliString& p, std::minstd_rand& rng) {
+static void random_mutation(PauliString& p, std::minstd_rand& rng) {
   bool r = rng() % 2;
   if ((r) || (p.num_qubits == 1)) {
     // Do single-qubit mutation
@@ -678,7 +678,7 @@ void random_mutation(PauliString& p, std::minstd_rand& rng) {
   }
 }
 
-void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
+static void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
   PauliString pnew(p);
   if ((rng() % 2) || (p.num_qubits == 1)) {
     // Do single-qubit mutation
@@ -704,11 +704,11 @@ void xxz_random_mutation(PauliString& p, std::minstd_rand& rng) {
   p = pnew;
 }
 
-void global_random_mutation(PauliString& p, std::minstd_rand& rng) {
+static void global_random_mutation(PauliString& p, std::minstd_rand& rng) {
   p = PauliString::rand(p.num_qubits, rng);
 }
 
-void random_bit_mutation(PauliString& p, std::minstd_rand& rng) {
+static void random_bit_mutation(PauliString& p, std::minstd_rand& rng) {
   size_t j = rng() % (2*p.num_qubits);
   p.set(j, !p.get(j));
 }
