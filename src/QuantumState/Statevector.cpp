@@ -1,5 +1,7 @@
 #include "QuantumStates.h"
 
+#include <unsupported/Eigen/MatrixFunctions>
+
 Statevector::Statevector(uint32_t num_qubits, uint32_t qregister) : QuantumState(num_qubits) {
   data = Eigen::VectorXcd::Zero(1u << num_qubits);
   data(qregister) = 1.;

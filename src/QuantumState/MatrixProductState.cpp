@@ -1,9 +1,11 @@
 #include "QuantumStates.h"
-#include <itensor/all.h>
+
 #include <sstream>
+#include <random>
 
 #include <fmt/ranges.h>
-#include <random>
+#include <itensor/all.h>
+#include <unsupported/Eigen/MatrixFunctions>
 
 using namespace itensor;
 
@@ -600,11 +602,20 @@ class MatrixProductStateImpl {
       return sv.to_string();
     }
 
-    void print_mps() const {
+    void print_mps(bool print_data=false) const {
       print(tensors[0]);
+      if (print_data) {
+        PrintData(tensors[0]);
+      }
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
         print(singular_values[i]);
+        if (print_data) {
+          PrintData(singular_values[i]);
+        }
         print(tensors[i+1]);
+        if (print_data) {
+          PrintData(tensors[i+1]);
+        }
       }
     }
 
@@ -678,6 +689,8 @@ class MatrixProductStateImpl {
           "LeftTags=",fmt::format("Internal,Left,n={}", q1),
           "RightTags=",fmt::format("Internal,Right,n={}", q1)});
 
+      //PrintData(D);
+
       internal_indices[2*q1] = commonIndex(U, D);
       internal_indices[2*q2 - 1] = commonIndex(V, D);
 
@@ -743,6 +756,7 @@ class MatrixProductStateImpl {
       }
 
       Eigen::MatrixXcd proj = (beta*t).exp();
+      //std::cout << "======================= APPLYING PROJECTOR =================\n";
       evolve(proj, qubits);
 
       uint32_t q1 = *std::ranges::min_element(qubits);
@@ -782,27 +796,27 @@ class MatrixProductStateImpl {
     }
 
     void propogate_normalization_right(size_t q) {
-      Eigen::Matrix4cd id;
-      id.setIdentity();
+      Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
 
       for (uint32_t i = q; i < num_qubits - 1; i++) {
         if (dim(internal_idx(i, InternalDir::Right)) == 1) {
           break;
         }
 
+        //std::cout << fmt::format("id on {}, {}\n", i, i+1);
         evolve(id, {i, i+1});
       }
     }
 
     void propogate_normalization_left(size_t q) {
-      Eigen::Matrix4cd id;
-      id.setIdentity();
+      Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
 
       for (uint32_t i = q; i > 1; i--) {
         if (dim(internal_idx(i-1, InternalDir::Left)) == 1) {
           break;
         }
 
+        //std::cout << fmt::format("id on {}, {}\n", i-1, i);
         evolve(id, {i-1, i});
       }
     }
@@ -1318,8 +1332,8 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
-magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
-  return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
+  return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
 }
 
 magic_t MatrixProductState::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
@@ -1342,8 +1356,8 @@ std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, 
   return impl->expectation(m, sites);
 }
 
-void MatrixProductState::print_mps() const {
-  impl->print_mps();
+void MatrixProductState::print_mps(bool print_data=false) const {
+  impl->print_mps(print_data);
 }
 
 MatrixProductOperator MatrixProductState::partial_trace(const std::vector<uint32_t>& qubits) const {
@@ -1412,8 +1426,8 @@ std::complex<double> MatrixProductOperator::expectation(const PauliString& p) co
   return impl->expectation(p);
 }
 
-magic_t MatrixProductOperator::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
-  return magic_mutual_information_montecarlo_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+magic_t MatrixProductOperator::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
+  return magic_mutual_information_montecarlo_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
 }
 
 magic_t MatrixProductOperator::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {

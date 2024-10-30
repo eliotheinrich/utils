@@ -93,8 +93,8 @@ DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_q
 	return reduced_rho;
 }
 
-magic_t DensityMatrix::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps) {
-  return magic_mutual_information_montecarlo_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps);
+magic_t DensityMatrix::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
+  return magic_mutual_information_montecarlo_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
 }
 
 magic_t DensityMatrix::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {

@@ -55,6 +55,10 @@ class QuantumStateSampler {
 
     ~QuantumStateSampler()=default;
 
+    void set_montecarlo_update(PauliMutationFunc f) {
+      mutation = f;
+    }
+
     void add_probability_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
       if (state->num_qubits > 31) {
         throw std::runtime_error("Cannot generate probabilities for n > 31 qubits.");
@@ -98,7 +102,7 @@ class QuantumStateSampler {
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
       ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
       if (sre_method == sre_method_t::MonteCarlo) {
-        return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob);
+        return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
       } else if (sre_method == sre_method_t::Exhaustive) {
         return state->sample_paulis_exhaustive();
       } else if (sre_method == sre_method_t::Exact) {
@@ -146,7 +150,7 @@ class QuantumStateSampler {
         if (sre_method == sre_method_t::Exhaustive) {
           magic_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
         } else if (sre_method == sre_method_t::MonteCarlo) {
-          magic_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps);
+          magic_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
         } else if (sre_method == sre_method_t::Exact) {
           magic_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
         } else {
@@ -178,6 +182,8 @@ class QuantumStateSampler {
     size_t magic_mutual_information_subsystem_size;
     size_t subsystem_offset_A;
     size_t subsystem_offset_B;
+
+    PauliMutationFunc mutation;
 
     uint32_t get_bin_idx(double s) const {
       if ((s < min_prob) || (s > max_prob)) {
