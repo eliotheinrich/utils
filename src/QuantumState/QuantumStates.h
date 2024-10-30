@@ -481,6 +481,7 @@ class MatrixProductState : public QuantumState {
 		std::complex<double> coefficients(uint32_t z) const;
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
 		Eigen::VectorXcd coefficients() const;
+    double trace() const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) override;
@@ -515,6 +516,8 @@ class MatrixProductOperator : public QuantumState {
 
     void print_mps() const;
 		Eigen::MatrixXcd coefficients() const;
+    double trace() const;
+
     virtual std::complex<double> expectation(const PauliString& p) const override;
 
     virtual std::vector<double> probabilities() const override {

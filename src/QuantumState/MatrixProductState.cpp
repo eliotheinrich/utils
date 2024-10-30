@@ -602,6 +602,25 @@ class MatrixProductStateImpl {
       return sv.to_string();
     }
 
+    std::vector<double> get_norms() const {
+      std::vector<double> norms{norm(tensors[0])};
+      for (uint32_t i = 0; i < num_qubits - 1; i++) {
+        norms.push_back(norm(singular_values[i]));
+        norms.push_back(norm(tensors[i+1]));
+      }
+      return norms;
+    }
+
+    void print_norms() const {
+      std::cout << fmt::format("tensors[0] = {}\n", norm(tensors[0]));
+
+      for (uint32_t i = 0; i < num_qubits - 1; i++) {
+        std::cout << fmt::format("singular_values[{}] = {}\n", i, norm(singular_values[i]));
+        std::cout << fmt::format("tensors[{}] = {}\n", i+1, norm(tensors[i+1]));
+      }
+
+    }
+
     void print_mps(bool print_data=false) const {
       print(tensors[0]);
       if (print_data) {
@@ -689,8 +708,6 @@ class MatrixProductStateImpl {
           "LeftTags=",fmt::format("Internal,Left,n={}", q1),
           "RightTags=",fmt::format("Internal,Right,n={}", q1)});
 
-      //PrintData(D);
-
       internal_indices[2*q1] = commonIndex(U, D);
       internal_indices[2*q2 - 1] = commonIndex(V, D);
 
@@ -756,7 +773,6 @@ class MatrixProductStateImpl {
       }
 
       Eigen::MatrixXcd proj = (beta*t).exp();
-      //std::cout << "======================= APPLYING PROJECTOR =================\n";
       evolve(proj, qubits);
 
       uint32_t q1 = *std::ranges::min_element(qubits);
@@ -803,7 +819,6 @@ class MatrixProductStateImpl {
           break;
         }
 
-        //std::cout << fmt::format("id on {}, {}\n", i, i+1);
         evolve(id, {i, i+1});
       }
     }
@@ -816,25 +831,29 @@ class MatrixProductStateImpl {
           break;
         }
 
-        //std::cout << fmt::format("id on {}, {}\n", i-1, i);
         evolve(id, {i-1, i});
       }
     }
 
     bool measure(uint32_t q, double r) {
-      double prob_zero = mzr_prob(q, 0);
-      bool outcome = r >= prob_zero;
+      PauliString Z(1);
+      Z.set_z(0, 1);
 
-      Eigen::Matrix2cd proj = outcome ? 
-        MatrixProductStateImpl::one_projector()/std::sqrt(1.0 - prob_zero) :
-        MatrixProductStateImpl::zero_projector()/std::sqrt(prob_zero);
+      return measure(Z, {q}, r);
 
-      evolve(proj, q);
+      //double prob_zero = mzr_prob(q, 0);
+      //bool outcome = r >= prob_zero;
 
-      propogate_normalization_left(q);
-      propogate_normalization_right(q);
+      //Eigen::Matrix2cd proj = outcome ? 
+      //  MatrixProductStateImpl::one_projector()/std::sqrt(1.0 - prob_zero) :
+      //  MatrixProductStateImpl::zero_projector()/std::sqrt(prob_zero);
 
-      return outcome;
+      //evolve(proj, q);
+
+      //propogate_normalization_left(q);
+      //propogate_normalization_right(q);
+
+      //return outcome;
     }
 };
 
@@ -1141,6 +1160,18 @@ class MatrixProductOperatorImpl {
       return sign*eltC(contraction, _inds);
     }
 
+    double trace() const {
+      std::vector<ITensor> deltas;
+      for (size_t i = 0; i < num_qubits; i++) {
+        Index idx = external_idx(i);
+        deltas.push_back(delta(idx, prime(idx)));
+      }
+
+      auto t = partial_contraction(0, num_qubits, deltas);
+      std::vector<uint32_t> assignments;
+      return eltC(t, assignments).real();
+    }
+
     ITensor partial_contraction(size_t _q1, size_t _q2, std::optional<std::vector<ITensor>> contraction_ops_opt=std::nullopt) const {
       std::vector<ITensor> contraction_ops;
       bool has_ops = contraction_ops_opt.has_value();
@@ -1376,12 +1407,21 @@ Eigen::VectorXcd MatrixProductState::coefficients() const {
   return impl->coefficients();
 }
 
+double MatrixProductState::trace() const {
+  MatrixProductOperator mpo = partial_trace({});
+  return mpo.trace();
+}
+
 void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
   impl->evolve(gate, qubit);
 }
 
 void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) {
   impl->evolve(gate, qubits);
+  double t = trace();
+  if (t < 0.98) {
+    throw std::runtime_error(fmt::format("After evolve, trace = {}\n", t));
+  }
 }
 
 double MatrixProductState::mzr_prob(uint32_t q, bool outcome) const {
@@ -1389,11 +1429,24 @@ double MatrixProductState::mzr_prob(uint32_t q, bool outcome) const {
 }
 
 bool MatrixProductState::mzr(uint32_t q) {
-  return impl->measure(q, randf());
+  bool res = impl->measure(q, randf());
+  double t = trace();
+  if (t < 0.98) {
+    throw std::runtime_error(fmt::format("After mzr, trace = {}\n", t));
+  }
+
+  return res;
+  // return impl->measure(q, randf());
 }
 
 bool MatrixProductState::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
-  return impl->measure(p, qubits, randf());
+  bool res = impl->measure(p, qubits, randf());
+  double t = trace();
+  if (t < 0.98) {
+    throw std::runtime_error(fmt::format("After measure, trace = {}\n", t));
+  }
+  return res;
+  //return impl->measure(p, qubits, randf());
 }
 
 bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
@@ -1420,6 +1473,10 @@ void MatrixProductOperator::print_mps() const {
 
 Eigen::MatrixXcd MatrixProductOperator::coefficients() const {
   return impl->coefficients();
+}
+
+double MatrixProductOperator::trace() const {
+  return impl->trace();
 }
 
 std::complex<double> MatrixProductOperator::expectation(const PauliString& p) const {
