@@ -164,15 +164,15 @@ class MatrixProductStateImpl {
 		std::vector<itensor::Index> external_indices;
 		std::vector<itensor::Index> internal_indices;
 
-    static Eigen::Matrix2cd zero_projector() {
+    static const Eigen::Matrix2cd zero_projector() {
       return (Eigen::Matrix2cd() << 1, 0, 0, 0).finished();
     }
 
-    static Eigen::Matrix2cd one_projector() {
+    static const Eigen::Matrix2cd one_projector() {
       return (Eigen::Matrix2cd() << 0, 0, 0, 1).finished();
     }
 
-    static Eigen::Matrix4cd SWAP() {
+    static const Eigen::Matrix4cd SWAP() {
       return (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1).finished();
     }
 
@@ -476,7 +476,7 @@ class MatrixProductStateImpl {
       }
 
       std::vector<int> _inds;
-      double sign = p.r() ? -1.0 : 1.0;
+      double sign = p.get_r() ? -1.0 : 1.0;
       return sign*eltC(contraction, _inds);
     }
 
@@ -1156,7 +1156,7 @@ class MatrixProductOperatorImpl {
       auto contraction = partial_contraction(0, num_qubits, paulis);
 
       std::vector<int> _inds;
-      double sign = p.r() ? -1.0 : 1.0;
+      double sign = p.get_r() ? -1.0 : 1.0;
       return sign*eltC(contraction, _inds);
     }
 

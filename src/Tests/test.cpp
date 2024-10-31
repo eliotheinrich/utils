@@ -579,5 +579,29 @@ int main() {
   //assert(test_partial_trace());
   //assert(test_mpo_partial_trace());
   //assert(test_mpo_vs_mps());
-  assert(test_mps_measure());
+  //assert(test_mps_measure());
+  
+  std::minstd_rand rng;
+  
+  size_t nqb = 5;
+
+  QuantumCHPState chp(nqb);
+  Statevector sv(nqb);
+
+  std::vector<uint32_t> qubits(nqb);
+  std::iota(qubits.begin(), qubits.end(), 0);
+
+  std::cout << fmt::format("chp = \n{}\n", chp.to_string());
+
+  PauliString p = PauliString::rand(nqb, rng);
+
+  random_clifford_impl(qubits, rng, sv, chp);
+
+  std::cout << fmt::format("chp = \n{}\n", chp.to_string());
+
+  Statevector sv2 = chp.tableau.to_statevector();
+
+  std::cout << fmt::format("d = {}\n", std::abs(sv.inner(sv2)));
+
+  
 }

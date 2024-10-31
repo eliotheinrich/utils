@@ -94,6 +94,10 @@ class QuantumCHPState : public CliffordState {
       tableau.h(b);
     }
 
+    virtual void random_clifford(std::vector<uint32_t> &qubits) override {
+      random_clifford_impl(qubits, rng, *this);
+    }
+
     virtual double mzr_expectation(uint32_t a) override {
       auto [deterministic, _] = tableau.mzr_deterministic(a);
       if (deterministic) {

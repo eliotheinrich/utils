@@ -47,6 +47,16 @@ class QuantumCircuit {
     void add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits);
     void add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit);
 
+    void h(uint32_t q) { }
+    void s(uint32_t q) { }
+    void x(uint32_t q) { }
+    void y(uint32_t q) { }
+    void z(uint32_t q) { }
+    void cx(uint32_t q1, uint32_t q2) { }
+    void cy(uint32_t q1, uint32_t q2) { }
+    void cz(uint32_t q1, uint32_t q2) { }
+    void swap(uint32_t q1, uint32_t q2) { }
+
     void append(const QuantumCircuit& other);
     void append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits);
     void append(const Instruction& inst);

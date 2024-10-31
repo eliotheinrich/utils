@@ -64,6 +64,8 @@ class QuantumGraphState : public CliffordState {
     virtual void y(uint32_t a) override;
     virtual void z(uint32_t a) override;
 
+    virtual void random_clifford(std::vector<uint32_t> &qubits) override;
+
     virtual void cz(uint32_t a, uint b) override;
     virtual double mzr_expectation(uint32_t a) override;
     virtual bool mzr(uint32_t a) override;

@@ -264,12 +264,9 @@ class CliffordState : public EntropyState {
       return outcome;
     }
 
-    void random_clifford(std::vector<uint32_t> &qubits) {
-      QuantumCircuit qc = ::random_clifford(qubits.size(), rng);
-      evolve(qc, qubits);
-    }
+    virtual void random_clifford(std::vector<uint32_t> &qubits)=0;
 
-    virtual std::string to_string() const { return ""; };
+    virtual std::string to_string() const=0;
 
     virtual double sparsity() const=0;
 

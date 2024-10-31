@@ -55,14 +55,14 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_sa
     double t1 = std::abs(expectation(p));
     double p1 = prob(t1);
 
-    PauliString q = p.copy();
+    PauliString q(p);
     mutation(q, rng);
 
     double t2 = std::abs(expectation(q));
     double p2 = prob(t2);
 
     if (randf() < p2 / p1) {
-      p = q.copy();
+      p = PauliString(q);
       return t2;
     }
 

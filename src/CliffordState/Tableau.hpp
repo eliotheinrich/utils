@@ -45,8 +45,8 @@ class Tableau {
       
       for (size_t i = 0; i < num_qubits; i++) {
         for (size_t j = 0; j < num_qubits; j++) {
-          M(i, j) = z(i + offset, j);
-          M(i, j + num_qubits) = x(i + offset, j);
+          M(i, j) = get_z(i + offset, j);
+          M(i, j + num_qubits) = get_x(i + offset, j);
         }
       }
 
@@ -85,16 +85,16 @@ class Tableau {
 
       int32_t r1 = track_destabilizers ? num_qubits : 0;
       for (uint32_t i = r1; i < num_rows(); i++) {
-        if (r(i) != other.r(i)) {
+        if (get_r(i) != other.get_r(i)) {
           return false;
         }
 
         for (uint32_t j = 0; j < num_qubits; j++) {
-          if (z(i, j) != other.z(i, j)) {
+          if (get_z(i, j) != other.get_z(i, j)) {
             return false;
           }
 
-          if (x(i, j) != other.x(i, j)) {
+          if (get_x(i, j) != other.get_x(i, j)) {
             return false;
           }
         }
@@ -116,7 +116,7 @@ class Tableau {
         bool z = k < sites.size();
         bool found_pivot = false;
         for (uint32_t i = row; i < r2; i++) {
-          if ((z && rows[i].z(c)) || (!z && rows[i].x(c))) {
+          if ((z && rows[i].get_z(c)) || (!z && rows[i].get_x(c))) {
             pivot_row = i;
             found_pivot = true;
             break;
@@ -131,7 +131,7 @@ class Tableau {
               continue;
             }
 
-            if ((z && rows[i].z(c)) || (!z && rows[i].x(c))) {
+            if ((z && rows[i].get_z(c)) || (!z && rows[i].get_x(c))) {
               rowsum(i, row);
             }
           }
@@ -152,7 +152,7 @@ class Tableau {
       uint32_t r = 0;
       for (uint32_t i = r1; i < r2; i++) {
         for (uint32_t j = 0; j < sites.size(); j++) {
-          if (rows[i].x(sites[j]) || rows[i].z(sites[j])) {
+          if (rows[i].get_x(sites[j]) || rows[i].get_z(sites[j])) {
             r++;
             break;
           }
@@ -263,6 +263,27 @@ class Tableau {
       s(a);
     }
 
+    void x(uint32_t a) {
+      validate_qubit(a);
+      for (uint32_t i = 0; i < num_rows(); i++) {
+        rows[i].x(a);
+      }
+    }
+
+    void y(uint32_t a) {
+      validate_qubit(a);
+      for (uint32_t i = 0; i < num_rows(); i++) {
+        rows[i].y(a);
+      }
+    }
+
+    void z(uint32_t a) {
+      validate_qubit(a);
+      for (uint32_t i = 0; i < num_rows(); i++) {
+        rows[i].z(a);
+      }
+    }
+
     void cx(uint32_t a, uint32_t b) {
       validate_qubit(a);
       validate_qubit(b);
@@ -286,7 +307,7 @@ class Tableau {
 
       for (uint32_t p = num_qubits; p < 2*num_qubits; p++) {
         // Suitable p identified; outcome is random
-        if (x(p, a)) { 
+        if (get_x(p, a)) { 
           return std::pair(false, p);
         }
       }
@@ -307,7 +328,7 @@ class Tableau {
       if (!deterministic) {
         bool outcome = rng() % 2;
         for (uint32_t i = 0; i < 2*num_qubits; i++) {
-          if (i != p && x(i, a)) {
+          if (i != p && get_x(i, a)) {
             rowsum(i, p);
           }
         }
@@ -325,7 +346,7 @@ class Tableau {
           rowsum(2*num_qubits, i + num_qubits);
         }
 
-        return r(2*num_qubits);
+        return get_r(2*num_qubits);
       }
     }
 
@@ -333,8 +354,8 @@ class Tableau {
       float nonzero = 0;
       for (uint32_t i = 0; i < num_rows(); i++) {
         for (uint32_t j = 0; j < num_qubits; j++) {
-          nonzero += rows[i].x(j);
-          nonzero += rows[i].z(j);
+          nonzero += rows[i].get_x(j);
+          nonzero += rows[i].get_z(j);
         }
       }
 
@@ -342,16 +363,16 @@ class Tableau {
     }
 
 
-    inline bool x(uint32_t i, uint32_t j) const { 
-      return rows[i].x(j); 
+    inline bool get_x(uint32_t i, uint32_t j) const { 
+      return rows[i].get_x(j); 
     }
 
-    inline bool z(uint32_t i, uint32_t j) const { 
-      return rows[i].z(j); 
+    inline bool get_z(uint32_t i, uint32_t j) const { 
+      return rows[i].get_z(j); 
     }
 
-    inline bool r(uint32_t i) const { 
-      return rows[i].r(); 
+    inline bool get_r(uint32_t i) const { 
+      return rows[i].get_r(); 
     }
 
     inline void set_x(uint32_t i, uint32_t j, bool v) { 

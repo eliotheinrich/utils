@@ -371,6 +371,10 @@ void QuantumGraphState::cz(uint32_t a, uint32_t b) {
   }
 }
 
+void QuantumGraphState::random_clifford(std::vector<uint32_t> &qubits) {
+  random_clifford_impl(qubits, rng, *this);
+}
+
 double QuantumGraphState::mzr_expectation(uint32_t a) {
   uint32_t basis = CONJUGATION_TABLE[graph.get_val(a)];
   bool positive = basis > 3;

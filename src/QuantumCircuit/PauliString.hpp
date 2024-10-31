@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unsupported/Eigen/KroneckerProduct>
+#include <fmt/ranges.h>
 
 template <typename T>
 static void remove_even_indices(std::vector<T> &v) {
@@ -38,6 +39,13 @@ class PauliString {
       bit_string = std::vector<uint32_t>(width, 0);
     }
 
+    PauliString(const PauliString& other) {
+      num_qubits = other.num_qubits;
+      bit_string = other.bit_string;
+      phase = other.phase;
+      width = other.width;
+    }
+
     PauliString(const std::vector<Pauli>& paulis) : PauliString(paulis.size()) { 
       for (size_t i = 0; i < paulis.size(); i++) {
         if (paulis[i] == Pauli::I) {
@@ -56,23 +64,23 @@ class PauliString {
       }
     }
 
-    static PauliString rand(uint32_t num_qubits, std::minstd_rand& r) {
+    static PauliString rand(uint32_t num_qubits, std::minstd_rand& rng) {
       PauliString p(num_qubits);
 
       for (uint32_t j = 0; j < p.width; j++) {
-        p.bit_string[j] = r();
+        p.bit_string[j] = rng();
       }
 
-      p.set_r(r() % 2);
+      p.set_r(rng() % 2);
 
       // Need to check that at least one bit is nonzero so that p is not the identity
       for (uint32_t j = 0; j < num_qubits; j++) {
-        if (p.xz(j)) {
+        if (p.get_xz(j)) {
           return p;
         }
       }
 
-      return PauliString::rand(num_qubits, r);
+      return PauliString::rand(num_qubits, rng);
     }
 
     static PauliString basis(uint32_t num_qubits, const std::string& P, uint32_t q, bool r) {
@@ -104,30 +112,23 @@ class PauliString {
       return PauliString::basis(num_qubits, P, q, false);
     }
 
-    PauliString copy() const {
-      PauliString p(num_qubits);
-      std::copy(bit_string.begin(), bit_string.end(), p.bit_string.begin());
-      p.set_r(r());
-      return p;
-    }
-
     PauliString substring(const std::vector<uint32_t>& sites, bool remove_qubits=false) const {
       size_t n = remove_qubits ? sites.size() : num_qubits;
       PauliString p(n);
 
       if (remove_qubits) {
         for (size_t i = 0; i < sites.size(); i++) {
-          p.set_x(i, x(sites[i]));
-          p.set_z(i, z(sites[i]));
+          p.set_x(i, get_x(sites[i]));
+          p.set_z(i, get_z(sites[i]));
         }
       } else {
         for (const auto q : sites) {
-          p.set_x(q, x(q));
-          p.set_z(q, z(q));
+          p.set_x(q, get_x(q));
+          p.set_z(q, get_z(q));
         }
       }
 
-      p.set_r(r());
+      p.set_r(get_r());
       return p;
     }
 
@@ -162,16 +163,16 @@ class PauliString {
     static int get_multiplication_phase(const PauliString& p1, const PauliString& p2) {
       int s = 0;
 
-      if (p1.r()) { 
+      if (p1.get_r()) { 
         s += 2; 
       }
 
-      if (p2.r()) { 
+      if (p2.get_r()) { 
         s += 2; 
       }
 
       for (uint32_t j = 0; j < p1.num_qubits; j++) {
-        s += PauliString::g(p1.xz(j), p2.xz(j));
+        s += PauliString::g(p1.get_xz(j), p2.get_xz(j));
       }
 
       return s;
@@ -223,16 +224,16 @@ class PauliString {
         return false;
       }
 
-      if (r() != rhs.r()) {
+      if (get_r() != rhs.get_r()) {
         return false;
       }
 
       for (uint32_t i = 0; i < num_qubits; i++) {
-        if (x(i) != rhs.x(i)) {
+        if (get_x(i) != rhs.get_x(i)) {
           return false;
         }
 
-        if (z(i) != rhs.z(i)) {
+        if (get_z(i) != rhs.get_z(i)) {
           return false;
         }
       }
@@ -286,8 +287,8 @@ class PauliString {
     }
 
     Pauli to_pauli(uint32_t i) const {
-      bool xi = x(i);
-      bool zi = z(i);
+      bool xi = get_x(i);
+      bool zi = get_z(i);
 
       if (xi && zi) {
         return Pauli::Y;
@@ -301,8 +302,8 @@ class PauliString {
     }
 
     std::string to_op(uint32_t i) const {
-      bool xi = x(i); 
-      bool zi = z(i);
+      bool xi = get_x(i); 
+      bool zi = get_z(i);
 
       if (xi && zi) {
         return "Y";
@@ -318,11 +319,11 @@ class PauliString {
     std::string to_string() const {
       std::string s = "[ ";
       for (uint32_t i = 0; i < num_qubits; i++) {
-        s += x(i) ? "1" : "0";
+        s += get_x(i) ? "1" : "0";
       }
 
       for (uint32_t i = 0; i < num_qubits; i++) {
-        s += z(i) ? "1" : "0";
+        s += get_z(i) ? "1" : "0";
       }
 
       s += " | ";
@@ -378,7 +379,7 @@ class PauliString {
 		}
 
     void s(uint32_t a) {
-      uint8_t xza = xz(a);
+      uint8_t xza = get_xz(a);
       bool xa = (xza >> 0u) & 1u;
       bool za = (xza >> 1u) & 1u;
 
@@ -395,7 +396,7 @@ class PauliString {
     }
 
     void h(uint32_t a) {
-      uint8_t xza = xz(a);
+      uint8_t xza = get_xz(a);
       bool xa = (xza >> 0u) & 1u;
       bool za = (xza >> 1u) & 1u;
 
@@ -406,12 +407,33 @@ class PauliString {
       set_z(a, xa);
     }
 
+    void x(uint32_t a) {
+      h(a);
+      s(a);
+      s(a);
+      h(a);
+    }
+
+    void y(uint32_t a) {
+      h(a);
+      s(a);
+      s(a);
+      h(a);
+      s(a);
+      s(a);
+    }
+
+    void z(uint32_t a) {
+      s(a);
+      s(a);
+    }
+
     void cx(uint32_t a, uint32_t b) {
-      uint8_t xza = xz(a);
+      uint8_t xza = get_xz(a);
       bool xa = (xza >> 0u) & 1u;
       bool za = (xza >> 1u) & 1u;
 
-      uint8_t xzb = xz(b);
+      uint8_t xzb = get_xz(b);
       bool xb = (xzb >> 0u) & 1u;
       bool zb = (xzb >> 1u) & 1u;
 
@@ -429,11 +451,11 @@ class PauliString {
     }
 
     bool commutes_at(PauliString &p, uint32_t i) const {
-      if ((x(i) == p.x(i)) && (z(i) == p.z(i))) { // operators are identical
+      if ((get_x(i) == p.get_x(i)) && (get_z(i) == p.get_z(i))) { // operators are identical
         return true;
-      } else if (!x(i) && !z(i)) { // this is identity
+      } else if (!get_x(i) && !get_z(i)) { // this is identity
         return true;
-      } else if (!p.x(i) && !p.z(i)) { // other is identity
+      } else if (!p.get_x(i) && !p.get_z(i)) { // other is identity
         return true;
       } else {
         return false; 
@@ -442,7 +464,7 @@ class PauliString {
 
     bool commutes(PauliString &p) const {
       if (num_qubits != p.num_qubits) {
-        throw std::invalid_argument("number of p does not have the same number of qubits.");
+        throw std::invalid_argument(fmt::format("p = {} has {} qubits and q = {} has {} qubits; cannot check commutation.", p.to_string_ops(), p.num_qubits, to_string_ops(), num_qubits));
       }
 
       uint32_t anticommuting_indices = 0u;
@@ -455,25 +477,23 @@ class PauliString {
       return anticommuting_indices % 2 == 0;
     }
 
-    // Returns the circuit which maps this PauliString onto ZII... if z or XII.. otherwise
-    QuantumCircuit reduce(bool z = true) const {
+    template <typename... Args>
+    void reduce(bool z, Args... args) const {
       PauliString p(*this);
-
-      QuantumCircuit circuit(num_qubits);
 
       if (z) {
         p.h(0);
-        circuit.add_gate("h", {0});
+        (args.first->h(args.second[0]), ...);
       }
 
       for (uint32_t i = 0; i < num_qubits; i++) {
-        if (p.z(i)) {
-          if (p.x(i)) {
+        if (p.get_z(i)) {
+          if (p.get_x(i)) {
             p.s(i);
-            circuit.add_gate("s", {i});
+            (args.first->s(args.second[i]), ...);
           } else {
             p.h(i);
-            circuit.add_gate("h", {i});
+            (args.first->h(args.second[i]), ...);
           }
         }
       }
@@ -481,16 +501,17 @@ class PauliString {
       // Step two
       std::vector<uint32_t> nonzero_idx;
       for (uint32_t i = 0; i < num_qubits; i++) {
-        if (p.x(i)) {
+        if (p.get_x(i)) {
           nonzero_idx.push_back(i);
         }
       }
+
       while (nonzero_idx.size() > 1) {
         for (uint32_t j = 0; j < nonzero_idx.size()/2; j++) {
           uint32_t q1 = nonzero_idx[2*j];
           uint32_t q2 = nonzero_idx[2*j+1];
           p.cx(q1, q2);
-          circuit.add_gate("cx", {q1, q2});
+          (args.first->cx(args.second[q1], args.second[q2]), ...);
         }
 
         remove_even_indices(nonzero_idx);
@@ -500,77 +521,70 @@ class PauliString {
       uint32_t ql = nonzero_idx[0];
       if (ql != 0) {
         for (uint32_t i = 0; i < num_qubits; i++) {
-          if (p.x(i)) {
+          if (p.get_x(i)) {
             p.cx(0, ql);
             p.cx(ql, 0);
             p.cx(0, ql);
 
-            circuit.add_gate("cx", {0, ql});
-            circuit.add_gate("cx", {ql, 0});
-            circuit.add_gate("cx", {0, ql});
+            (args.first->cx(args.second[0], args.second[ql]), ...);
+            (args.first->cx(args.second[ql], args.second[0]), ...);
+            (args.first->cx(args.second[0], args.second[ql]), ...);
 
             break;
           }
         }
       }
 
-      if (p.r()) {
+      if (p.get_r()) {
         // Apply Y gate to tableau
-        p.h(0);
-        p.s(0);
-        p.s(0);
-        p.h(0);
-        p.s(0);
-        p.s(0);
-
-        circuit.add_gate("h", {0});
-        circuit.add_gate("s", {0});
-        circuit.add_gate("s", {0});
-        circuit.add_gate("h", {0});
-        circuit.add_gate("s", {0});
-        circuit.add_gate("s", {0});
+        p.y(0);
+        (args.first->y(args.second[0]), ...);
       }
 
       if (z) {
         // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
-        circuit.add_gate("h", {0});
+        (args.first->h(args.second[0]), ...);
       }
-
-      return circuit;
     }
 
     // Returns the circuit which maps this PauliString onto p
     QuantumCircuit transform(PauliString const &p) const {
-      QuantumCircuit c1 = reduce();
-      QuantumCircuit c2 = p.reduce().adjoint();
+      std::vector<uint32_t> qubits(p.num_qubits);
+      std::iota(qubits.begin(), qubits.end(), 0);
 
-      c1.append(c2);
+      QuantumCircuit qc1(p.num_qubits);
+      reduce(true, std::make_pair(&qc1, qubits));
 
-      return c1;
+      QuantumCircuit qc2(p.num_qubits);
+      p.reduce(true, std::make_pair(&qc2, qubits));
+
+      qc1.append(qc2.adjoint());
+
+      return qc1;
     }
 
     // It is slightly faster (~20-30%) to query both the x and z bits at a given site
     // at the same time, storing them in the first two bits of the return value.
-    inline uint8_t xz(uint32_t i) const {
+    inline uint8_t get_xz(uint32_t i) const {
       uint32_t word = bit_string[i / 16u];
       uint32_t bit_ind = 2u*(i % 16u);
 
       return 0u | (((word >> bit_ind) & 3u) << 0u);
     }
 
-    inline bool x(uint32_t i) const { 
+    inline bool get_x(uint32_t i) const { 
       uint32_t word = bit_string[i / 16u];
       uint32_t bit_ind = 2u*(i % 16u);
       return (word >> bit_ind) & 1u;
     }
 
-    inline bool z(uint32_t i) const { 
+    inline bool get_z(uint32_t i) const { 
       uint32_t word = bit_string[i / 16u];
       uint32_t bit_ind = 2u*(i % 16u) + 1u;
       return (word >> bit_ind) & 1u; 
     }
 
-    inline bool r() const { 
+    inline bool get_r() const { 
       return phase; 
     }
 
@@ -602,4 +616,136 @@ class PauliString {
       phase = v; 
     }
 };
+
+
+template <class T>
+void single_qubit_random_clifford_impl(T& qobj, size_t q, size_t r) {
+  // r == 0 is identity, so do nothing in this case
+  if (r == 1) {
+    qobj.x(q);
+  } else if (r == 2) {
+    qobj.y(q);
+  } else if (r == 3) {
+    qobj.z(q);
+  } else if (r == 4) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+  } else if (r == 5) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 6) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 7) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.z(q);
+  } else if (r == 8) {
+    qobj.h(q);
+    qobj.s(q);
+  } else if (r == 9) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 10) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 11) {
+    qobj.h(q);
+    qobj.s(q);
+    qobj.z(q);
+  } else if (r == 12) {
+    qobj.h(q);
+  } else if (r == 13) {
+    qobj.h(q);
+    qobj.x(q);
+  } else if (r == 14) {
+    qobj.h(q);
+    qobj.y(q);
+  } else if (r == 15) {
+    qobj.h(q);
+    qobj.z(q);
+  } else if (r == 16) {
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+  } else if (r == 17) {
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 18) {
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 19) {
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.z(q);
+  } else if (r == 20) {
+    qobj.s(q);
+  } else if (r == 21) {
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 22) {
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 23) {
+    qobj.s(q);
+    qobj.z(q);
+  }
+}
+
+// Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
+template <typename... Args>
+void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::minstd_rand& rng, Args&... args) {
+  size_t num_qubits = qubits.size();
+
+  // If only acting on one qubit, can easily lookup from a table
+  if (num_qubits == 1) {
+    size_t r = rng() % 24;
+    (single_qubit_random_clifford_impl(args, {qubits[0]}, r), ...);
+  }
+
+  std::vector<uint32_t> qubits_(num_qubits);
+  std::iota(qubits_.begin(), qubits_.end(), 0);
+
+  PauliString p1 = PauliString::rand(num_qubits, rng);
+  PauliString p2 = PauliString::rand(num_qubits, rng);
+  while (p1.commutes(p2)) {
+    p2 = PauliString::rand(num_qubits, rng);
+  }
+
+  p1.reduce(false, std::make_pair(&args, qubits)..., std::make_pair(&p2, qubits_));
+
+  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
+  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
+
+  if (p2 != z1p && p2 != z1m) {
+    p2.reduce(false, std::make_pair(&args, qubits)...);
+  }
+}
+
+template <typename... Args>
+void random_clifford_impl(const std::vector<uint32_t>& qubits, std::minstd_rand& rng, Args&... args) {
+  std::vector<uint32_t> qubits_(qubits.begin(), qubits.end());
+
+  for (uint32_t i = 0; i < qubits.size(); i++) {
+    random_clifford_iteration_impl(qubits_, rng, args...);
+    qubits_.pop_back();
+  }
+}
 

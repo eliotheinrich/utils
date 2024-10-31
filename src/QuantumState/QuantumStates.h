@@ -13,6 +13,37 @@
 #define QS_ATOL 1e-8
 
 namespace quantumstate_utils {
+  constexpr double sqrt2i_ = 0.707106781186547524400844362104849;
+  constexpr std::complex<double> i_ = std::complex<double>(0.0, 1.0);
+
+  struct H { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << sqrt2i_, sqrt2i_, sqrt2i_, -sqrt2i_).finished(); };
+
+  struct X { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, 1.0, 1.0, 0.0).finished(); };
+  struct Y { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, -i_, i_, 0.0).finished(); };
+  struct Z { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -1.0).finished(); };
+
+  struct sqrtX { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (1.0 - i_)/2.0, (1.0 - i_)/2.0, (1.0 + i_)/2.0).finished(); };
+  struct sqrtY { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (-1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0).finished(); };
+  struct sqrtZ { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, i_).finished(); };
+
+  struct sqrtXd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
+  struct sqrtYd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 - i_)/2.0, (-1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
+  struct sqrtZd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -i_).finished(); };
+
+  struct T { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 + i_)).finished(); };
+  struct Td { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 - i_)).finished(); };
+
+  struct CX { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
+                                                                                  0, 0, 0, 1, 
+                                                                                  0, 0, 1, 0, 
+                                                                                  0, 1, 0, 0).finished(); };
+  struct CY { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
+                                                                                  0, 0, 0, -i_, 
+                                                                                  0, 0, 1, 0, 
+                                                                                  0, i_, 0, 0).finished(); };
+  struct CZ { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1).finished(); };
+  struct SWAP { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1).finished(); };
+
 	static inline bool print_congruence(uint32_t z1, uint32_t z2, const std::vector<uint32_t>& pos, bool outcome) {
 		std::bitset<8> b1(z1);
 		std::bitset<8> b2(z2);
@@ -163,6 +194,53 @@ class QuantumState : public EntropyState {
 
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits)=0;
 
+    template <typename G>
+    void evolve_one_qubit_gate(uint32_t q) {
+      evolve(G::value, q);
+    }
+
+    #define DEFINE_ONE_QUBIT_GATE(name, struct)             \
+    void name(uint32_t q) {                                 \
+      evolve_one_qubit_gate<quantumstate_utils::struct>(q); \
+    }
+
+    #define DEFINE_ALL_ONE_QUBIT_GATES     \
+    DEFINE_ONE_QUBIT_GATE(h, H);           \
+    DEFINE_ONE_QUBIT_GATE(x, X);           \
+    DEFINE_ONE_QUBIT_GATE(y, Y);           \
+    DEFINE_ONE_QUBIT_GATE(z, Z);           \
+    DEFINE_ONE_QUBIT_GATE(sqrtX, sqrtX);   \
+    DEFINE_ONE_QUBIT_GATE(sqrtY, sqrtY);   \
+    DEFINE_ONE_QUBIT_GATE(sqrtZ, sqrtZ);   \
+    DEFINE_ONE_QUBIT_GATE(sqrtXd, sqrtXd); \
+    DEFINE_ONE_QUBIT_GATE(sqrtYd, sqrtYd); \
+    DEFINE_ONE_QUBIT_GATE(sqrtZd, sqrtZd); \
+    DEFINE_ONE_QUBIT_GATE(s, sqrtZ);       \
+    DEFINE_ONE_QUBIT_GATE(sd, sqrtZd);     \
+
+    template <typename G>
+    void evolve_two_qubit_gate(uint32_t q1, uint32_t q2) { 
+      evolve(G::value, {q1, q2});
+    }
+
+    #define DEFINE_TWO_QUBIT_GATE(name, struct)                  \
+    void name(uint32_t q1, uint32_t q2) {                        \
+      evolve_two_qubit_gate<quantumstate_utils::struct>(q1, q2); \
+    }
+
+    #define DEFINE_ALL_TWO_QUBIT_GATES       \
+    DEFINE_TWO_QUBIT_GATE(cx, CX)     \
+    DEFINE_TWO_QUBIT_GATE(cy, CY)     \
+    DEFINE_TWO_QUBIT_GATE(cz, CZ)     \
+    DEFINE_TWO_QUBIT_GATE(swap, SWAP)
+
+    DEFINE_ALL_ONE_QUBIT_GATES
+    DEFINE_ALL_TWO_QUBIT_GATES
+
+    void random_clifford(const std::vector<uint32_t> &qubits) {
+      random_clifford_impl(qubits, rng, *this);
+    }
+
 		virtual void evolve(const Eigen::MatrixXcd& gate) {
 			std::vector<uint32_t> qbits(num_qubits);
 			std::iota(qbits.begin(), qbits.end(), 0);
@@ -223,10 +301,10 @@ class QuantumState : public EntropyState {
       evolve(qc_mapped);
     }
 
-    void random_clifford(std::vector<uint32_t> &qubits) {
-      QuantumCircuit qc = ::random_clifford(qubits.size(), rng);
-      evolve(qc, qubits);
-    }
+    //void random_clifford(std::vector<uint32_t> &qubits) {
+    //  QuantumCircuit qc = ::random_clifford(qubits.size(), rng);
+    //  evolve(qc, qubits);
+    //}
 
 		virtual bool mzr(uint32_t q)=0;
 		
