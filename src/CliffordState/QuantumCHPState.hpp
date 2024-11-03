@@ -22,7 +22,7 @@ class QuantumCHPState : public CliffordState {
     QuantumCHPState(const std::string &s) : CliffordState(get_num_qubits(s)) {
       auto substrings = dataframe::utils::split(s, "\n");
 
-      tableau = Tableau(system_size());
+      tableau = Tableau(num_qubits);
 
       for (uint32_t i = 0; i < substrings.size()-1; i++) {
         substrings[i] = substrings[i].substr(1, substrings[i].size() - 3);
@@ -31,9 +31,9 @@ class QuantumCHPState : public CliffordState {
         auto row = chars[0];
         bool r = chars[1][0] == '1';
 
-        for (uint32_t j = 0; j < system_size(); j++) {
+        for (uint32_t j = 0; j < num_qubits; j++) {
           tableau.set_x(i, j, row[j] == '1');
-          tableau.set_z(i, j, row[j + system_size()] == '1');
+          tableau.set_z(i, j, row[j + num_qubits] == '1');
         }
 
         tableau.set_r(i, r);
@@ -75,23 +75,23 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void cx(uint32_t a, uint32_t b) override {
-      tableau.cx(a, b);
+      tableau.cx(b, a);
     }
 
     virtual void cy(uint32_t a, uint32_t b) override {
-      tableau.s(b);
-      tableau.h(b);
-      tableau.cz(a, b);
-      tableau.h(b);
-      tableau.s(b);
-      tableau.s(b);
-      tableau.s(b);
+      tableau.s(a);
+      tableau.h(a);
+      tableau.cz(b, a);
+      tableau.h(a);
+      tableau.s(a);
+      tableau.s(a);
+      tableau.s(a);
     }
 
     virtual void cz(uint32_t a, uint32_t b) override {
-      tableau.h(b);
-      tableau.cx(a, b);
-      tableau.h(b);
+      tableau.h(a);
+      tableau.cx(b, a);
+      tableau.h(a);
     }
 
     virtual void random_clifford(std::vector<uint32_t> &qubits) override {
@@ -116,7 +116,7 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override {
-      uint32_t system_size = this->system_size();
+      uint32_t system_size = this->num_qubits;
       uint32_t partition_size = qubits.size();
 
       // Optimization; if partition size is larger than half the system size, 

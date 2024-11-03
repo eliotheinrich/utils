@@ -51,6 +51,7 @@ NB_MODULE(pyqtools_bindings, m) {
 
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<uint32_t>())
+    .def(nanobind::init<const std::string&>())
     .def("__str__", &PauliString::to_string_ops)
     .def("__mul__", &PauliString::operator*)
     .def("__rmul__", &PauliString::operator*)

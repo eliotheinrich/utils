@@ -46,6 +46,42 @@ class PauliString {
       width = other.width;
     }
 
+    static uint32_t process_pauli_string(const std::string& paulis) {
+      uint32_t num_qubits = paulis.size();
+      if (paulis[0] == '+' || paulis[0] == '-') {
+        num_qubits--;
+      }
+      return num_qubits;
+    }
+
+    PauliString(const std::string& paulis) : PauliString(process_pauli_string(paulis)) {
+      std::string s = paulis;
+      if (s[0] == '-') {
+        phase = true;
+        s = s.substr(1);
+      } else if (s[0] == '+') {
+        s = s.substr(1);
+      }
+
+      for (size_t i = 0; i < num_qubits; i++) {
+        if (std::toupper(s[i]) == 'I') {
+          set_x(i, false);
+          set_z(i, false);
+        } else if (std::toupper(s[i]) == 'X') {
+          set_x(i, true);
+          set_z(i, false);
+        } else if (std::toupper(s[i]) == 'Y') {
+          set_x(i, true);
+          set_z(i, true);
+        } else if (std::toupper(s[i]) == 'Z') {
+          set_x(i, false);
+          set_z(i, true);
+        } else {
+          throw std::runtime_error(fmt::format("Invalid string {} used to create PauliString.", paulis));
+        }
+      }
+    }
+
     PauliString(const std::vector<Pauli>& paulis) : PauliString(paulis.size()) { 
       for (size_t i = 0; i < paulis.size(); i++) {
         if (paulis[i] == Pauli::I) {
@@ -130,6 +166,20 @@ class PauliString {
 
       p.set_r(get_r());
       return p;
+    }
+
+    PauliString superstring(const std::vector<uint32_t>& sites, size_t new_num_qubits) const {
+      if (sites.size() != num_qubits) {
+        throw std::runtime_error(fmt::format("When constructing a superstring Pauli, provided sites must have same size as num_qubits. P = {}, sites = {}.", to_string_ops(), sites));
+      }
+      std::vector<Pauli> paulis(new_num_qubits, Pauli::I);
+      for (size_t i = 0; i < num_qubits; i++) {
+        uint32_t q = sites[i];
+
+        paulis[q] = to_pauli(i);
+      }
+
+      return PauliString(paulis);
     }
 
     static int g(uint8_t xz1, uint8_t xz2) {
@@ -243,6 +293,11 @@ class PauliString {
 
     bool operator!=(const PauliString &rhs) const { 
       return !(this->operator==(rhs)); 
+    }
+
+    friend std::ostream& operator<< (std::ostream& stream, const PauliString& p) {
+      stream << p.to_string_ops();
+      return stream;
     }
 
     std::vector<uint32_t>::iterator begin() {
@@ -618,6 +673,18 @@ class PauliString {
 };
 
 
+template <>
+struct fmt::formatter<PauliString> {
+  template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+    auto format(const PauliString& p, FormatContext& ctx) {
+      return format_to(ctx.out(), "{}", p.to_string_ops());
+    }
+};
+
+
 template <class T>
 void single_qubit_random_clifford_impl(T& qobj, size_t q, size_t r) {
   // r == 0 is identity, so do nothing in this case
@@ -735,7 +802,7 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
   PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
 
   if (p2 != z1p && p2 != z1m) {
-    p2.reduce(false, std::make_pair(&args, qubits)...);
+    p2.reduce(true, std::make_pair(&args, qubits)...);
   }
 }
 

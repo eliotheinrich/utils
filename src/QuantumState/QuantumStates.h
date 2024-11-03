@@ -18,6 +18,7 @@ namespace quantumstate_utils {
 
   struct H { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << sqrt2i_, sqrt2i_, sqrt2i_, -sqrt2i_).finished(); };
 
+  struct I { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, 1.0).finished(); };
   struct X { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, 1.0, 1.0, 0.0).finished(); };
   struct Y { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, -i_, i_, 0.0).finished(); };
   struct Z { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -1.0).finished(); };
@@ -112,6 +113,8 @@ class QuantumState : public EntropyState {
 	protected:
     std::minstd_rand rng;
 
+
+	public:
     uint32_t rand() { 
       return this->rng(); 
     }
@@ -119,8 +122,6 @@ class QuantumState : public EntropyState {
     double randf() { 
       return double(rand())/double(RAND_MAX); 
     }
-
-	public:
 		uint32_t num_qubits;
 		uint32_t basis;
 
@@ -188,7 +189,7 @@ class QuantumState : public EntropyState {
       return sample_paulis_montecarlo(num_samples, 5*num_qubits, prob);
     }
 
-    virtual std::complex<double> expectation(const PauliString& p) const=0;
+    virtual double expectation(const PauliString& p) const=0;
 
 		virtual std::string to_string() const=0;
 
@@ -343,6 +344,8 @@ class DensityMatrix : public QuantumState {
 
     DensityMatrix(const MatrixProductState& mps);
 
+    DensityMatrix(const MatrixProductOperator& mpo);
+
 		DensityMatrix(const Eigen::MatrixXcd& data);
 
 		virtual std::string to_string() const override;
@@ -355,7 +358,7 @@ class DensityMatrix : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
 
-    virtual std::complex<double> expectation(const PauliString& p) const override;
+    virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) const;
 
@@ -420,7 +423,7 @@ class Statevector : public QuantumState {
       return DensityMatrix(*this).magic_mutual_information_exact(qubitsA, qubitsB, num_samples);
     }
 
-    virtual std::complex<double> expectation(const PauliString& p) const override;
+    virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
 
@@ -492,7 +495,7 @@ class UnitaryState : public QuantumState {
       return DensityMatrix(*this).magic_mutual_information_exact(qubitsA, qubitsB, num_samples);
     }
 
-    virtual std::complex<double> expectation(const PauliString& p) const override {
+    virtual double expectation(const PauliString& p) const override {
       return DensityMatrix(*this).expectation(p);
     }
 
@@ -539,6 +542,7 @@ class MatrixProductState : public QuantumState {
     static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
 
     virtual void seed(int i) override;
+    void seed(int i, int j);
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
@@ -549,7 +553,7 @@ class MatrixProductState : public QuantumState {
     virtual magic_t magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) override;
     virtual magic_t magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
 
-    virtual std::complex<double> expectation(const PauliString& p) const override;
+    virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
 
 		void print_mps(bool print_data) const;
@@ -576,6 +580,8 @@ class MatrixProductState : public QuantumState {
 		virtual bool mzr(uint32_t q) override;
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
+
+    bool debug_tests();
 };
 
 class MatrixProductOperatorImpl;
@@ -596,7 +602,7 @@ class MatrixProductOperator : public QuantumState {
 		Eigen::MatrixXcd coefficients() const;
     double trace() const;
 
-    virtual std::complex<double> expectation(const PauliString& p) const override;
+    virtual double expectation(const PauliString& p) const override;
 
     virtual std::vector<double> probabilities() const override {
       return DensityMatrix(coefficients()).probabilities();

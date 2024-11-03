@@ -25,6 +25,9 @@ DensityMatrix::DensityMatrix(const UnitaryState& U) : DensityMatrix(U.num_qubits
 DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {
 }
 
+DensityMatrix::DensityMatrix(const MatrixProductOperator& mpo) : DensityMatrix(mpo.coefficients()) {
+}
+
 DensityMatrix::DensityMatrix(const Eigen::MatrixXcd& data) : data(data) {
   size_t nrows = data.rows();
   size_t ncols = data.cols();
@@ -47,8 +50,6 @@ std::string DensityMatrix::to_string() const {
 }
 
 DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_qubits) const {
-	uint32_t num_qubits = std::log2(data.rows());
-
 	std::vector<uint32_t> remaining_qubits;
 	for (uint32_t q = 0; q < num_qubits; q++) {
 		if (!std::count(traced_qubits.begin(), traced_qubits.end(), q)) {
@@ -157,9 +158,9 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 	}
 }
 
-std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
+double DensityMatrix::expectation(const PauliString &p) const {
   Eigen::MatrixXcd P = p.to_matrix();
-  return expectation(P);
+  return expectation(P).real();
 }
 
 std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) const {
@@ -250,12 +251,7 @@ std::vector<bool> DensityMatrix::mzr_all() {
 }
 
 bool DensityMatrix::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
-  std::vector<Pauli> paulis(num_qubits, Pauli::I);
-  for (size_t i = 0; i < qubits.size(); i++) {
-    paulis[i] = p.to_pauli(i);
-  }
-
-  PauliString p_(paulis);
+  PauliString p_ = p.superstring(qubits, num_qubits);
   Eigen::MatrixXcd matrix = p_.to_matrix();
   Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
 

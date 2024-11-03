@@ -63,9 +63,13 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
 }
 
 
-std::complex<double> Statevector::expectation(const PauliString& p) const {
+double Statevector::expectation(const PauliString& p) const {
+  if (p.num_qubits != num_qubits) {
+    throw std::runtime_error(fmt::format("P = {} has {} qubits but state has {} qubits. Cannot compute expectation.", p, p.num_qubits, num_qubits));
+  }
+
   Eigen::MatrixXcd pm = p.to_matrix();
-  return expectation(pm);
+  return expectation(pm).real();
 }
 
 std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
@@ -74,9 +78,8 @@ std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const s
 }
 
 std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m) const {
-  Statevector other(num_qubits);
+  Statevector other(*this);
   other.evolve(m);
-
   return inner(other);
 }
 
@@ -129,54 +132,52 @@ bool Statevector::mzr(uint32_t q) {
 
 bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
   if (qubits.size() != p.num_qubits) {
-    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
   }
 
-  std::vector<Pauli> paulis(num_qubits, Pauli::I);
-  for (size_t i = 0; i < qubits.size(); i++) {
-    paulis[i] = p.to_pauli(i);
-  }
+  Eigen::MatrixXcd pm = p.to_matrix();
+  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(1u << qubits.size(), 1u << qubits.size());
 
-  PauliString p_(paulis);
-  Eigen::MatrixXcd matrix = p_.to_matrix();
-  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
+  Eigen::MatrixXcd proj0 = (id + pm)/2.0;
+  Eigen::MatrixXcd proj1 = (id - pm)/2.0;
 
-  double prob_zero = std::abs(expectation((id + matrix)/2.0));
+  double prob_zero = std::abs(expectation(proj0, qubits));
 
-  bool outcome = randf() >= prob_zero;
+  double r = randf();
+  bool outcome = r >= prob_zero;
 
-  Eigen::MatrixXcd proj0 = (id + matrix)/(2.0*std::sqrt(prob_zero));
-  Eigen::MatrixXcd proj1 = (id - matrix)/(2.0*std::sqrt(1.0 - prob_zero));
+  proj0 = proj0/std::sqrt(prob_zero);
+  proj1 = proj1/std::sqrt(1.0 - prob_zero);
+
   Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
 
-  evolve(proj);
+  evolve(proj, qubits);
   normalize();
 
   return outcome;
 }
 
 bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
-  std::vector<Pauli> paulis(num_qubits, Pauli::I);
-  for (size_t i = 0; i < qubits.size(); i++) {
-    paulis[i] = p.to_pauli(i);
-  }
+  PauliString p_ = p.superstring(qubits, num_qubits);
 
-  PauliString p_(paulis);
-  Eigen::MatrixXcd matrix = p_.to_matrix();
-  Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
+  auto pm = p.to_matrix();
+  auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+  Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-  double prob_zero = std::abs(expectation((id + matrix)/2.0));
+  double prob_zero = std::abs(expectation(proj0, qubits));
 
-  bool outcome = randf() >= prob_zero;
+  double r = randf();
+  bool outcome = r >= prob_zero;
+  //std::cout << fmt::format("From Statevector: r = {}, prob_zero = {}, outcome = {}\n", r, prob_zero, outcome);
 
-  Eigen::MatrixXcd t = matrix;
+  Eigen::MatrixXcd t = pm;
   if (outcome) {
     t = -t;
   }
 
   Eigen::MatrixXcd proj = (beta*t).exp();
 
-  evolve(proj);
+  evolve(proj, qubits);
   normalize();
 
   return outcome;
@@ -209,7 +210,7 @@ void Statevector::evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_
 
 void Statevector::evolve(const Eigen::MatrixXcd &gate) {
   if (!(gate.rows() == data.size() && gate.cols() == data.size())) {
-    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+    throw std::invalid_argument("Invalid gate dimensions for provided qubits. Can't do Statevector.evolve.");
   }
 
   data = gate*data;

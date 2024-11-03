@@ -146,8 +146,6 @@ Statevector QuantumGraphState::to_statevector() const {
   Eigen::Matrix2cd sqrtZ; sqrtZ << 1, 0, 0, std::complex<double>(0.0, 1.0);
   Eigen::Matrix4cd CZ; CZ << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1;
 
-  uint32_t num_qubits = system_size();
-
   Statevector state(num_qubits);
   for (uint32_t i = 0; i < num_qubits; i++) {
     state.QuantumState::evolve(static_cast<Eigen::MatrixXcd>(H), i);

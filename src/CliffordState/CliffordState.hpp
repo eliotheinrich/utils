@@ -21,9 +21,10 @@ static inline CliffordType parse_clifford_type(std::string s) {
 
 class CliffordState : public EntropyState {
   public:
+    size_t num_qubits;
     CliffordState()=default;
 
-    CliffordState(uint32_t num_qubits, int seed=-1) : EntropyState(num_qubits) {
+    CliffordState(uint32_t num_qubits, int seed=-1) : EntropyState(num_qubits), num_qubits(num_qubits) {
       if (seed == -1) {
         thread_local std::random_device rd;
         rng = std::minstd_rand(rd());
@@ -41,17 +42,13 @@ class CliffordState : public EntropyState {
 
     virtual ~CliffordState() {}
 
-    uint32_t system_size() const { 
-      return EntropyState::system_size; 
-    }
-
     void evolve(const QuantumCircuit& qc, const std::vector<uint32_t>& qubits) {
       if (qubits.size() != qc.num_qubits) {
         throw std::runtime_error("Provided qubits do not match size of circuit.");
       }
 
       QuantumCircuit qc_mapped(qc);
-      qc_mapped.resize(system_size());
+      qc_mapped.resize(num_qubits);
       qc_mapped.apply_qubit_map(qubits);
       
       evolve(qc_mapped);
@@ -169,17 +166,17 @@ class CliffordState : public EntropyState {
     virtual void cz(uint32_t a, uint32_t b)=0;
 
     virtual void cx(uint32_t a, uint32_t b) {
-      h(b);
-      cz(a, b);
-      h(b);
+      h(a);
+      cz(b, a);
+      h(a);
     }
 
     virtual void cy(uint32_t a, uint32_t b) {
-      s(b);
-      h(b);
-      cz(a, b);
-      h(b);
-      sd(b);
+      s(a);
+      h(a);
+      cz(b, a);
+      h(a);
+      sd(a);
     }
 
     virtual void swap(uint32_t a, uint32_t b) {
@@ -206,11 +203,11 @@ class CliffordState : public EntropyState {
     virtual double mzr_expectation() {
       double e = 0.0;
 
-      for (uint32_t i = 0; i < system_size(); i++) {
+      for (uint32_t i = 0; i < num_qubits; i++) {
         e += mzr_expectation(i);
       }
 
-      return e/system_size();
+      return e/num_qubits;
     }
 
     virtual double mxr_expectation(uint32_t a) {
@@ -222,11 +219,11 @@ class CliffordState : public EntropyState {
     virtual double mxr_expectation() {
       double e = 0.0;
 
-      for (uint32_t i = 0; i < system_size(); i++) {
+      for (uint32_t i = 0; i < num_qubits; i++) {
         e += mxr_expectation(i);
       }
 
-      return e/system_size();
+      return e/num_qubits;
     }
 
     virtual double myr_expectation(uint32_t a) {
@@ -240,11 +237,11 @@ class CliffordState : public EntropyState {
     virtual double myr_expectation() {
       double e = 0.0;
 
-      for (uint32_t i = 0; i < system_size(); i++) {
+      for (uint32_t i = 0; i < num_qubits; i++) {
         e += myr_expectation(i);
       }
 
-      return e/system_size();
+      return e/num_qubits;
     }
 
     virtual bool mzr(uint32_t a)=0;

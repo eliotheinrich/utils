@@ -29,12 +29,21 @@ class QuantumCircuit {
     }
 
     std::string to_string() const;
+    friend std::ostream& operator<<(std::ostream& stream, const QuantumCircuit& qc) {
+      stream << qc.to_string();
+      return stream;
+    }
 
     uint32_t num_params() const;
     uint32_t length() const;
 
     bool contains_measurement() const;
     bool is_clifford() const;
+
+    template <typename... QuantumStates>
+    void apply(QuantumStates&... states) const {
+      (states.evolve(*this), ...);
+    }
 
     void apply_qubit_map(const std::vector<uint32_t>& qubits);
 
@@ -47,15 +56,36 @@ class QuantumCircuit {
     void add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits);
     void add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit);
 
-    void h(uint32_t q) { }
-    void s(uint32_t q) { }
-    void x(uint32_t q) { }
-    void y(uint32_t q) { }
-    void z(uint32_t q) { }
-    void cx(uint32_t q1, uint32_t q2) { }
-    void cy(uint32_t q1, uint32_t q2) { }
-    void cz(uint32_t q1, uint32_t q2) { }
-    void swap(uint32_t q1, uint32_t q2) { }
+    void h(uint32_t q) {
+      add_gate("h", {q});
+    }
+    void s(uint32_t q) {
+      add_gate("s", {q});
+    }
+    void x(uint32_t q) {
+      add_gate("x", {q});
+    }
+    void y(uint32_t q) {
+      add_gate("y", {q});
+    }
+    void z(uint32_t q) {
+      add_gate("z", {q});
+    }
+    void cx(uint32_t q1, uint32_t q2) {
+      add_gate("cx", {q1, q2});
+    }
+    void cy(uint32_t q1, uint32_t q2) {
+      add_gate("cy", {q1, q2});
+    }
+    void cz(uint32_t q1, uint32_t q2) {
+      add_gate("cz", {q1, q2});
+    }
+    void swap(uint32_t q1, uint32_t q2) {
+      add_gate("swap", {q1, q2});
+    }
+    void mzr(uint32_t q) {
+      add_measurement(q);
+    }
 
     void append(const QuantumCircuit& other);
     void append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits);
@@ -67,6 +97,18 @@ class QuantumCircuit {
 
     Eigen::MatrixXcd to_matrix(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
 };
+
+template <>
+struct fmt::formatter<QuantumCircuit> {
+  template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+    auto format(const QuantumCircuit& qc, FormatContext& ctx) {
+      return format_to(ctx.out(), "{}", qc.to_string());
+    }
+};
+
 
 // --- Library for building common circuits --- //
 
