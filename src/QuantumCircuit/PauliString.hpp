@@ -499,6 +499,16 @@ class PauliString {
       set_z(a, za != zb);
     }
 
+    void cy(uint32_t a, uint32_t b) {
+      s(a);
+      h(a);
+      cz(b, a);
+      h(a);
+      s(a);
+      s(a);
+      s(a);
+    }
+
     void cz(uint32_t a, uint32_t b) {
       h(b);
       cx(a, b);

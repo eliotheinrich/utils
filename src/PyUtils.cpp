@@ -50,7 +50,6 @@ NB_MODULE(pyqtools_bindings, m) {
                                  0, 0, 0, 1;
 
   nanobind::class_<PauliString>(m, "PauliString")
-    .def(nanobind::init<uint32_t>())
     .def(nanobind::init<const std::string&>())
     .def("__str__", &PauliString::to_string_ops)
     .def("__mul__", &PauliString::operator*)
@@ -58,22 +57,31 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("__eq__", &PauliString::operator==)
     .def("__neq__", &PauliString::operator!=)
     .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
-    .def("copy", &PauliString::copy)
     .def("substring", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, true); })
     .def("substring_retain", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, false); })
+    .def("x", &PauliString::x)
+    .def("y", &PauliString::y)
+    .def("z", &PauliString::z)
     .def("s", [](PauliString& self, uint32_t q) { self.s(q); })
     .def("sd", [](PauliString& self, uint32_t q) { self.sd(q); })
     .def("h", [](PauliString& self, uint32_t q) { self.h(q); })
     .def("cx", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cx(q1, q2); })
+    .def("cy", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cy(q1, q2); })
     .def("cz", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cz(q1, q2); })
     .def("commutes", &PauliString::commutes)
     .def("set_x", &PauliString::set_x)
     .def("set_x", [](PauliString& self, size_t i, size_t v) { self.set_x(i, static_cast<bool>(v)); })
     .def("set_z", &PauliString::set_z)
     .def("set_z", [](PauliString& self, size_t i, size_t v) { self.set_z(i, static_cast<bool>(v)); })
-    .def("x", &PauliString::x)
-    .def("z", &PauliString::z)
-    .def("reduce", &PauliString::reduce);
+    .def("get_x", &PauliString::get_x)
+    .def("get_z", &PauliString::get_z)
+    .def("reduce", [](const PauliString& self, bool z) { 
+        QuantumCircuit qc(self.num_qubits);
+        std::vector<uint32_t> qubits(self.num_qubits);
+        std::iota(qubits.begin(), qubits.end(), 0);
+        self.reduce(z, std::make_pair(&qc, qubits));
+        return qc;
+      }, "z"_a = true);
 
   m.def("random_paulistring", [](uint32_t num_qubits) {
     thread_local std::random_device gen;
@@ -255,14 +263,14 @@ NB_MODULE(pyqtools_bindings, m) {
 
   nanobind::class_<QuantumCHPState>(m, "QuantumCHPState")
     .def(nanobind::init<uint32_t>())
-    .def("system_size", &QuantumCHPState::system_size)
+    .def_ro("num_qubits", &QuantumCHPState::num_qubits)
     .def("__str__", &QuantumCHPState::to_string)
     .def("set_x", &QuantumCHPState::set_x)
     .def("set_x", [](QuantumCHPState& self, size_t i, size_t j, size_t v) { self.set_x(i, j, static_cast<bool>(v)); })
     .def("set_z", &QuantumCHPState::set_z)
     .def("set_z", [](QuantumCHPState& self, size_t i, size_t j, size_t v) { self.set_z(i, j, static_cast<bool>(v)); })
-    .def("get_x", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.x(i, j); })
-    .def("get_z", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.z(i, j); })
+    .def("get_x", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.get_x(i, j); })
+    .def("get_z", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.get_z(i, j); })
     .def("tableau", [](QuantumCHPState& self) { return self.tableau.to_matrix(); })
     .def("partial_rank", &QuantumCHPState::partial_rank)
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
