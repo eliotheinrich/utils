@@ -65,7 +65,7 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
 
 double Statevector::expectation(const PauliString& p) const {
   if (p.num_qubits != num_qubits) {
-    throw std::runtime_error(fmt::format("P = {} has {} qubits but state has {} qubits. Cannot compute expectation.", p, p.num_qubits, num_qubits));
+    throw std::runtime_error(fmt::format("P = {} has {} qubits but state has {} qubits. Cannot compute expectation.", p.to_string_ops(), p.num_qubits, num_qubits));
   }
 
   Eigen::MatrixXcd pm = p.to_matrix();
@@ -132,7 +132,7 @@ bool Statevector::mzr(uint32_t q) {
 
 bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
   if (qubits.size() != p.num_qubits) {
-    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
 
   Eigen::MatrixXcd pm = p.to_matrix();

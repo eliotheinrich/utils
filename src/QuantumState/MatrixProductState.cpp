@@ -885,7 +885,7 @@ class MatrixProductStateImpl {
 
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
       if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
       }
 
       if (qubits.size() == 1 && p.to_pauli(0) == Pauli::Y) {
@@ -926,7 +926,7 @@ class MatrixProductStateImpl {
 
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
       if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
       }
 
 

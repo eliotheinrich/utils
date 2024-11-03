@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unsupported/Eigen/KroneckerProduct>
+#include <fmt/format.h>
 #include <fmt/ranges.h>
 
 template <typename T>
@@ -681,19 +682,6 @@ class PauliString {
       phase = v; 
     }
 };
-
-
-template <>
-struct fmt::formatter<PauliString> {
-  template <typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-    auto format(const PauliString& p, FormatContext& ctx) {
-      return format_to(ctx.out(), "{}", p.to_string_ops());
-    }
-};
-
 
 template <class T>
 void single_qubit_random_clifford_impl(T& qobj, size_t q, size_t r) {
