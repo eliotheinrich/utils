@@ -157,7 +157,7 @@ class QuantumState : public EntropyState {
         double q = 0.0;
         for (size_t i = 0; i < amplitude_samples.size(); i++) {
           double p = amplitude_samples[i];
-          q += -std::log(p*p);
+          q += std::log(p*p);
         }
 
         q = q/samples.size();
