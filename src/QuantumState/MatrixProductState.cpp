@@ -883,6 +883,14 @@ class MatrixProductStateImpl {
       return std::abs(tensor_to_scalar(contraction));
     }
 
+    size_t bond_dimension_at_site(size_t i) const {
+      if (i >= num_qubits - 1) {
+        throw std::runtime_error(fmt::format("Cannot check bond dimension of site {} for MPS with {} sites.", i, num_qubits));
+      }
+
+      return dim(inds(singular_values[i])[0]);
+    }
+
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
       if (qubits.size() != p.num_qubits) {
         throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
@@ -1578,6 +1586,10 @@ Eigen::VectorXcd MatrixProductState::coefficients() const {
 
 double MatrixProductState::trace() const {
   return impl->trace();
+}
+
+size_t MatrixProductState::bond_dimension(size_t i) const {
+  return impl->bond_dimension_at_site(i);
 }
 
 void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {

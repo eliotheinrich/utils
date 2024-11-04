@@ -564,6 +564,7 @@ class MatrixProductState : public QuantumState {
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
 		Eigen::VectorXcd coefficients() const;
     double trace() const;
+    size_t bond_dimension(size_t i) const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) override;
