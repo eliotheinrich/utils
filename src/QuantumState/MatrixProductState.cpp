@@ -590,12 +590,14 @@ class MatrixProductStateImpl {
         if (q1 == num_qubits - 1) {
           A2 *= delta(right, prime(right));
         } else {
-          ITensor T = toDense(singular_values[q1]);
+          ITensor T = singular_values[q1];
           Index left_ = findIndex(T, "Left");
-          T.replaceInds({left_}, {right});
+          Index right_ = findIndex(T, "Right");
 
+          A1 *= delta(right, left_);
           A1 *= T;
-          A2 *= conj(prime(T, right));
+          A2 *= delta(prime(right), left_);
+          A2 *= conj(T);
         }
 
         ITensor contraction = A1 * A2;
@@ -615,8 +617,9 @@ class MatrixProductStateImpl {
         Index left_ = findIndex(A1, fmt::format("m={}",q2));
         Index right_ = findIndex(A2, fmt::format("m={}",q2));
 
-        ITensor L = replaceInds(toDense(singular_values[q1]), {left, right}, {left_, right_});
-        A1 *= L;
+        A1 *= singular_values[q1];
+        A1 *= delta(left, left_);
+        A1 *= delta(right, right_);
 
         std::vector<Index> primed1{i, right_};
         std::vector<Index> primed2{j, right_};
@@ -685,25 +688,6 @@ class MatrixProductStateImpl {
     std::string to_string() const {
       Statevector sv(coefficients());
       return sv.to_string();
-    }
-
-    std::vector<double> get_norms() const {
-      std::vector<double> norms{norm(tensors[0])};
-      for (uint32_t i = 0; i < num_qubits - 1; i++) {
-        norms.push_back(norm(singular_values[i]));
-        norms.push_back(norm(tensors[i+1]));
-      }
-      return norms;
-    }
-
-    void print_norms() const {
-      std::cout << fmt::format("tensors[0] = {}\n", norm(tensors[0]));
-
-      for (uint32_t i = 0; i < num_qubits - 1; i++) {
-        std::cout << fmt::format("singular_values[{}] = {}\n", i, norm(singular_values[i]));
-        std::cout << fmt::format("tensors[{}] = {}\n", i+1, norm(tensors[i+1]));
-      }
-
     }
 
     void print_mps(bool print_data=false) const {
