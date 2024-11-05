@@ -90,7 +90,7 @@ bool states_close_pauli_fuzz(std::minstd_rand& rng, const T& first, const V& sec
 template <typename T, typename... QuantumStates>
 size_t get_num_qubits(const T& first, const QuantumStates&... args) {
   size_t num_qubits = first.num_qubits;
-  if constexpr (sizeof...(args) == 1) {
+  if constexpr (sizeof...(args) == 0) {
     return num_qubits;
   } else {
     if (num_qubits != get_num_qubits(args...)) {
@@ -279,29 +279,6 @@ bool test_parity_check_reduction() {
   return true;
 }
 
-bool test_leaf_removal() {
-  ParityCheckMatrix H(3, 5);
-
-  H.set(0, 0, 1);
-  H.set(0, 1, 1);
-  H.set(0, 3, 1);
-
-  H.set(1, 1, 1);
-  H.set(1, 2, 1);
-  H.set(1, 3, 1);
-
-  H.set(2, 2, 1);
-  H.set(2, 3, 1);
-  H.set(2, 4, 1);
-
-  std::minstd_rand rng(5);
-  auto result = H.leaf_removal_iteration(rng);
-
-  // TODO rigorous test
-
-  return true;
-}
-
 bool test_statevector() {
   size_t num_qubits = 3;
 
@@ -355,7 +332,7 @@ bool test_mps() {
       d1 = std::abs(s.expectation(Pp));
       d2 = std::abs(mps.expectation(Pp));
 
-      ASSERT(is_close(d1, d2), fmt::format("<{}> = {}, {}\n", P, d1, d2));
+      ASSERT(is_close(d1, d2), fmt::format("<{}> = {}, {}\n", P.to_string_ops(), d1, d2));
     } else if (r == 1) {
       Eigen::MatrixXcd M = haar_unitary(nqb, rng);
 
@@ -375,7 +352,7 @@ bool test_mps() {
 }
 
 bool test_clifford_states_unitary() {
-  size_t nqb = 4;
+  size_t nqb = 6;
   QuantumCHPState chp(nqb);
   QuantumGraphState graph(nqb);
   Statevector sv(nqb);
@@ -555,8 +532,9 @@ bool test_mps_measure() {
       bool b1 = mps.measure(P, qubits);
       bool b2 = sv.measure(P, qubits);
 
-      ASSERT(b1 == b2, "Different measurement outcomes observed.");
-      ASSERT(states_close(sv, mps), fmt::format("States don't match after measurement of {} on {}.\n{}\n{}", P, qubits, sv.to_string(), mps.to_string()));
+      ASSERT(mps.debug_tests(), fmt::format("MPS failed debug tests for P = {} on {}. seed = {}", P.to_string_ops(), qubits, seed));
+      ASSERT(b1 == b2, fmt::format("Different measurement outcomes observed for {}.", P.to_string_ops()));
+      ASSERT(states_close(sv, mps), fmt::format("States don't match after measurement of {} on {}.\n{}\n{}", P.to_string_ops(), qubits, sv.to_string(), mps.to_string()));
     }
   }
 
@@ -564,7 +542,7 @@ bool test_mps_measure() {
 }
 
 bool test_weak_measure() {
-  constexpr size_t nqb = 4;
+  constexpr size_t nqb = 6;
 
   std::minstd_rand rng;
   thread_local std::random_device gen;
@@ -602,10 +580,27 @@ bool test_weak_measure() {
 
       double d = std::abs(sv.inner(Statevector(mps)));
 
+      ASSERT(mps.debug_tests(), fmt::format("MPS failed debug tests for P = {} on {}. seed = {}", P.to_string_ops(), qubits, seed));
       ASSERT(b1 == b2, "Different measurement outcomes observed.");
-      ASSERT(states_close(sv, mps), fmt::format("States don't match after weak measurement of {} on {}. d = {} \n{}\n{}", P, qubits, d, sv.to_string(), mps.to_string()));
+      ASSERT(states_close(sv, mps), fmt::format("States don't match after weak measurement of {} on {}. d = {} \n{}\n{}", P.to_string_ops(), qubits, d, sv.to_string(), mps.to_string()));
     }
   }
+
+  return true;
+}
+
+
+bool mps_debug() {
+  size_t nqb = 4;
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  std::minstd_rand rng(314);
+  randomize_state_haar(rng, mps);
+
+  mps.measure(PauliString("XY"), {0, 1});
+  std::cout << "Finished measure\n";
+
+  ASSERT(mps.debug_tests(), "MPS failed debug tests.");
 
   return true;
 }
@@ -629,7 +624,9 @@ int main() {
   ADD_TEST(test_mps_measure());  
   ADD_TEST(test_weak_measure());
 
+  //ADD_TEST(mps_debug());
+
   for (const auto& [name, result] : tests) {
-    std::cout << fmt::format("{:>30}: {}\n", name, result ? "PASSED" : "FAILED");
+    std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
   }
 }

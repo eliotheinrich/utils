@@ -168,7 +168,6 @@ bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>
 
   double r = randf();
   bool outcome = r >= prob_zero;
-  //std::cout << fmt::format("From Statevector: r = {}, prob_zero = {}, outcome = {}\n", r, prob_zero, outcome);
 
   Eigen::MatrixXcd t = pm;
   if (outcome) {

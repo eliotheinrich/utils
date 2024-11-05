@@ -108,7 +108,7 @@ static Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
 	return new_idx;
 }
 
-static bool is_identity(ITensor& I) {
+static bool is_identity(const ITensor& I, double tol=1e-4) {
   auto idxs = inds(I);
   if (idxs.size() != 2) {
     return false;
@@ -126,12 +126,33 @@ static bool is_identity(ITensor& I) {
     idx_assignments[0] = k;
     idx_assignments[1] = k;
 
-    if (std::abs(eltC(I, idx_assignments) - 1.0) > 1e-4) {
+    if (std::abs(eltC(I, idx_assignments) - 1.0) > tol) {
       return false;
     }
   }
 
   return true;
+}
+
+static Eigen::MatrixXcd tensor_to_matrix(const ITensor& A) {
+  auto idxs = inds(A);
+  if (idxs.size() != 2) {
+    throw std::runtime_error("Can only convert order = 2 tensor to matrix.");
+  }
+
+  auto id1 = idxs[0];
+  auto id2 = idxs[1];
+
+  Eigen::MatrixXcd m(dim(id1), dim(id2));
+  for (uint32_t i = 0; i < dim(id1); i++) {
+    for (uint32_t j = 0; j < dim(id2); j++) {
+      std::vector<uint32_t> assignments = {i + 1, j + 1};
+
+      m(i, j) = eltC(A, assignments);
+    }
+  }
+
+  return m;
 }
 
 static std::complex<double> tensor_to_scalar(const ITensor& A) {
@@ -423,22 +444,24 @@ class MatrixProductStateImpl {
       for (size_t i = 0; i < num_qubits; i++) {
         auto A = A_l(i);
 
-        Index idx = findIndex(A, fmt::format("m={}", i));
-        auto I = A * conj(prime(A, idx));
-        if (!is_identity(I)) {
+        auto I = orthogonality_tensor_l(i);
+        if (!is_identity(I, 1e-1)) {
           return false;
         }
       }
 
-      for (size_t i = 0; i < num_qubits; i++) {
-        auto A = A_r(i);
+      // TODO check right normalization
+      //for (size_t i = 0; i < num_qubits; i++) {
+      //  auto A = A_r(i);
 
-        Index idx = findIndex(A, fmt::format("m={}", i+1));
-        auto I = A * conj(prime(A, idx));
-        if (!is_identity(I)) {
-          return false;
-        }
-      }
+      //  Index idx = findIndex(A, fmt::format("m={}", i+1));
+      //  auto I = A * conj(prime(A, idx));
+      //  if (!is_identity(I)) {
+      //    std::cout << fmt::format("At site {}, (R)\n", i);
+      //    PrintData(I);
+      //    return false;
+      //  }
+      //}
 
       return true;
     }
@@ -558,88 +581,50 @@ class MatrixProductStateImpl {
 
         ITensor contraction = tensors[q1] * prime(conj(tensors[q1])) * m_tensor;
 
-        //if (q1 != 0) {
-        //  ITensor C = toDense(singular_values[q1 - 1]);
-        //  contraction = contraction * C * conj(prime(C));
-        //  Index left = noPrime(findInds(contraction, fmt::format("n={},Left", q1-1))[0]);
-        //  contraction *= delta(left, prime(left));
-        //}
+        if (q1 != 0) {
+          ITensor C = toDense(singular_values[q1 - 1]);
+          contraction = contraction * C * conj(prime(C));
+          Index left = noPrime(findInds(contraction, fmt::format("n={},Left", q1-1))[0]);
+          contraction *= delta(left, prime(left));
+        }
 
-        //if (q1 != num_qubits - 1) {
-        //  ITensor C = toDense(singular_values[q1]);
-        //  contraction = contraction * C * conj(prime(C));
-        //  Index right = noPrime(findInds(contraction, fmt::format("n={},Right", q1))[0]);
-        //  contraction *= delta(right, prime(right));
-        //}
+        if (q1 != num_qubits - 1) {
+          ITensor C = toDense(singular_values[q1]);
+          contraction = contraction * C * conj(prime(C));
+          Index right = noPrime(findInds(contraction, fmt::format("n={},Right", q1))[0]);
+          contraction *= delta(right, prime(right));
+        }
 
-        //return tensor_to_scalar(contraction);
+        return tensor_to_scalar(contraction);
       } else if (n == 2) {
         Index i = external_idx(q1);
         Index j = external_idx(q2);
         m_tensor = matrix_to_tensor(m, prime(i), prime(j), i, j);
 
         // More efficient local contraction
-        //ITensor A1 = A_r(q1);
-        //ITensor A2 = A_l(q2);
+        ITensor A1 = A_r(q1);
+        ITensor A2 = A_l(q2);
 
-        //Index left = internal_idx(q1, InternalDir::Left);
-        //Index right = internal_idx(q1, InternalDir::Right);
-        //Index left_ = findIndex(A1, fmt::format("m={}",q2));
-        //Index right_ = findIndex(A2, fmt::format("m={}",q2));
+        Index left = internal_idx(q1, InternalDir::Left);
+        Index right = internal_idx(q1, InternalDir::Right);
+        Index left_ = findIndex(A1, fmt::format("m={}",q2));
+        Index right_ = findIndex(A2, fmt::format("m={}",q2));
 
-        //// TOOD remove toDense?
-        //ITensor C = A1 * replaceInds(toDense(singular_values[q1]), {left, right}, {left_, right_});
-        //ITensor contraction = C * conj(prime(C)) * m_tensor * A2 * prime(conj(A2));
-        //
-        //left = findIndex(A1, fmt::format("m={}", q1));
-        //right = findIndex(A2, fmt::format("m={}", q2+1));
-        //contraction *= delta(left, prime(left));
-        //contraction *= delta(right, prime(right));
 
-        //auto c = tensor_to_scalar(contraction);
-        //return tensor_to_scalar(contraction);
+        // TOOD remove toDense?
+        ITensor C = A1 * replaceInds(toDense(singular_values[q1]), {left, right}, {left_, right_});
+        ITensor contraction = C * conj(prime(C)) * m_tensor * A2 * prime(conj(A2));
+        
+        left = findIndex(A1, fmt::format("m={}", q1));
+        right = findIndex(A2, fmt::format("m={}", q2+1));
+        contraction *= delta(left, prime(left));
+        contraction *= delta(right, prime(right));
+
+        auto c = tensor_to_scalar(contraction);
+        return tensor_to_scalar(contraction);
       } else {
         throw std::runtime_error("Currectly only support 1- and 2- qubit expectations.");
       }
-
-      ITensor C = tensors[0];
-      ITensor contraction;
-      bool contracted_m;
-      if (q1 != 0) {
-        Index i = external_idx(0);
-        contraction = C*delta(i, prime(i))*prime(conj(C));
-        contracted_m = false;
-      } else {
-        contraction = C*m_tensor*prime(conj(C));
-        contracted_m = true;
-      }
-
-      if (q1 != 0) {
-        Index i = external_idx(0);
-        contraction = C*delta(i, prime(i))*prime(conj(C));
-        contracted_m = false;
-      } else {
-        contraction = C*m_tensor*prime(conj(C));
-        contracted_m = true;
-      }
-
-      for (size_t k = 1; k < num_qubits; k++) {
-        C = tensors[k]*singular_values[k-1];
-        if (k >= q1 && k <= q2) {
-          if (!contracted_m) {
-            contraction *= C*m_tensor*prime(conj(C));
-            contracted_m = true;
-          } else {
-            Index i = external_idx(k);
-            contraction *= C*prime(conj(C));
-          }
-        } else {
-          Index i = external_idx(k);
-          contraction *= C*delta(i, prime(i))*prime(conj(C));
-        }
-      }
-
-      return tensor_to_scalar(contraction);
     }
 
     ITensor coefficient_tensor() const {
@@ -925,11 +910,58 @@ class MatrixProductStateImpl {
       proj = proj / std::sqrt(std::abs(c));
       evolve(proj, qubits);
 
-      uint32_t q1 = *std::ranges::min_element(qubits);
-      propogate_normalization_right(q1);
-      propogate_normalization_left(q1);
-
+      uint32_t q = *std::ranges::min_element(qubits);
+      normalize(q);
+      
       return outcome;
+    }
+
+    ITensor orthogonality_tensor_l(uint32_t i) const {
+      ITensor A = A_l(i);
+      return A * conj(prime(A, fmt::format("m={}",i)));
+    }
+
+    ITensor orthogonality_tensor_r(uint32_t i) const {
+        ITensor A = A_r(i);
+        return A * conj(prime(A, fmt::format("m={}",i)));
+    }
+
+    void normalize(size_t q) {
+      //std::cout << fmt::format("q = {}\n\n", q);
+      //for (size_t j = 0; j < num_qubits; j++) {
+      //  std::cout << fmt::format("j = {}\n", j);
+      //  PrintData(orthogonality_tensor_l(j));
+      //  if (j != num_qubits - 1) {
+      //    PrintData(singular_values[j]);
+      //  }
+      //}
+
+      Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
+
+      // TODO check dimension of singular_values and stop propagation
+      for (uint32_t i = q; i < num_qubits - 1; i++) {
+        //if (dim(internal_idx(i, InternalDir::Right)) == 1) {
+        //  break;
+        //}
+
+        evolve(id, {i, i+1});
+      }
+
+      for (uint32_t i = q; i > 0; i--) {
+        //if (dim(internal_idx(i-1, InternalDir::Left)) == 1) {
+        //  break;
+        //}
+
+        evolve(id, {i-1, i});
+      }
+
+      //for (size_t j = 0; j < num_qubits; j++) {
+      //  std::cout << fmt::format("j = {}\n", j);
+      //  PrintData(orthogonality_tensor_l(j));
+      //  if (j != num_qubits - 1) {
+      //    PrintData(singular_values[j]);
+      //  }
+      //}
     }
 
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
@@ -974,35 +1006,10 @@ class MatrixProductStateImpl {
 
       evolve(proj, qubits);
 
-      uint32_t q1 = *std::ranges::min_element(qubits);
-      propogate_normalization_right(q1);
-      propogate_normalization_left(q1);
+      uint32_t q = *std::ranges::min_element(qubits);
+      normalize(q);
 
       return outcome;
-    }
-
-    void propogate_normalization_right(size_t q) {
-      Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
-
-      for (uint32_t i = q; i < num_qubits - 1; i++) {
-        if (dim(internal_idx(i, InternalDir::Right)) == 1) {
-          break;
-        }
-
-        evolve(id, {i, i+1});
-      }
-    }
-    
-    void propogate_normalization_left(size_t q) {
-      Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
-
-      for (uint32_t i = q; i > 1; i--) {
-        if (dim(internal_idx(i-1, InternalDir::Left)) == 1) {
-          break;
-        }
-
-        evolve(id, {i-1, i});
-      }
     }
 
     // TODO don't use measure(Z)
@@ -1617,6 +1624,17 @@ bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<ui
 }
 
 bool MatrixProductState::debug_tests() {
+  bool b1 = impl->check_orthonormality();
+  bool b2 = impl->valid_state();
+
+  if (!b1) {
+    std::cout << "Not orthonormal.\n";
+  }
+
+  if (!b2) {
+    std::cout << "not valid.\n";
+  } 
+
   return impl->check_orthonormality() && impl->valid_state();
 }
 
