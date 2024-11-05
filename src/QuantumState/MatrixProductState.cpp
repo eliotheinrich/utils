@@ -579,21 +579,26 @@ class MatrixProductStateImpl {
         Index i = external_idx(q1);
         m_tensor = matrix_to_tensor(m, prime(i), i);
 
-        ITensor contraction = tensors[q1] * prime(conj(tensors[q1])) * m_tensor;
+        ITensor A1 = A_r(q1);
+        Index right = findIndex(A1, fmt::format("m={}", q1+1));
+        Index left = findIndex(A1, fmt::format("m={}", q1));
+        std::vector<Index> primed{external_idx(q1), right};
+        ITensor A2 = prime(conj(A1), primed);
 
-        if (q1 != 0) {
-          ITensor C = toDense(singular_values[q1 - 1]);
-          contraction = contraction * C * conj(prime(C));
-          Index left = noPrime(findInds(contraction, fmt::format("n={},Left", q1-1))[0]);
-          contraction *= delta(left, prime(left));
+        A1 *= m_tensor;
+
+        if (q1 == num_qubits - 1) {
+          A2 *= delta(right, prime(right));
+        } else {
+          ITensor T = toDense(singular_values[q1]);
+          Index left_ = findIndex(T, "Left");
+          T.replaceInds({left_}, {right});
+
+          A1 *= T;
+          A2 *= conj(prime(T, right));
         }
 
-        if (q1 != num_qubits - 1) {
-          ITensor C = toDense(singular_values[q1]);
-          contraction = contraction * C * conj(prime(C));
-          Index right = noPrime(findInds(contraction, fmt::format("n={},Right", q1))[0]);
-          contraction *= delta(right, prime(right));
-        }
+        ITensor contraction = A1 * A2;
 
         return tensor_to_scalar(contraction);
       } else if (n == 2) {
@@ -610,17 +615,18 @@ class MatrixProductStateImpl {
         Index left_ = findIndex(A1, fmt::format("m={}",q2));
         Index right_ = findIndex(A2, fmt::format("m={}",q2));
 
+        ITensor L = replaceInds(toDense(singular_values[q1]), {left, right}, {left_, right_});
+        A1 *= L;
 
-        // TOOD remove toDense?
-        ITensor C = A1 * replaceInds(toDense(singular_values[q1]), {left, right}, {left_, right_});
-        ITensor contraction = C * conj(prime(C)) * m_tensor * A2 * prime(conj(A2));
-        
-        left = findIndex(A1, fmt::format("m={}", q1));
-        right = findIndex(A2, fmt::format("m={}", q2+1));
-        contraction *= delta(left, prime(left));
-        contraction *= delta(right, prime(right));
+        std::vector<Index> primed1{i, right_};
+        std::vector<Index> primed2{j, right_};
 
-        auto c = tensor_to_scalar(contraction);
+        ITensor contraction = A1;
+        contraction *= A2;
+        contraction *= m_tensor;
+        contraction *= conj(prime(A1, primed1));
+        contraction *= conj(prime(A2, primed2));
+
         return tensor_to_scalar(contraction);
       } else {
         throw std::runtime_error("Currectly only support 1- and 2- qubit expectations.");
