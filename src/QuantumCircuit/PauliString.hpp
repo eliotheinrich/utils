@@ -872,3 +872,63 @@ void random_clifford_impl(const std::vector<uint32_t>& qubits, std::minstd_rand&
   }
 }
 
+class CliffordTable {
+  private:
+    using TableauBasis = std::tuple<PauliString, PauliString, size_t>;
+    std::vector<TableauBasis> circuits;
+
+  public:
+    CliffordTable(std::optional<std::function<bool(const QuantumCircuit&)>> mask_opt = std::nullopt) {
+      std::function<bool(const QuantumCircuit&)> mask;
+      if (mask_opt) {
+        mask = mask_opt.value();
+      } else {
+        mask = [](const QuantumCircuit& qc) -> bool { return true; };
+      }
+
+      std::vector<std::pair<PauliString, PauliString>> basis;
+
+      for (size_t s1 = 1; s1 < 16; s1++) {
+        PauliString X, Z;
+        X = PauliString::from_bitstring(2, s1);
+        for (size_t s2 = 1; s2 < 16; s2++) {
+          Z = PauliString::from_bitstring(2, s2);
+          
+          // Z should anticommute with X
+          if (Z.commutes(X)) {
+            continue;
+          }
+
+          basis.push_back({ X, Z });
+        }
+      }
+
+      std::vector<uint32_t> qubits{0, 1};
+      for (const auto& [X, Z] : basis) {
+        for (size_t r = 0; r < 24; r++) {
+          QuantumCircuit qc(2);
+          reduce_paulis(X, Z, qubits, qc);
+          single_qubit_clifford_impl(qc, 0, r);
+          if (mask(qc)) {
+            circuits.push_back(std::make_tuple(X, Z, r));
+          }
+        }
+      }
+
+      std::cout << fmt::format("Finished generating circuits. {} elements.\n", circuits.size());
+    }
+
+    template <typename... Args>
+    void apply_random(std::minstd_rand& rng, Args&... args) {
+      size_t r1 = rng() % circuits.size();
+
+      auto [X, Z, r2] = circuits[r1];
+
+      std::vector<uint32_t> qubits{0, 1};
+      reduce_paulis(X, Z, qubits, args...);
+      (single_qubit_clifford_impl(args, 0, r2), ...);
+    } 
+};
+
+
+

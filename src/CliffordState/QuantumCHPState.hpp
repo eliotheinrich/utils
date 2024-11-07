@@ -13,11 +13,13 @@ class QuantumCHPState : public CliffordState {
 
   public:
     Tableau tableau;
+    CliffordTable rcs;
 
     QuantumCHPState()=default;
 
     QuantumCHPState(uint32_t num_qubits, int seed=-1)
-      : CliffordState(num_qubits, seed), tableau(Tableau(num_qubits)) {}
+      : CliffordState(num_qubits, seed), tableau(Tableau(num_qubits)) {
+    }
 
     QuantumCHPState(const std::string &s) : CliffordState(get_num_qubits(s)) {
       auto substrings = dataframe::utils::split(s, "\n");
@@ -95,9 +97,15 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void random_clifford(std::vector<uint32_t> &qubits) override {
+      //QuantumCircuit qc(num_qubits);
+      //random_clifford_impl(qubits, rng, *this, qc);
+      //std::cout << "produced qc = " << qc.to_string() << "\n";
       QuantumCircuit qc(num_qubits);
-      random_clifford_impl(qubits, rng, *this, qc);
-      std::cout << "produced qc = " << qc.to_string() << "\n";
+      QuantumCircuit rc(qubits.size());
+      rcs.apply_random(rng, rc);
+
+      qc.append(rc, qubits);
+      qc.apply(*this);
     }
 
     virtual double mzr_expectation(uint32_t a) override {
