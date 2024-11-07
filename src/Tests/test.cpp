@@ -402,7 +402,7 @@ bool test_pauli_reduce() {
     std::vector<uint32_t> qubits(nqb);
     std::iota(qubits.begin(), qubits.end(), 0);
     QuantumCircuit qc(nqb);
-    reduce(p1, p2, qubits, qubits, qc);
+    reduce_paulis(p1, p2, qubits, qc);
 
     PauliString p1_ = p1;
     PauliString p2_ = p2;
@@ -611,21 +611,6 @@ bool test_weak_measure() {
   return true;
 }
 
-bool mps_debug() {
-  size_t nqb = 4;
-  MatrixProductState mps(nqb, 1u << nqb);
-
-  std::minstd_rand rng(314);
-  randomize_state_haar(rng, mps);
-
-  mps.measure(PauliString("XY"), {0, 1});
-  std::cout << "Finished measure\n";
-
-  ASSERT(mps.debug_tests(), "MPS failed debug tests.");
-
-  return true;
-}
-
 class CliffordTable {
   private:
     using TableauBasis = std::tuple<PauliString, PauliString, size_t>;
@@ -654,7 +639,7 @@ class CliffordTable {
       for (const auto& [X, Z] : basis) {
         for (size_t r = 0; r < 24; r++) {
           QuantumCircuit qc(2);
-          reduce(X, Z, qubits, qubits, qc);
+          reduce_paulis(X, Z, qubits, qc);
           single_qubit_clifford_impl(qc, 0, r);
           if (mask(qc)) {
             circuits.push_back(std::make_tuple(X, Z, r));
@@ -670,7 +655,7 @@ class CliffordTable {
       auto [X, Z, r2] = circuits[r1];
 
       std::vector<uint32_t> qubits{0, 1};
-      reduce(X, Z, qubits, qubits, args...);
+      reduce_paulis(X, Z, qubits, args...);
       (single_qubit_clifford_impl(args, 0, r2), ...);
     } 
 };
@@ -704,9 +689,10 @@ bool test_z2_clifford() {
 
 bool debug_rc() {
   constexpr size_t nqb = 4;
-  QuantumCHPState state(nqb);
+  QuantumCHPState state(nqb, 314);
 
-  state.random_clifford({1, 2});
+  std::vector<uint32_t> qubits = {1, 2};
+  state.random_clifford(qubits);
   return true;
 }
 
@@ -731,8 +717,6 @@ int main() {
   //ADD_TEST(test_weak_measure());
   //ADD_TEST(test_z2_clifford());
   ADD_TEST(debug_rc());
-
-  //ADD_TEST(mps_debug());
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

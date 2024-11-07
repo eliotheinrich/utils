@@ -786,15 +786,15 @@ void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
 }
 
 template<typename... Args>
-void reduce(const PauliString& p1, const PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+void reduce_paulis(const PauliString& p1, const PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
   PauliString p1_ = p1;
   PauliString p2_ = p2;
 
-  reduce_inplace(p1_, p2_, qubits, args...);
+  reduce_paulis_inplace(p1_, p2_, qubits, args...);
 }
 
 template<typename... Args>
-void reduce_inplace(PauliString& p1, PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
   size_t num_qubits = p1.num_qubits;
   if (p2.num_qubits != num_qubits) {
     throw std::runtime_error(fmt::format("Cannot reduce tableau for provided PauliStrings {} and {}; mismatched number of qubits.", p1.to_string_ops(), p2.to_string_ops()));
@@ -859,7 +859,7 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
   }
 
   std::cout << fmt::format("p1 = {}, p2 = {}\n", p1.to_string_ops(), p2.to_string_ops());
-  reduce_inplace(p1, p2, qubits, args...);
+  reduce_paulis_inplace(p1, p2, qubits, args...);
 }
 
 template <typename... Args>
