@@ -95,7 +95,9 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void random_clifford(std::vector<uint32_t> &qubits) override {
-      random_clifford_impl(qubits, rng, *this);
+      QuantumCircuit qc(num_qubits);
+      random_clifford_impl(qubits, rng, *this, qc);
+      std::cout << "produced qc = " << qc.to_string() << "\n";
     }
 
     virtual double mzr_expectation(uint32_t a) override {

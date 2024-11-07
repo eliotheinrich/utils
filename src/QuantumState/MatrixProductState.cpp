@@ -959,7 +959,6 @@ class MatrixProductStateImpl {
         throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
       }
 
-
       if (qubits.size() == 1) {
         Pauli op = p.to_pauli(0);
         if (op == Pauli::X) {
@@ -1002,26 +1001,8 @@ class MatrixProductStateImpl {
       return outcome;
     }
 
-    // TODO don't use measure(Z)
     bool measure(uint32_t q, double r) {
-      PauliString Z(1);
-      Z.set_z(0, 1);
-
-      return measure(Z, {q}, r);
-
-      //double prob_zero = mzr_prob(q, 0);
-      //bool outcome = r >= prob_zero;
-
-      //Eigen::Matrix2cd proj = outcome ? 
-      //  MatrixProductStateImpl::one_projector()/std::sqrt(1.0 - prob_zero) :
-      //  MatrixProductStateImpl::zero_projector()/std::sqrt(prob_zero);
-
-      //evolve(proj, q);
-
-      //propogate_normalization_left(q);
-      //propogate_normalization_right(q);
-
-      //return outcome;
+      return measure(PauliString("Z"), {q}, r);
     }
 };
 

@@ -206,6 +206,12 @@ class Tableau {
       rows[h] *= rows[i];
     }
 
+    void evolve(const QuantumCircuit& qc) {
+      thread_local std::random_device gen;
+      std::minstd_rand rng(gen());
+      evolve(qc, rng);
+    }
+
     void evolve(const QuantumCircuit& qc, std::minstd_rand& rng) {
       if (!qc.is_clifford()) {
         throw std::runtime_error("Provided circuit is not Clifford.");
@@ -225,6 +231,12 @@ class Tableau {
             h(gate->qbits[0]);
           } else if (name == "S") {
             s(gate->qbits[0]);
+          } else if (name == "X") {
+            x(gate->qbits[0]);
+          } else if (name == "Y") {
+            y(gate->qbits[0]);
+          } else if (name == "Z") {
+            z(gate->qbits[0]);
           } else if (name == "Sd") {
             sd(gate->qbits[0]);
           } else if (name == "CX") {

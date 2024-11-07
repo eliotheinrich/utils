@@ -1,3 +1,4 @@
+#include <random>
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -132,6 +133,13 @@ void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
   qc.apply(states...);
 }
 
+std::minstd_rand seeded_rng() {
+  thread_local std::random_device gen;
+  int seed = gen();
+  std::minstd_rand rng(seed);
+
+  return rng;
+}
 
 
 bool test_solve_linear_system() {
@@ -258,8 +266,8 @@ bool test_random_regular_graph() {
 
 bool test_parity_check_reduction() {
   size_t num_runs = 100;
-  thread_local std::random_device rd;
-  std::minstd_rand rng(rd());
+
+  auto rng = seeded_rng();
   for (size_t i = 0; i < num_runs; i++) {
     size_t num_cols = rng() % 20;
     size_t num_rows = num_cols + 5;
@@ -305,8 +313,7 @@ bool test_mps() {
   size_t num_qubits = 6;
   size_t bond_dimension = 1u << num_qubits;
 
-  thread_local std::random_device gen;
-  std::minstd_rand rng(gen());
+  auto rng = seeded_rng();
 
   Statevector s(num_qubits);
   MatrixProductState mps(num_qubits, bond_dimension);
@@ -357,9 +364,7 @@ bool test_clifford_states_unitary() {
   QuantumGraphState graph(nqb);
   Statevector sv(nqb);
 
-  thread_local std::random_device gen;
-  int seed = gen();
-  std::minstd_rand rng(seed);
+  auto rng = seeded_rng();
 
   for (size_t i = 0; i < 10; i++) {
     QuantumCircuit qc(nqb);
@@ -383,12 +388,37 @@ bool test_clifford_states_unitary() {
   return true;
 }
 
+bool test_pauli_reduce() {
+  auto rng = seeded_rng();
+
+  for (size_t i = 0; i < 100; i++) {
+    size_t nqb =  rng() % 20 + 1;
+    PauliString p1 = PauliString::rand(nqb, rng);
+    PauliString p2 = PauliString::rand(nqb, rng);
+    while (p2.commutes(p1)) {
+      p2 = PauliString::rand(nqb, rng);
+    }
+
+    std::vector<uint32_t> qubits(nqb);
+    std::iota(qubits.begin(), qubits.end(), 0);
+    QuantumCircuit qc(nqb);
+    reduce(p1, p2, qubits, qubits, qc);
+
+    PauliString p1_ = p1;
+    PauliString p2_ = p2;
+    qc.apply(p1_, p2_);
+
+    ASSERT(p1_ == PauliString::basis(nqb, "X", 0, false) && p2_ == PauliString::basis(nqb, "Z", 0, false),
+        fmt::format("p1 = {} and p2 = {}\nreduced to {} and {}.", p1.to_string_ops(), p2.to_string_ops(), p1_.to_string_ops(), p2_.to_string_ops()));
+  }
+
+  return true;
+}
+
 bool test_nonlocal_mps() {
   size_t nqb = 6;
 
-  thread_local std::random_device gen;
-  int seed = gen();
-  std::minstd_rand rng(seed);
+  auto rng = seeded_rng();
 
   for (size_t i = 0; i < 4; i++) {
     QuantumCircuit qc = generate_haar_circuit(nqb, nqb, true, rng());
@@ -413,9 +443,7 @@ bool test_partial_trace() {
   constexpr size_t nqb = 6;
   static_assert(nqb % 2 == 0);
 
-  thread_local std::random_device gen;
-  std::minstd_rand rng(gen());
-  rng.seed(314);
+  auto rng = seeded_rng();
 
   for (size_t i = 0; i < 10; i++) {
     MatrixProductState mps(nqb, 1u << nqb);
@@ -498,16 +526,13 @@ bool test_partial_trace() {
 bool test_mps_measure() {
   size_t nqb = 6;
 
-  std::minstd_rand rng;
-  thread_local std::random_device gen;
-  int seed = gen();
-  rng.seed(seed);
+  auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
-  int s = rng();
-  mps.seed(s, s);
-  sv.seed(s);
+  int seed = rng();
+  mps.seed(seed, seed);
+  sv.seed(seed);
 
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(rng, mps, sv);
@@ -544,16 +569,13 @@ bool test_mps_measure() {
 bool test_weak_measure() {
   constexpr size_t nqb = 6;
 
-  std::minstd_rand rng;
-  thread_local std::random_device gen;
-  int seed = gen();
-  rng.seed(seed);
+  auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
-  int s = rng();
-  mps.seed(s, s);
-  sv.seed(s);
+  int seed = rng();
+  mps.seed(seed, seed);
+  sv.seed(seed);
 
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(rng, mps, sv);
@@ -589,7 +611,6 @@ bool test_weak_measure() {
   return true;
 }
 
-
 bool mps_debug() {
   size_t nqb = 4;
   MatrixProductState mps(nqb, 1u << nqb);
@@ -605,6 +626,90 @@ bool mps_debug() {
   return true;
 }
 
+class CliffordTable {
+  private:
+    using TableauBasis = std::tuple<PauliString, PauliString, size_t>;
+    std::vector<TableauBasis> circuits;
+
+  public:
+    CliffordTable(std::function<bool(const QuantumCircuit&)> mask) {
+      std::vector<std::pair<PauliString, PauliString>> basis;
+
+      for (size_t s1 = 1; s1 < 16; s1++) {
+        PauliString X, Z;
+        X = PauliString::from_bitstring(2, s1);
+        for (size_t s2 = 1; s2 < 16; s2++) {
+          Z = PauliString::from_bitstring(2, s2);
+          
+          // Z should anticommute with X
+          if (Z.commutes(X)) {
+            continue;
+          }
+
+          basis.push_back({ X, Z });
+        }
+      }
+
+      std::vector<uint32_t> qubits{0, 1};
+      for (const auto& [X, Z] : basis) {
+        for (size_t r = 0; r < 24; r++) {
+          QuantumCircuit qc(2);
+          reduce(X, Z, qubits, qubits, qc);
+          single_qubit_clifford_impl(qc, 0, r);
+          if (mask(qc)) {
+            circuits.push_back(std::make_tuple(X, Z, r));
+          }
+        }
+      }
+    }
+
+    template <typename... Args>
+    void apply_random(std::minstd_rand& rng, Args&... args) {
+      size_t r1 = rng() % circuits.size();
+
+      auto [X, Z, r2] = circuits[r1];
+
+      std::vector<uint32_t> qubits{0, 1};
+      reduce(X, Z, qubits, qubits, args...);
+      (single_qubit_clifford_impl(args, 0, r2), ...);
+    } 
+};
+
+
+
+bool test_z2_clifford() {
+  auto rng = seeded_rng();
+
+  constexpr size_t nqb = 8;
+
+  auto Z2 = [](const QuantumCircuit& qc) {
+    PauliString XX("XX");
+    PauliString XX_ = XX;
+
+    qc.apply(XX_);
+
+    return XX == XX_;
+  };
+
+  CliffordTable t(Z2);
+  QuantumCHPState state(nqb);
+  for (size_t i = 0; i < 5; i++) {
+    PauliString XX("XX");
+
+    t.apply_random(rng, state);
+  }
+  
+  return true;
+}
+
+bool debug_rc() {
+  constexpr size_t nqb = 4;
+  QuantumCHPState state(nqb);
+
+  state.random_clifford({1, 2});
+  return true;
+}
+
 #define ADD_TEST(x) tests[#x] = x;
 
 int main() {
@@ -616,13 +721,16 @@ int main() {
   //assert(test_random_regular_graph());
   //assert(test_parity_check_reduction());
   //assert(test_leaf_removal());
-  ADD_TEST(test_nonlocal_mps());
-  ADD_TEST(test_statevector());
-  ADD_TEST(test_mps());
-  ADD_TEST(test_partial_trace());
-  ADD_TEST(test_clifford_states_unitary());
-  ADD_TEST(test_mps_measure());  
-  ADD_TEST(test_weak_measure());
+  //ADD_TEST(test_nonlocal_mps());
+  //ADD_TEST(test_statevector());
+  //ADD_TEST(test_mps());
+  //ADD_TEST(test_partial_trace());
+  //ADD_TEST(test_clifford_states_unitary());
+  //ADD_TEST(test_pauli_reduce());
+  //ADD_TEST(test_mps_measure());  
+  //ADD_TEST(test_weak_measure());
+  //ADD_TEST(test_z2_clifford());
+  ADD_TEST(debug_rc());
 
   //ADD_TEST(mps_debug());
 

@@ -270,6 +270,11 @@ class PauliString {
       return *this;
     }
 
+    PauliString operator-() { 
+      set_r(!get_r());
+      return *this;
+    }
+
     bool operator==(const PauliString &rhs) const {
       if (num_qubits != rhs.num_qubits) {
         return false;
@@ -420,6 +425,12 @@ class PauliString {
             s(gate->qbits[0]);
           } else if (name == "Sd") {
             sd(gate->qbits[0]);
+          } else if (name == "X") {
+            x(gate->qbits[0]);
+          } else if (name == "Y") {
+            y(gate->qbits[0]);
+          } else if (name == "Z") {
+            z(gate->qbits[0]);
           } else if (name == "CX") {
             cx(gate->qbits[0], gate->qbits[1]);
           } else if (name == "CZ") {
@@ -546,19 +557,24 @@ class PauliString {
     template <typename... Args>
     void reduce(bool z, Args... args) const {
       PauliString p(*this);
+      p.reduce_inplace(z, args...);
+    }
 
+    template <typename... Args>
+    void reduce_inplace(bool z, Args... args) {
       if (z) {
-        p.h(0);
+        h(0);
         (args.first->h(args.second[0]), ...);
       }
 
+      // Step one
       for (uint32_t i = 0; i < num_qubits; i++) {
-        if (p.get_z(i)) {
-          if (p.get_x(i)) {
-            p.s(i);
+        if (get_z(i)) {
+          if (get_x(i)) {
+            s(i);
             (args.first->s(args.second[i]), ...);
           } else {
-            p.h(i);
+            h(i);
             (args.first->h(args.second[i]), ...);
           }
         }
@@ -567,7 +583,7 @@ class PauliString {
       // Step two
       std::vector<uint32_t> nonzero_idx;
       for (uint32_t i = 0; i < num_qubits; i++) {
-        if (p.get_x(i)) {
+        if (get_x(i)) {
           nonzero_idx.push_back(i);
         }
       }
@@ -576,7 +592,7 @@ class PauliString {
         for (uint32_t j = 0; j < nonzero_idx.size()/2; j++) {
           uint32_t q1 = nonzero_idx[2*j];
           uint32_t q2 = nonzero_idx[2*j+1];
-          p.cx(q1, q2);
+          cx(q1, q2);
           (args.first->cx(args.second[q1], args.second[q2]), ...);
         }
 
@@ -587,10 +603,10 @@ class PauliString {
       uint32_t ql = nonzero_idx[0];
       if (ql != 0) {
         for (uint32_t i = 0; i < num_qubits; i++) {
-          if (p.get_x(i)) {
-            p.cx(0, ql);
-            p.cx(ql, 0);
-            p.cx(0, ql);
+          if (get_x(i)) {
+            cx(0, ql);
+            cx(ql, 0);
+            cx(0, ql);
 
             (args.first->cx(args.second[0], args.second[ql]), ...);
             (args.first->cx(args.second[ql], args.second[0]), ...);
@@ -601,14 +617,9 @@ class PauliString {
         }
       }
 
-      if (p.get_r()) {
-        // Apply Y gate to tableau
-        p.y(0);
-        (args.first->y(args.second[0]), ...);
-      }
-
       if (z) {
         // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
+        h(0);
         (args.first->h(args.second[0]), ...);
       }
     }
@@ -684,7 +695,7 @@ class PauliString {
 };
 
 template <class T>
-void single_qubit_random_clifford_impl(T& qobj, size_t q, size_t r) {
+void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
   // r == 0 is identity, so do nothing in this case
   if (r == 1) {
     qobj.x(q);
@@ -774,6 +785,58 @@ void single_qubit_random_clifford_impl(T& qobj, size_t q, size_t r) {
   }
 }
 
+template<typename... Args>
+void reduce(const PauliString& p1, const PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+  PauliString p1_ = p1;
+  PauliString p2_ = p2;
+
+  reduce_inplace(p1_, p2_, qubits, args...);
+}
+
+template<typename... Args>
+void reduce_inplace(PauliString& p1, PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+  size_t num_qubits = p1.num_qubits;
+  if (p2.num_qubits != num_qubits) {
+    throw std::runtime_error(fmt::format("Cannot reduce tableau for provided PauliStrings {} and {}; mismatched number of qubits.", p1.to_string_ops(), p2.to_string_ops()));
+  }
+
+  std::vector<uint32_t> qubits_(num_qubits);
+  std::iota(qubits_.begin(), qubits_.end(), 0);
+
+  p1.reduce_inplace(false, std::make_pair(&args, qubits)..., std::make_pair(&p2, qubits_));
+
+  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
+  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
+
+  if (p2 != z1p && p2 != z1m) {
+    p2.reduce_inplace(true, std::make_pair(&args, qubits)..., std::make_pair(&p1, qubits_));
+  }
+
+  bool sa = p1.get_r();
+  bool sb = p2.get_r();
+
+  if (sa) {
+    if (sb) {
+      // apply y
+      (args.y(qubits[0]), ...);
+      p1.y(0);
+      p2.y(0);
+    } else {
+      // apply z
+      (args.z(qubits[0]), ...);
+      p1.z(0);
+      p2.z(0);
+    }
+  } else {
+    if (sb) {
+      // apply x
+      (args.x(qubits[0]), ...);
+      p1.x(0);
+      p2.x(0);
+    }
+  }
+}
+
 // Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
 template <typename... Args>
 void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::minstd_rand& rng, Args&... args) {
@@ -782,7 +845,8 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
   // If only acting on one qubit, can easily lookup from a table
   if (num_qubits == 1) {
     size_t r = rng() % 24;
-    (single_qubit_random_clifford_impl(args, {qubits[0]}, r), ...);
+    (single_qubit_clifford_impl(args, {qubits[0]}, r), ...);
+    return;
   }
 
   std::vector<uint32_t> qubits_(num_qubits);
@@ -794,14 +858,8 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
     p2 = PauliString::rand(num_qubits, rng);
   }
 
-  p1.reduce(false, std::make_pair(&args, qubits)..., std::make_pair(&p2, qubits_));
-
-  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
-  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
-
-  if (p2 != z1p && p2 != z1m) {
-    p2.reduce(true, std::make_pair(&args, qubits)...);
-  }
+  std::cout << fmt::format("p1 = {}, p2 = {}\n", p1.to_string_ops(), p2.to_string_ops());
+  reduce_inplace(p1, p2, qubits, args...);
 }
 
 template <typename... Args>
