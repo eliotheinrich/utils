@@ -13,7 +13,6 @@ class QuantumCHPState : public CliffordState {
 
   public:
     Tableau tableau;
-    CliffordTable rcs;
 
     QuantumCHPState()=default;
 
@@ -97,15 +96,15 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void random_clifford(std::vector<uint32_t> &qubits) override {
-      //QuantumCircuit qc(num_qubits);
-      //random_clifford_impl(qubits, rng, *this, qc);
-      //std::cout << "produced qc = " << qc.to_string() << "\n";
       QuantumCircuit qc(num_qubits);
-      QuantumCircuit rc(qubits.size());
-      rcs.apply_random(rng, rc);
+      random_clifford_impl(qubits, rng, *this, qc);
+      std::cout << "produced qc = " << qc.to_string() << "\n";
+      //QuantumCircuit qc(num_qubits);
+      //QuantumCircuit rc(qubits.size());
+      //rcs.apply_random(rng, rc);
 
-      qc.append(rc, qubits);
-      qc.apply(*this);
+      //qc.append(rc, qubits);
+      //qc.apply(*this);
     }
 
     virtual double mzr_expectation(uint32_t a) override {

@@ -696,6 +696,8 @@ class PauliString {
 
 template <class T>
 void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
+  //std::cout << "r = " << r << "\n";
+  //std::cout << "\nstate ====== \n" << qobj.to_string() << "\n======\n";
   // r == 0 is identity, so do nothing in this case
   if (r == 1) {
     qobj.x(q);
@@ -783,6 +785,8 @@ void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
     qobj.s(q);
     qobj.z(q);
   }
+
+  //std::cout << "\nstate ====== \n" << qobj.to_string() << "\n======\n";
 }
 
 template<typename... Args>
