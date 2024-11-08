@@ -919,8 +919,6 @@ class CliffordTable {
           }
         }
       }
-
-      std::cout << fmt::format("Finished generating table with {} elements\n", num_elements());
     }
 
     size_t num_elements() const {
