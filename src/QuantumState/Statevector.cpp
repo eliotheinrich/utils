@@ -231,7 +231,7 @@ void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const std::vecto
   for (uint32_t a = 0; a < s; a++) {
     uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
 
-    data(a) *= gate(b);
+    data(a) *= gate(h - b - 1);
   }
 }
 

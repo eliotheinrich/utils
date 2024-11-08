@@ -76,35 +76,25 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void cx(uint32_t a, uint32_t b) override {
-      tableau.cx(b, a);
+      tableau.cx(a, b);
     }
 
     virtual void cy(uint32_t a, uint32_t b) override {
-      tableau.s(a);
-      tableau.h(a);
-      tableau.cz(b, a);
-      tableau.h(a);
-      tableau.s(a);
-      tableau.s(a);
-      tableau.s(a);
+      tableau.s(b);
+      tableau.h(b);
+      tableau.cz(a, b);
+      tableau.h(b);
+      tableau.sd(b);
     }
 
     virtual void cz(uint32_t a, uint32_t b) override {
-      tableau.h(a);
-      tableau.cx(b, a);
-      tableau.h(a);
+      tableau.h(b);
+      tableau.cx(a, b);
+      tableau.h(b);
     }
 
     virtual void random_clifford(std::vector<uint32_t> &qubits) override {
-      QuantumCircuit qc(num_qubits);
-      random_clifford_impl(qubits, rng, *this, qc);
-      std::cout << "produced qc = " << qc.to_string() << "\n";
-      //QuantumCircuit qc(num_qubits);
-      //QuantumCircuit rc(qubits.size());
-      //rcs.apply_random(rng, rc);
-
-      //qc.append(rc, qubits);
-      //qc.apply(*this);
+      random_clifford_impl(qubits, rng, *this);
     }
 
     virtual double mzr_expectation(uint32_t a) override {

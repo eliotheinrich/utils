@@ -14,6 +14,8 @@
 
 #include "CircuitUtils.h"
 
+#include "QuantumState/utils.hpp"
+
 // --- Definitions for gates/measurements --- //
 
 class Gate {
@@ -142,55 +144,38 @@ class SymbolicGate : public Gate {
       switch (g) {
         case SymbolicGate::GateLabel::H:
           return "H";
-          break;
         case SymbolicGate::GateLabel::X:
           return "X";
-          break;
         case SymbolicGate::GateLabel::Y:
           return "Y";
-          break;
         case SymbolicGate::GateLabel::Z:
           return "Z";
-          break;
         case SymbolicGate::GateLabel::sqrtX:
           return "sqrtX";
-          break;
         case SymbolicGate::GateLabel::sqrtY:
           return "sqrtY";
-          break;
         case SymbolicGate::GateLabel::S:
           return "S";
-          break;
         case SymbolicGate::GateLabel::sqrtXd:
           return "sqrtXd";
-          break;
         case SymbolicGate::GateLabel::sqrtYd:
           return "sqrtYd";
-          break;
         case SymbolicGate::GateLabel::Sd:
           return "Sd";
-          break;
         case SymbolicGate::GateLabel::T:
           return "T";
-          break;
         case SymbolicGate::GateLabel::Td:
           return "Td";
-          break;
         case SymbolicGate::GateLabel::CX:
           return "CX";
-          break;
         case SymbolicGate::GateLabel::CY:
           return "CY";
-          break;
         case SymbolicGate::GateLabel::CZ:
           return "CZ";
-          break;
         case SymbolicGate::GateLabel::SWAP:
           return "SWAP";
-          break;
         default:
           throw std::runtime_error("Invalid gate type.");
-          break;
       }
     }
 
@@ -198,128 +183,79 @@ class SymbolicGate : public Gate {
       switch (g) {
         case SymbolicGate::GateLabel::H:
           return 1;
-          break;
         case SymbolicGate::GateLabel::X:
           return 1;
-          break;
         case SymbolicGate::GateLabel::Y:
           return 1;
-          break;
         case SymbolicGate::GateLabel::Z:
           return 1;
-          break;
         case SymbolicGate::GateLabel::sqrtX:
           return 1;
-          break;
         case SymbolicGate::GateLabel::sqrtY:
           return 1;
-          break;
         case SymbolicGate::GateLabel::S:
           return 1;
-          break;
         case SymbolicGate::GateLabel::sqrtXd:
           return 1;
-          break;
         case SymbolicGate::GateLabel::sqrtYd:
           return 1;
-          break;
         case SymbolicGate::GateLabel::Sd:
           return 1;
-          break;
         case SymbolicGate::GateLabel::T:
           return 1;
-          break;
         case SymbolicGate::GateLabel::Td:
           return 1;
-          break;
         case SymbolicGate::GateLabel::CX:
           return 2;
-          break;
         case SymbolicGate::GateLabel::CY:
           return 2;
-          break;
         case SymbolicGate::GateLabel::CZ:
           return 2;
-          break;
         case SymbolicGate::GateLabel::SWAP:
           return 2;
-          break;
         default:
           throw std::runtime_error("Invalid gate type.");
-          break;
         
       }
     }
 
     Eigen::MatrixXcd to_data(SymbolicGate::GateLabel g) const {
-      size_t nqb = 1u << num_qubits_for_gate(g);
-      Eigen::MatrixXcd data(nqb, nqb);
-
-      static double sqrt2 = 0.70710678118;
       switch (g) {
         case SymbolicGate::GateLabel::H:
-          data << sqrt2, sqrt2, sqrt2, -sqrt2;
-          break;
+          return quantumstate_utils::H::value;
         case SymbolicGate::GateLabel::X:
-          data << 0, 1, 1, 0;
-          break;
+          return quantumstate_utils::X::value;
         case SymbolicGate::GateLabel::Y:
-          data << 0, std::complex<double>(0, -1), std::complex<double>(0, 1), 0;
-          break;
+          return quantumstate_utils::Y::value;
         case SymbolicGate::GateLabel::Z:
-          data << 1, 0, 0, -1;
-          break;
+          return quantumstate_utils::Z::value;
         case SymbolicGate::GateLabel::sqrtX:
-          data << std::complex<double>(0.5, 0.5), std::complex<double>(0.5, -0.5), std::complex<double>(0.5, -0.5), std::complex<double>(0.5, 0.5);
-          break;
+          return quantumstate_utils::sqrtX::value;
         case SymbolicGate::GateLabel::sqrtY:
-          data << std::complex<double>(0.5, 0.5), std::complex<double>(-0.5, -0.5), std::complex<double>(0.5, 0.5), std::complex<double>(0.5, 0.5);
-          break;
+          return quantumstate_utils::sqrtY::value;
         case SymbolicGate::GateLabel::S:
-          data << 1, 0, 0, std::complex<double>(0, 1);
-          break;
+          return quantumstate_utils::sqrtZ::value;
         case SymbolicGate::GateLabel::sqrtXd:
-          data << std::complex<double>(0.5, -0.5), std::complex<double>(0.5, 0.5), std::complex<double>(0.5, 0.5), std::complex<double>(0.5, -0.5);
-          break;
+          return quantumstate_utils::sqrtXd::value;
         case SymbolicGate::GateLabel::sqrtYd:
-          data << std::complex<double>(0.5, -0.5), std::complex<double>(0.5, -0.5), std::complex<double>(-0.5, 0.5), std::complex<double>(0.5, -0.5);
-          break;
+          return quantumstate_utils::sqrtYd::value;
         case SymbolicGate::GateLabel::Sd:
-          data << 1, 0, 0, std::complex<double>(0, -1);
-          break;
+          return quantumstate_utils::sqrtZd::value;
         case SymbolicGate::GateLabel::T:
-          data << 1, 0, 0, std::complex<double>(sqrt2, sqrt2);
-          break;
+          return quantumstate_utils::T::value;
         case SymbolicGate::GateLabel::Td:
-          data << 1, 0, 0, std::complex<double>(sqrt2, -sqrt2);
-          break;
+          return quantumstate_utils::Td::value;
         case SymbolicGate::GateLabel::CX:
-          data << 1, 0, 0, 0, 
-               0, 1, 0, 0, 
-               0, 0, 0, 1, 
-               0, 0, 1, 0;
-          break;
+          return quantumstate_utils::CX::value;
         case SymbolicGate::GateLabel::CY:
-          data << 1, 0, 0, 0, 
-               0, 1, 0, 0, 
-               0, 0, 0, std::complex<double>(0, -1), 
-               0, 0, std::complex<double>(0, 1), 0;
-          break;
+          return quantumstate_utils::CY::value;
         case SymbolicGate::GateLabel::CZ:
-          data << 1, 0, 0, 0, 
-               0, 1, 0, 0, 
-               0, 0, 1, 0, 
-               0, 0, 0, -1;
-          break;
+          return quantumstate_utils::CZ::value;
         case SymbolicGate::GateLabel::SWAP:
-          data << 1, 0, 0, 0, 
-               0, 0, 1, 0, 
-               0, 1, 0, 0, 
-               0, 0, 0, 1;
-          break;
+          return quantumstate_utils::SWAP::value;
+        default:
+          return quantumstate_utils::I::value;
       }
-
-      return data;
     }
 
   public:

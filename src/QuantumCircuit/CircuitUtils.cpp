@@ -1,5 +1,8 @@
 #include "CircuitUtils.h"
 
+#include <iostream>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unordered_set>
 #include <assert.h>
@@ -30,6 +33,15 @@ std::vector<uint32_t> parse_qargs_opt(const std::optional<std::vector<uint32_t>>
   }
 
   return qargs;
+}
+
+std::vector<uint32_t> complement(const std::vector<uint32_t>& sites, size_t num_qubits) {
+  std::vector<uint32_t> sites_(sites.size());
+  for (size_t i = 0; i < sites.size(); i++) {
+    sites_[i] = num_qubits - sites[i] - 1;
+  }
+
+  return sites_;
 }
 
 std::pair<uint32_t, uint32_t> get_targets(uint32_t d, uint32_t q, uint32_t num_qubits) {

@@ -1,8 +1,11 @@
 #pragma once
 
 #include <unsupported/Eigen/KroneckerProduct>
+#include <iostream>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+
+#include "QuantumCircuit.h"
 
 template <typename T>
 static void remove_even_indices(std::vector<T> &v) {
@@ -696,8 +699,6 @@ class PauliString {
 
 template <class T>
 void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
-  //std::cout << "r = " << r << "\n";
-  //std::cout << "\nstate ====== \n" << qobj.to_string() << "\n======\n";
   // r == 0 is identity, so do nothing in this case
   if (r == 1) {
     qobj.x(q);
@@ -785,8 +786,6 @@ void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
     qobj.s(q);
     qobj.z(q);
   }
-
-  //std::cout << "\nstate ====== \n" << qobj.to_string() << "\n======\n";
 }
 
 template<typename... Args>
@@ -862,7 +861,6 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
     p2 = PauliString::rand(num_qubits, rng);
   }
 
-  std::cout << fmt::format("p1 = {}, p2 = {}\n", p1.to_string_ops(), p2.to_string_ops());
   reduce_paulis_inplace(p1, p2, qubits, args...);
 }
 
@@ -904,6 +902,9 @@ class CliffordTable {
           }
 
           basis.push_back({ X, Z });
+          basis.push_back({ X, -Z });
+          basis.push_back({ -X, Z });
+          basis.push_back({ -X, -Z });
         }
       }
 
@@ -919,18 +920,21 @@ class CliffordTable {
         }
       }
 
-      std::cout << fmt::format("Finished generating circuits. {} elements.\n", circuits.size());
+      std::cout << fmt::format("Finished generating table with {} elements\n", num_elements());
+    }
+
+    size_t num_elements() const {
+      return 24 * circuits.size();
     }
 
     template <typename... Args>
-    void apply_random(std::minstd_rand& rng, Args&... args) {
+    void apply_random(std::minstd_rand& rng, const std::vector<uint32_t>& qubits, Args&... args) {
       size_t r1 = rng() % circuits.size();
 
       auto [X, Z, r2] = circuits[r1];
 
-      std::vector<uint32_t> qubits{0, 1};
       reduce_paulis(X, Z, qubits, args...);
-      (single_qubit_clifford_impl(args, 0, r2), ...);
+      (single_qubit_clifford_impl(args, qubits[0], r2), ...);
     } 
 };
 

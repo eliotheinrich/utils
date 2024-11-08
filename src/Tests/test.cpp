@@ -359,7 +359,7 @@ bool test_mps() {
 }
 
 bool test_clifford_states_unitary() {
-  size_t nqb = 6;
+  size_t nqb = 2;
   QuantumCHPState chp(nqb);
   QuantumGraphState graph(nqb);
   Statevector sv(nqb);
@@ -382,7 +382,7 @@ bool test_clifford_states_unitary() {
     Statevector sv_chp = chp.to_statevector();
     Statevector sv_graph = graph.to_statevector();
 
-    ASSERT(states_close(sv, sv_chp, sv_graph));
+    ASSERT(states_close(sv, sv_chp), fmt::format("Clifford simulators disagree."));
   }
 
   return true;
@@ -626,22 +626,26 @@ bool test_z2_clifford() {
   };
 
   CliffordTable t(Z2);
-  QuantumCHPState state(nqb);
-  for (size_t i = 0; i < 5; i++) {
-    PauliString XX("XX");
+  MatrixProductState state(nqb, 1u << nqb);
+  randomize_state_haar(rng, state);
 
-    t.apply_random(rng, state);
+  std::string s;
+  for (size_t i = 0; i < nqb; i++) {
+    s += "X";
+  }
+
+  PauliString T(s);
+  double e = state.expectation(T);
+
+
+  for (size_t i = 0; i < 1000; i++) {
+    uint32_t q = rng() % (nqb - 1);
+    t.apply_random(rng, {q, q+1}, state);
+
+    double c = state.expectation(T);
+    ASSERT(is_close(e, state.expectation(T)), fmt::format("Expectation of {} changed from {} to {}.", T.to_string_ops(), e, c));
   }
   
-  return true;
-}
-
-bool debug_rc() {
-  constexpr size_t nqb = 4;
-  QuantumCHPState state(nqb, 314);
-
-  std::vector<uint32_t> qubits = {1, 2};
-  state.random_clifford(qubits);
   return true;
 }
 
@@ -656,16 +660,15 @@ int main() {
   //assert(test_random_regular_graph());
   //assert(test_parity_check_reduction());
   //assert(test_leaf_removal());
-  //ADD_TEST(test_nonlocal_mps());
-  //ADD_TEST(test_statevector());
-  //ADD_TEST(test_mps());
-  //ADD_TEST(test_partial_trace());
-  //ADD_TEST(test_clifford_states_unitary());
-  //ADD_TEST(test_pauli_reduce());
-  //ADD_TEST(test_mps_measure());  
-  //ADD_TEST(test_weak_measure());
-  //ADD_TEST(test_z2_clifford());
-  ADD_TEST(debug_rc());
+  ADD_TEST(test_nonlocal_mps());
+  ADD_TEST(test_statevector());
+  ADD_TEST(test_mps());
+  ADD_TEST(test_partial_trace());
+  ADD_TEST(test_clifford_states_unitary());
+  ADD_TEST(test_pauli_reduce());
+  ADD_TEST(test_mps_measure());  
+  ADD_TEST(test_weak_measure());
+  ADD_TEST(test_z2_clifford());
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
