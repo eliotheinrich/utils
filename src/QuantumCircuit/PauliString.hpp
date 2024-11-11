@@ -2,6 +2,7 @@
 
 #include <unsupported/Eigen/KroneckerProduct>
 #include <iostream>
+
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 

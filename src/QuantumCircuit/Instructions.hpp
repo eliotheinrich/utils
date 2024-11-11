@@ -10,9 +10,10 @@
 #include <complex>
 #include <memory>
 #include <assert.h>
-#include <fmt/format.h>
 
 #include "CircuitUtils.h"
+
+#include <fmt/format.h>
 
 #include "QuantumState/utils.hpp"
 

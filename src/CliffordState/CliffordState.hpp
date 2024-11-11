@@ -90,7 +90,7 @@ class CliffordState : public EntropyState {
           } else if (name == "SWAP") {
             swap(gate->qbits[0], gate->qbits[1]);
           } else {
-            throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
+            throw std::runtime_error(std::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
           }
 				},
 				[this](Measurement m) { 

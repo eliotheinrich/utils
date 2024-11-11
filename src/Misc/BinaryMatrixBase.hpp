@@ -9,8 +9,7 @@
 #include <memory>
 #include <random>
 
-#define FMT_HEADER_ONLY
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 class BinaryMatrixBase {
   public:

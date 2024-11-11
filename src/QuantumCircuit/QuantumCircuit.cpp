@@ -2,6 +2,8 @@
 #include "PauliString.hpp"
 #include <assert.h>
 
+#include <fmt/format.h>
+
 std::string QuantumCircuit::to_string() const {
 	std::string s = "";
 	for (auto const &inst : instructions) {

@@ -163,7 +163,7 @@ class QuantumStateSampler {
             magic_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
             break;
           case sre_method_t::Virtual:
-          magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
+            magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
             break;
         }
 

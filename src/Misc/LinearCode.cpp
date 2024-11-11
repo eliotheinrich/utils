@@ -1,9 +1,5 @@
 #include "LinearCode.h"
 
-#define FMT_HEADER_ONLY
-#include <fmt/format.h>
-#include <fmt/ranges.h>
-
 
 ParityCheckMatrix::ParityCheckMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 

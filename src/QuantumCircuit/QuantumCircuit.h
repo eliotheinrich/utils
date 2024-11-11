@@ -4,10 +4,9 @@
 #include "CircuitUtils.h"
 #include "Gates.hpp"
 
+#include <iostream>
 
 #include <fmt/format.h>
-
-#include <iostream>
 
 // --- Definitions for QuantumCircuit --- //
 

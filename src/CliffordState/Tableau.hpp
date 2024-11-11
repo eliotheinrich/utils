@@ -11,6 +11,8 @@
 
 #include <Eigen/Dense>
 
+#include <fmt/format.h>
+
 class Tableau {
   public:
     bool track_destabilizers;

@@ -178,8 +178,6 @@ class MatrixProductStateImpl {
   friend class MatrixProductState;
 
   private:
-    std::mt19937 rng;
-
 		std::vector<itensor::ITensor> tensors;
 		std::vector<itensor::ITensor> singular_values;
 		std::vector<itensor::Index> external_indices;
@@ -201,14 +199,9 @@ class MatrixProductStateImpl {
     MatrixProductStateImpl()=default;
     ~MatrixProductStateImpl()=default;
 
-    void seed(int i) {
-      rng.seed(i);
-    }
-
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
     : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold) {
       std::random_device random_device;
-      seed(random_device());
 
       if ((bond_dimension > 1u << num_qubits) && (num_qubits < 32)) {
         throw std::invalid_argument("Bond dimension must be smaller than 2^num_qubits.");
@@ -466,7 +459,8 @@ class MatrixProductStateImpl {
       return true;
     }
 
-    std::pair<PauliString, double> sample_pauli() {
+    // 1322
+    std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
@@ -512,11 +506,11 @@ class MatrixProductStateImpl {
       return std::make_pair(PauliString(p), t);
     }
 
-    std::vector<PauliAmplitude> sample_paulis(size_t num_samples) {
+    std::vector<PauliAmplitude> sample_paulis(size_t num_samples, std::minstd_rand& rng) const {
       std::vector<PauliAmplitude> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
-        samples[k] = sample_pauli();
+        samples[k] = sample_pauli(rng);
       } 
 
       return samples;
@@ -1281,6 +1275,71 @@ class MatrixProductOperatorImpl {
     Index external_idx(size_t i) const {
       return findInds(ops[i], "External")[0];
     }
+
+    bool block_trivial(size_t k) const {
+      if (k < num_qubits - 1) {
+        return !blocks[k].has_value();
+      }
+
+      return is_identity(blocks[k].value());
+    }
+
+    // 490
+    std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
+      std::vector<Pauli> p(num_qubits);
+      double P = 1.0;
+
+      ITensor L = left_block / std::sqrt(tensor_to_scalar(left_block * left_block).real());
+
+      for (size_t k = 0; k < num_qubits; k++) {
+        if (!block_trivial(k)) {
+          throw std::runtime_error("Encountered nontrivial block in MatrixProductOperator.sample_pauli.");
+        }
+
+        std::vector<double> probs(4);
+        std::vector<ITensor> tensors(4);
+
+        auto Ak = ops[k];
+        std::string label1 = fmt::format("n={},Left", k);
+        std::string label2 = fmt::format("n={},Right", k);
+        Index alpha_left = findInds(Ak, label1)[0];
+        L.replaceInds(inds(L), {alpha_left, prime(alpha_left)});
+
+        Index s = external_indices[k];
+
+        for (size_t p = 0; p < 4; p++) {
+          auto sigma = pauli_matrix(p, s, prime(s));
+
+          auto C = prime(Ak)*conj(Ak)*sigma*L;
+          auto contraction = conj(C)*C / 2.0;
+          
+          std::vector<size_t> inds;
+          double prob = std::abs(eltC(contraction, inds));
+          probs[p] = prob;
+          tensors[p] = C / std::sqrt(2.0 * prob);
+        }
+
+        std::discrete_distribution<> dist(probs.begin(), probs.end());
+        size_t a = dist(rng);
+
+        p[k] = static_cast<Pauli>(a);
+        P *= probs[a];
+        L = apply_block_r(tensors[a], k);
+      }
+
+      double t = std::sqrt(P*std::pow(2.0, num_qubits));
+      return std::make_pair(PauliString(p), t);
+    }
+
+    std::vector<PauliAmplitude> sample_paulis(size_t num_samples, std::minstd_rand& rng) const {
+      std::vector<PauliAmplitude> samples(num_samples);
+
+      for (size_t k = 0; k < num_samples; k++) {
+        samples[k] = sample_pauli(rng);
+      } 
+
+      return samples;
+    }
     
     double expectation(const PauliString& p) const {
       if (p.num_qubits != num_qubits) {
@@ -1361,7 +1420,7 @@ class MatrixProductOperatorImpl {
     }
 
     ITensor apply_block_r(const ITensor& tensor, size_t i) const {
-      if (blocks[i]) {
+      if (blocks[i].has_value()) {
         return tensor*blocks[i].value();
       } else {
         Index i1 = internal_idx(i, InternalDir::Right);
@@ -1373,7 +1432,7 @@ class MatrixProductOperatorImpl {
     ITensor apply_block_l(const ITensor& tensor, size_t i) const {
       if (i == 0) {
         return tensor*left_block;
-      } else if (blocks[i-1]) {
+      } else if (blocks[i-1].has_value()) {
         return tensor*blocks[i-1].value();
       } else {
         Index i1 = internal_idx(i, InternalDir::Left);
@@ -1430,15 +1489,20 @@ class MatrixProductOperatorImpl {
 
 MatrixProductState::MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) : QuantumState(num_qubits) {
   impl = std::make_unique<MatrixProductStateImpl>(num_qubits, bond_dimension, sv_threshold);
-  impl->seed(rand());
 }
 
 MatrixProductState::MatrixProductState(const MatrixProductState& other) : QuantumState(other.num_qubits) {
   impl = std::make_unique<MatrixProductStateImpl>(*other.impl.get());
-  impl->seed(rand());
 }
 
 MatrixProductState::~MatrixProductState()=default;
+
+MatrixProductState& MatrixProductState::operator=(const MatrixProductState& other) {
+  if (this != &other) {
+    impl = std::make_unique<MatrixProductStateImpl>(*other.impl);
+  }
+  return *this;
+}
 
 MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, double h, size_t bond_dimension, double sv_threshold, size_t num_sweeps) {
   SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
@@ -1478,15 +1542,6 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   return mps;
 }
 
-void MatrixProductState::seed(int i, int j) {
-  QuantumState::seed(i);
-  impl->seed(j);
-}
-
-void MatrixProductState::seed(int i) {
-  seed(i, rand());
-}
-
 std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }
@@ -1518,6 +1573,63 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q);
 }
 
+magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  auto contiguous = [](const std::vector<uint32_t>& v) {
+    auto v_r = v;
+    std::sort(v_r.begin(), v_r.end());
+
+    for (size_t i = 0; i < v_r.size() - 1; i++) {
+      if (v_r[i+1] != v_r[i] + 1) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
+    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
+  }
+
+  std::vector<bool> mask(num_qubits, false);
+  for (const uint32_t q : qubitsA) {
+    mask[q] = true;
+  }
+
+  for (const uint32_t q : qubitsB) {
+    mask[q] = true;
+  }
+
+  for (size_t i = 0; i < num_qubits; i++) {
+    if (!mask[i]) {
+      throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} are not a bipartition of system with {} qubits. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB, num_qubits));
+    }
+  }
+
+  auto stateA = partial_trace(qubitsB);
+  MatrixProductState state_(*this);
+  for (size_t i = 0; i < num_qubits/2; i++) {
+    state_.swap(i, num_qubits - i - 1);
+  }
+
+  std::vector<uint32_t> qubitsB_ = qubitsB;
+  for (size_t i = 0; i < qubitsB_.size(); i++) {
+    qubitsB_[i] = num_qubits - qubitsB_[i] - 1;
+  }
+
+  auto stateB = state_.partial_trace(qubitsB_);
+
+  auto samplesAB = sample_paulis(num_samples);
+  auto samplesA = stateA.sample_paulis(num_samples);
+  auto samplesB = stateB.sample_paulis(num_samples);
+
+  double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB);
+  double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA);
+  double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB);
+
+  return MA + MB - MAB;
+}
+
 magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
   return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
 }
@@ -1531,7 +1643,7 @@ magic_t MatrixProductState::magic_mutual_information_exact(const std::vector<uin
 }
 
 std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
-  return impl->sample_paulis(num_samples);
+  return impl->sample_paulis(num_samples, rng);
 }
 
 double MatrixProductState::expectation(const PauliString& p) const {
@@ -1627,6 +1739,13 @@ MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& other)
 
 MatrixProductOperator::~MatrixProductOperator()=default;
 
+MatrixProductOperator& MatrixProductOperator::operator=(const MatrixProductOperator& other) {
+  if (this != &other) {
+    impl = std::make_unique<MatrixProductOperatorImpl>(*other.impl);
+  }
+  return *this;
+}
+
 void MatrixProductOperator::print_mps() const {
   impl->print_mps();
 }
@@ -1637,6 +1756,10 @@ Eigen::MatrixXcd MatrixProductOperator::coefficients() const {
 
 double MatrixProductOperator::trace() const {
   return impl->trace();
+}
+
+std::vector<PauliAmplitude> MatrixProductOperator::sample_paulis(size_t num_samples) {
+  return impl->sample_paulis(num_samples, rng);
 }
 
 double MatrixProductOperator::expectation(const PauliString& p) const {

@@ -1,8 +1,6 @@
 #include "CircuitUtils.h"
 
 #include <iostream>
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unordered_set>
 #include <assert.h>

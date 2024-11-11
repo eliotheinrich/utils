@@ -6,6 +6,8 @@
 #include <iterator>
 #include <vector>
 
+#include <fmt/format.h>
+
 class SparseBinaryMatrix : public BinaryMatrixBase {
   private:
     std::vector<std::set<size_t>> inds;

@@ -1,3 +1,5 @@
+#define FMT_HEADER_ONLY
+
 #include "QuantumState.h"
 #include "CliffordState.h"
 #include "BinaryPolynomial.h"
@@ -238,7 +240,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("partial_trace", &MatrixProductState::partial_trace)
     .def("sample_paulis_exhaustive", &MatrixProductState::sample_paulis_exhaustive)
     .def("sample_paulis_montecarlo", &MatrixProductState::sample_paulis_montecarlo)
-    .def("magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
+    .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
     .def("magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
     .def("magic_mutual_information_montecarlo", &MatrixProductState::magic_mutual_information_montecarlo)
     .def("magic_mutual_information_exhaustive", &MatrixProductState::magic_mutual_information_exhaustive)
@@ -298,6 +300,24 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("to_statevector", &QuantumCHPState::to_statevector)
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
     .def("random_clifford", &QuantumCHPState::random_clifford);
+
+
+  auto symm = [](const QuantumCircuit& q) {
+    PauliString p("+ZZ");
+    PauliString p_ = p;
+    q.apply(p_);
+    return p == p_;
+  };
+
+  static CliffordTable z2_table = CliffordTable(symm);
+
+  m.def("random_clifford_z2", [](uint32_t num_qubits, uint32_t q1, uint32_t q2) {
+    QuantumCircuit qc(num_qubits);
+    thread_local std::random_device gen;
+    std::minstd_rand rng(gen());
+    z2_table.apply_random(rng, {q1, q2}, qc);
+    return qc;
+  });
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
     .def(nanobind::init<size_t, size_t>())

@@ -1,4 +1,5 @@
 #include <random>
+
 #define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -136,6 +137,7 @@ void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
 std::minstd_rand seeded_rng() {
   thread_local std::random_device gen;
   int seed = gen();
+  seed = 314;
   std::minstd_rand rng(seed);
 
   return rng;
@@ -531,7 +533,7 @@ bool test_mps_measure() {
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
   int seed = rng();
-  mps.seed(seed, seed);
+  mps.seed(seed);
   sv.seed(seed);
 
   for (size_t i = 0; i < 100; i++) {
@@ -574,7 +576,7 @@ bool test_weak_measure() {
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
   int seed = rng();
-  mps.seed(seed, seed);
+  mps.seed(seed);
   sv.seed(seed);
 
   for (size_t i = 0; i < 100; i++) {
@@ -616,7 +618,7 @@ bool test_z2_clifford() {
 
   constexpr size_t nqb = 8;
 
-  auto Z2 = [](const QuantumCircuit& qc) {
+  auto XX_sym = [](const QuantumCircuit& qc) {
     PauliString XX("XX");
     PauliString XX_ = XX;
 
@@ -625,34 +627,108 @@ bool test_z2_clifford() {
     return XX == XX_;
   };
 
-  CliffordTable t(Z2);
+  auto ZZ_sym = [](const QuantumCircuit& qc) {
+    PauliString ZZ("ZZ");
+    PauliString ZZ_ = ZZ;
+
+    qc.apply(ZZ_);
+
+    return ZZ == ZZ_;
+  };
+
+  CliffordTable tXX(XX_sym);
+  CliffordTable tZZ(ZZ_sym);
+
   MatrixProductState state(nqb, 1u << nqb);
   randomize_state_haar(rng, state);
 
-  std::string s;
+  std::string sx, sz;
   for (size_t i = 0; i < nqb; i++) {
-    s += "X";
+    sx += "X";
+    sz += "Z";
   }
 
-  PauliString T(s);
-  double e = state.expectation(T);
-
+  PauliString Tx(sx);
+  PauliString Tz(sz);
 
   for (size_t i = 0; i < 1000; i++) {
     uint32_t q = rng() % (nqb - 1);
-    t.apply_random(rng, {q, q+1}, state);
+    double tz1 = state.expectation(Tz);
+    tZZ.apply_random(rng, {q, q+1}, state);
+    double tz2 = state.expectation(Tz);
+    ASSERT(is_close(tz1, tz2), fmt::format("Expectation of {} changed from {} to {}", Tz.to_string_ops(), tz1, tz2));
 
-    double c = state.expectation(T);
-    ASSERT(is_close(e, state.expectation(T)), fmt::format("Expectation of {} changed from {} to {}.", T.to_string_ops(), e, c));
+    q = rng() % (nqb - 1);
+    double tx1 = state.expectation(Tx);
+    tXX.apply_random(rng, {q, q+1}, state);
+    double tx2 = state.expectation(Tx);
+    ASSERT(is_close(tx1, tx2), fmt::format("Expectation of {} changed from {} to {}", Tx.to_string_ops(), tx1, tx2));
   }
   
   return true;
 }
 
-#define ADD_TEST(x) tests[#x] = x;
+// Check that trivial partial trace and MPS give same results from sample_pauli
+bool test_mpo_sample_paulis() {
+  auto rng = seeded_rng();
 
-int main() {
+  constexpr size_t nqb = 8;
+  
+  MatrixProductState mps(nqb, 1u << nqb);
+  randomize_state_haar(rng, mps);
+  MatrixProductOperator mpo = mps.partial_trace({});
+
+  int seed = rng();
+  mps.seed(seed);
+  mpo.seed(seed);
+
+
+  constexpr size_t num_samples = 100;
+  auto paulis1 = mps.sample_paulis(num_samples);
+  auto paulis2 = mpo.sample_paulis(num_samples);
+  for (size_t i = 0; i < num_samples; i++) {
+    auto [P1, t1] = paulis1[i];
+    auto [P2, t2] = paulis2[i];
+
+    ASSERT(P1 == P2 && is_close(t1, t2), fmt::format("Paulis <{}> = {:.3f} and <{}> = {:.3f} do not match in sample_paulis.", P1.to_string_ops(), t1, P2.to_string_ops(), t2));
+  }
+
+  mpo = mps.partial_trace({0, 1, 2});
+
+  auto paulis = mpo.sample_paulis(1);
+
+  mpo = mps.partial_trace({0, 1, 5});
+  bool found_error = false;
+  try {
+    paulis = mpo.sample_paulis(1);
+  } catch (std::runtime_error e) {
+    found_error = true;
+  }
+
+  ASSERT(found_error);
+
+
+  return true;
+}
+
+#define ADD_TEST(x)                     \
+if (run_all) {                          \
+  tests[#x "()"] = x();                 \
+} else if (test_names.contains(#x)) {   \
+  tests[#x "()"] = x();                 \
+}
+
+int main(int argc, char *argv[]) {
   std::map<std::string, bool> tests;
+  std::set<std::string> test_names;
+
+  bool run_all = (argc == 1);
+
+  if (!run_all) {
+    for (size_t i = 1; i < argc; i++) {
+      test_names.insert(argv[i]);
+    }
+  }
 
   //assert(test_binary_polynomial());
   //assert(test_binary_matrix());
@@ -660,15 +736,20 @@ int main() {
   //assert(test_random_regular_graph());
   //assert(test_parity_check_reduction());
   //assert(test_leaf_removal());
-  ADD_TEST(test_nonlocal_mps());
-  ADD_TEST(test_statevector());
-  ADD_TEST(test_mps());
-  ADD_TEST(test_partial_trace());
-  ADD_TEST(test_clifford_states_unitary());
-  ADD_TEST(test_pauli_reduce());
-  ADD_TEST(test_mps_measure());  
-  ADD_TEST(test_weak_measure());
-  ADD_TEST(test_z2_clifford());
+  ADD_TEST(test_nonlocal_mps);
+  ADD_TEST(test_statevector);
+  ADD_TEST(test_mps);
+  ADD_TEST(test_partial_trace);
+  ADD_TEST(test_clifford_states_unitary);
+  ADD_TEST(test_pauli_reduce);
+  ADD_TEST(test_mps_measure);  
+  ADD_TEST(test_weak_measure);
+  ADD_TEST(test_z2_clifford);
+  ADD_TEST(test_mpo_sample_paulis);
+
+  for (const auto& name : test_names) {
+    
+  }
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

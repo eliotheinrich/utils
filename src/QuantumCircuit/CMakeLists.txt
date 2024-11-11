@@ -4,5 +4,3 @@ add_library(quantum_circuit
     Gates.hpp
     QuantumCircuit.cpp
 )
-
-target_link_libraries(quantum_circuit PUBLIC fmt::fmt)

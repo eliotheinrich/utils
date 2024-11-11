@@ -1,5 +1,7 @@
 #include "MonteCarlo.hpp"
 
+#include <fmt/format.h>
+
 #ifdef BUILD_GLFW
 #include <GLFW/glfw3.h>
 

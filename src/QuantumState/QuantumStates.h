@@ -52,7 +52,7 @@ class QuantumState : public EntropyState {
 		}
 
     virtual magic_t magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-      return magic_mutual_information_montecarlo(qubitsA, qubitsB, num_samples, 1000, std::nullopt);
+      throw std::runtime_error("Virtual magic_mutual_information called on a state which has no implemented it.");
     }
     virtual magic_t magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt)=0;
     virtual magic_t magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB)=0;
@@ -83,12 +83,6 @@ class QuantumState : public EntropyState {
         q = q/amplitude_samples.size();
         return 1.0/(1.0 - index) * std::log(q);
       }
-    }
-
-    virtual double stabilizer_renyi_entropy(size_t index) {
-      // Default to 1000 samples
-      std::vector<PauliAmplitude> samples = sample_paulis(1000);
-      return QuantumState::stabilizer_renyi_entropy(index, samples);
     }
 
     std::vector<PauliAmplitude> sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
@@ -315,9 +309,6 @@ class Statevector : public QuantumState {
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
-    virtual double stabilizer_renyi_entropy(size_t index) override {
-      return DensityMatrix(*this).stabilizer_renyi_entropy(index);
-    }
 
     virtual magic_t magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override {
       return DensityMatrix(*this).magic_mutual_information_montecarlo(qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
@@ -387,10 +378,6 @@ class UnitaryState : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override;
 
-    virtual double stabilizer_renyi_entropy(size_t index) override {
-      return DensityMatrix(*this).stabilizer_renyi_entropy(index);
-    }
-
     virtual magic_t magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override {
       return DensityMatrix(*this).magic_mutual_information_montecarlo(qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
     }
@@ -444,17 +431,17 @@ class MatrixProductState : public QuantumState {
 
 		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-8);
     MatrixProductState(const MatrixProductState& other);
+    MatrixProductState& operator=(const MatrixProductState& other);
 
     static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
 
-    virtual void seed(int i) override;
-    void seed(int i, int j);
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
     virtual std::vector<PauliAmplitude> sample_paulis(size_t num_samples) override;
 
+    virtual magic_t magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
     virtual magic_t magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
     virtual magic_t magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) override;
     virtual magic_t magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
@@ -504,6 +491,7 @@ class MatrixProductOperator : public QuantumState {
     MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits);
     MatrixProductOperator(const MatrixProductOperator& mpo, const std::vector<uint32_t>& traced_qubits);
     MatrixProductOperator(const MatrixProductOperator& other);
+    MatrixProductOperator& operator=(const MatrixProductOperator& other);
 
     void print_mps() const;
 		Eigen::MatrixXcd coefficients() const;
@@ -520,6 +508,8 @@ class MatrixProductOperator : public QuantumState {
     }
 
     MatrixProductOperator partial_trace(const std::vector<uint32_t>& qubits) const;
+
+    virtual std::vector<PauliAmplitude> sample_paulis(size_t num_samples) override;
 
     virtual magic_t magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
     virtual magic_t magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) override;
@@ -627,7 +617,7 @@ magic_t magic_mutual_information_exhaustive_impl(StateType& state, const std::ve
   return I - W;
 }
 
-static void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng, size_t j) {
+static void single_qubit_random_mutation_at_site(PauliString& p, std::minstd_rand& rng, size_t j) {
   size_t g = rng() % 4;
 
   bool b1 = g % 2;
@@ -650,7 +640,7 @@ static void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng, 
 
 static void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
   size_t j = rng() % p.num_qubits;
-  single_qubit_random_mutation(p, rng, j);
+  single_qubit_random_mutation_at_site(p, rng, j);
 }
 
 static void random_mutation(PauliString& p, std::minstd_rand& rng) {
@@ -658,7 +648,7 @@ static void random_mutation(PauliString& p, std::minstd_rand& rng) {
   if ((r) || (p.num_qubits == 1)) {
     // Do single-qubit mutation
     size_t j = rng() % p.num_qubits;
-    single_qubit_random_mutation(p, rng, j);
+    single_qubit_random_mutation_at_site(p, rng, j);
   } else {
     // Do double-qubit mutation
     size_t j1 = rng() % p.num_qubits;
@@ -667,8 +657,8 @@ static void random_mutation(PauliString& p, std::minstd_rand& rng) {
       j2 = rng() % p.num_qubits;
     }
 
-    single_qubit_random_mutation(p, rng, j1);
-    single_qubit_random_mutation(p, rng, j2);
+    single_qubit_random_mutation_at_site(p, rng, j1);
+    single_qubit_random_mutation_at_site(p, rng, j2);
   }
 }
 
@@ -708,22 +698,9 @@ static void random_bit_mutation(PauliString& p, std::minstd_rand& rng) {
 }
 
 template <class StateType>
-magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) {
-  PauliMutationFunc mutation = xxz_random_mutation;
-  if (mutation_opt) {
-    mutation = mutation_opt.value();
-  }
-
-  auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, state.num_qubits);
-
-  auto stateAB = state.partial_trace(_qubits);
+magic_t process_magic_samples(const StateType& stateAB, const std::vector<uint32_t>& _qubitsA, const std::vector<uint32_t>& _qubitsB, const std::vector<PauliAmplitude>& samples1, const std::vector<PauliAmplitude>& samples2) {
   auto stateA = stateAB.partial_trace(_qubitsB);
   auto stateB = stateAB.partial_trace(_qubitsA);
-
-  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
-  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
-  auto samples1 = stateAB.sample_paulis_montecarlo(num_samples, equilibration_timesteps, p1, mutation);
-  auto samples2 = stateAB.sample_paulis_montecarlo(num_samples, equilibration_timesteps, p2, mutation);
 
   double I = 0.0;
   for (const auto &[P, t] : samples1) {
@@ -755,43 +732,34 @@ magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::ve
 }
 
 template <class StateType>
+magic_t magic_mutual_information_montecarlo_impl(StateType& state, const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) {
+  PauliMutationFunc mutation = single_qubit_random_mutation;
+  if (mutation_opt) {
+    mutation = mutation_opt.value();
+  }
+
+  auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, state.num_qubits);
+
+  auto stateAB = state.partial_trace(_qubits);
+
+  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
+  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
+  auto samples1 = stateAB.sample_paulis_montecarlo(num_samples, equilibration_timesteps, p1, mutation);
+  auto samples2 = stateAB.sample_paulis_montecarlo(num_samples, equilibration_timesteps, p2, mutation);
+  
+  return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
+}
+
+template <class StateType>
 magic_t magic_mutual_information_exact_impl(StateType& state, const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
   auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, state.num_qubits);
 
   auto stateAB = state.partial_trace(_qubits);
-  auto stateA = stateAB.partial_trace(_qubitsB);
-  auto stateB = stateAB.partial_trace(_qubitsA);
 
   ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
   ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
   auto samples1 = stateAB.sample_paulis_exact(num_samples, p1);
   auto samples2 = stateAB.sample_paulis_exact(num_samples, p2);
 
-  double I = 0.0;
-  for (const auto &[P, t] : samples1) {
-    PauliString PA = P.substring(_qubitsA, true);
-    PauliString PB = P.substring(_qubitsB, true);
-
-    double tA = std::abs(stateA.expectation(PA));
-    double tB = std::abs(stateB.expectation(PB));
-
-    I += std::pow(tA*tB/t, 2.0);
-  }
-
-  I = -std::log(I/samples1.size());
-
-  double W = 0.0;
-  for (const auto &[P, t] : samples2) {
-    PauliString PA = P.substring(_qubitsA, true);
-    PauliString PB = P.substring(_qubitsB, true);
-
-    double tA = std::abs(stateA.expectation(PA));
-    double tB = std::abs(stateB.expectation(PB));
-
-    W += std::pow(tA*tB/t, 4.0);
-  }
-  
-  W = -std::log(W/samples2.size());
-
-  return I - W;
+  return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
 }

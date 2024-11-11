@@ -9,9 +9,10 @@
 #include <Samplers.h>
 
 #include <sstream>
-#include <fmt/format.h>
-
 #include <iostream>
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 class FreeFermionState : public EntropyState {
   private:
