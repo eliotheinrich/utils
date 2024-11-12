@@ -177,9 +177,10 @@ static ITensor pauli_matrix(size_t i, Index i1, Index i2) {
 
 
 static void swap_tags(Index& idx1, Index& idx2) {
-    auto new_idxs = swapTags({idx1, idx2}, idx1.tags(), idx2.tags());
-    idx1 = new_idxs[0];
-    idx2 = new_idxs[1];
+  IndexSet idxs = {idx1, idx2};
+  auto new_idxs = swapTags(idxs, idx1.tags(), idx2.tags());
+  idx1 = new_idxs[0];
+  idx2 = new_idxs[1];
 }
 
 template <typename T1, typename T2, typename... Args>
