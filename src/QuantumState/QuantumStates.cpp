@@ -46,7 +46,7 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_exact(size_t num_samples
 }
 
 std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
-  PauliMutationFunc mutation = xxz_random_mutation;
+  PauliMutationFunc mutation = single_qubit_random_mutation;
   if (mutation_opt) {
     mutation = mutation_opt.value();
   }

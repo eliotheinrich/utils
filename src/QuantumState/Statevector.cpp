@@ -68,8 +68,21 @@ double Statevector::expectation(const PauliString& p) const {
     throw std::runtime_error(fmt::format("P = {} has {} qubits but state has {} qubits. Cannot compute expectation.", p.to_string_ops(), p.num_qubits, num_qubits));
   }
 
-  Eigen::MatrixXcd pm = p.to_matrix();
-  return expectation(pm).real();
+  Statevector s(*this);
+
+  for (uint32_t i = 0; i < num_qubits; i++) {
+    uint32_t j = i;
+    Pauli op = p.to_pauli(i);
+    if (op == Pauli::X) {
+      s.evolve(quantumstate_utils::X::value, j);
+    } else if (op == Pauli::Y) {
+      s.evolve(quantumstate_utils::Y::value, j);
+    } else if (op == Pauli::Z) {
+      s.evolve(quantumstate_utils::Z::value, j);
+    }
+  }
+
+  return inner(s).real();
 }
 
 std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
@@ -221,30 +234,34 @@ void Statevector::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
 
 // Vector representing diagonal gate
 void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const std::vector<uint32_t> &qubits) {
-  uint32_t s = 1u << num_qubits;
-  uint32_t h = 1u << qubits.size();
+  throw std::runtime_error("evolve_diagonal is currently bugged.");
 
-  if (gate.size() != h) {
-    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
-  }
+  //uint32_t s = 1u << num_qubits;
+  //uint32_t h = 1u << qubits.size();
 
-  for (uint32_t a = 0; a < s; a++) {
-    uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
+  //if (gate.size() != h) {
+  //  throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+  //}
 
-    data(a) *= gate(h - b - 1);
-  }
+  //for (uint32_t a = 0; a < s; a++) {
+  //  uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
+
+  //  data(a) *= gate(h - b - 1);
+  //}
 }
 
 void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate) {
-  uint32_t s = 1u << num_qubits;
+  throw std::runtime_error("evolve_diagonal is currently bugged.");
 
-  if (gate.size() != s) {
-    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
-  }
+  //uint32_t s = 1u << num_qubits;
 
-  for (uint32_t a = 0; a < s; a++) {
-    data(a) *= gate(a);
-  }
+  //if (gate.size() != s) {
+  //  throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+  //}
+
+  //for (uint32_t a = 0; a < s; a++) {
+  //  data(a) *= gate(a);
+  //}
 }
 
 void Statevector::evolve(const QuantumCircuit& circuit, const std::vector<bool>& outcomes) {

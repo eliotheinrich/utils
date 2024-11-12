@@ -299,7 +299,7 @@ bool test_statevector() {
     PauliString Z(num_qubits);
     Z.set_z(i, 1);
 
-    std::complex<double> d = s.expectation(Z);
+    double d = s.expectation(Z);
 
     if (i == 0) {
       ASSERT(is_close(d, -1.0));
@@ -711,6 +711,55 @@ bool test_mpo_sample_paulis() {
   return true;
 }
 
+bool test_mps_inner() {
+  constexpr size_t nqb = 6;
+  auto rng = seeded_rng();
+
+  MatrixProductState mps1(nqb, 64);
+  MatrixProductState mps2(nqb, 64);
+  Statevector s1(nqb);
+  Statevector s2(nqb);
+
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(rng, mps1, s1);
+    randomize_state_haar(rng, mps2, s2);
+
+    auto c1 = mps1.inner(mps2);
+    auto c2 = s1.inner(s2);
+
+    ASSERT(is_close(c1, c2));
+  }
+
+  return true;
+}
+
+bool test_mps_reverse() {
+  constexpr size_t nqb = 4;
+  auto rng = seeded_rng();
+
+  std::vector<size_t> nqbs = {2, 3, 4, 5, 6};
+
+  for (auto nqb : nqbs) {
+    MatrixProductState mps(nqb, 1u << nqb);
+
+    randomize_state_haar(rng, mps);
+
+    MatrixProductState mps_r = mps;
+    auto c1 = mps.inner(mps_r);
+    auto c2 = mps_r.inner(mps);
+    ASSERT(is_close(c1, std::conj(c2)));
+
+    mps_r.reverse();
+    for (size_t i = 0; i < nqb/2; i++) {
+      mps_r.swap(i, nqb - i - 1);
+    }
+
+    ASSERT(states_close(mps, mps_r));
+  }
+
+  return true;
+}
+
 #define ADD_TEST(x)                     \
 if (run_all) {                          \
   tests[#x "()"] = x();                 \
@@ -746,10 +795,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_weak_measure);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mpo_sample_paulis);
-
-  for (const auto& name : test_names) {
-    
-  }
+  ADD_TEST(test_mps_inner);
+  ADD_TEST(test_mps_reverse);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

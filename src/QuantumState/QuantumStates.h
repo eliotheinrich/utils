@@ -123,6 +123,8 @@ class QuantumState : public EntropyState {
     DEFINE_ONE_QUBIT_GATE(sqrtZd, sqrtZd); \
     DEFINE_ONE_QUBIT_GATE(s, sqrtZ);       \
     DEFINE_ONE_QUBIT_GATE(sd, sqrtZd);     \
+    DEFINE_ONE_QUBIT_GATE(t, T);       \
+    DEFINE_ONE_QUBIT_GATE(td, Td);     \
 
     template <typename G>
     void evolve_two_qubit_gate(uint32_t q1, uint32_t q2) { 
@@ -458,6 +460,10 @@ class MatrixProductState : public QuantumState {
 		Eigen::VectorXcd coefficients() const;
     double trace() const;
     size_t bond_dimension(size_t i) const;
+
+    void reverse();
+
+    std::complex<double> inner(const MatrixProductState& other) const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 		virtual void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) override;

@@ -5,6 +5,7 @@
 
 #include <fmt/ranges.h>
 #include <itensor/all.h>
+#include <stdexcept>
 #include <unsupported/Eigen/MatrixFunctions>
 
 using namespace itensor;
@@ -172,6 +173,28 @@ static ITensor pauli_matrix(size_t i, Index i1, Index i2) {
   }
 
   throw std::runtime_error(fmt::format("Invalid Pauli index {}.", i));
+}
+
+
+static void swap_tags(Index& idx1, Index& idx2) {
+    auto new_idxs = swapTags({idx1, idx2}, idx1.tags(), idx2.tags());
+    idx1 = new_idxs[0];
+    idx2 = new_idxs[1];
+}
+
+template <typename T1, typename T2, typename... Args>
+static void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
+  auto tags1 = idx1.tags();
+  auto tags2 = idx2.tags();
+
+  first.swapTags(tags1, tags2);
+  second.swapTags(tags2, tags1);
+
+  if constexpr (sizeof...(args) == 0) {
+    swap_tags(idx1, idx2);
+  } else {
+    swap_tags(idx1, idx2, args...);
+  }
 }
 
 class MatrixProductStateImpl {
@@ -858,6 +881,65 @@ class MatrixProductStateImpl {
       }
 
       return dim(inds(singular_values[i])[0]);
+    }
+
+    void reverse() {
+      for (size_t i = 0; i < num_qubits/2; i++) {
+        size_t j = num_qubits - i - 1;
+        std::swap(tensors[i], tensors[j]);
+      }
+
+      size_t k = (num_qubits % 2) ? (num_qubits / 2) : (num_qubits / 2 - 1);
+      for (size_t i = 0; i < k; i++) {
+        size_t j = num_qubits - i - 2;
+        std::swap(singular_values[i], singular_values[j]);
+      }
+
+
+      // Relabel indices
+      for (size_t i = 0; i < num_qubits/2; i++) {
+        size_t j = num_qubits - i - 1;
+        std::swap(external_indices[i], external_indices[j]);
+        swap_tags(external_indices[i], external_indices[j], tensors[i], tensors[j]);
+      }
+
+      for (size_t i = 0; i < num_qubits - 1; i++) {
+        size_t j = internal_indices.size() - i - 1;
+        std::swap(internal_indices[i], internal_indices[j]);
+      }
+
+      for (size_t i = 0; i < k; i++) {
+        size_t j = internal_indices.size() - i - 1;
+        size_t k1 = i / 2;
+        size_t k2 = num_qubits - k1 - 1;
+
+        if (i % 2 == 0) {
+          swap_tags(internal_indices[i], internal_indices[j], singular_values[k1], singular_values[k2 - 1], tensors[k1], tensors[k2]);
+        } else {
+          swap_tags(internal_indices[i], internal_indices[j], singular_values[k1], singular_values[k2 - 1], tensors[k1 + 1], tensors[k2 - 1]);
+        }
+      }
+    }
+
+    std::complex<double> inner(const MatrixProductStateImpl& other) const {
+      if (num_qubits != other.num_qubits) {
+        throw std::runtime_error("Can't compute inner product of MPS; number of qubits do not match.");
+      }
+      
+      Index ext1 = external_idx(0);
+      Index ext2 = other.external_idx(0);
+      ITensor contraction = tensors[0] * conj(replaceInds(other.tensors[0], {ext2}, {ext1}));
+
+      for (size_t i = 1; i < num_qubits; i++) {
+        ext1 = external_idx(i);
+        ext2 = other.external_idx(i);
+        contraction *= singular_values[i - 1];
+        contraction *= tensors[i];
+        contraction *= other.singular_values[i - 1];
+        contraction *= conj(replaceInds(other.tensors[i], {ext2}, {ext1}));
+      }
+
+      return std::conj(tensor_to_scalar(contraction));
     }
 
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
@@ -1608,9 +1690,7 @@ magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>
 
   auto stateA = partial_trace(qubitsB);
   MatrixProductState state_(*this);
-  for (size_t i = 0; i < num_qubits/2; i++) {
-    state_.swap(i, num_qubits - i - 1);
-  }
+  state_.reverse();
 
   std::vector<uint32_t> qubitsB_ = qubitsB;
   for (size_t i = 0; i < qubitsB_.size(); i++) {
@@ -1627,7 +1707,7 @@ magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>
   double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA);
   double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB);
 
-  return MA + MB - MAB;
+  return MAB - MA - MB;
 }
 
 magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
@@ -1680,6 +1760,14 @@ double MatrixProductState::trace() const {
 
 size_t MatrixProductState::bond_dimension(size_t i) const {
   return impl->bond_dimension_at_site(i);
+}
+
+void MatrixProductState::reverse() {
+  impl->reverse();
+}
+
+std::complex<double> MatrixProductState::inner(const MatrixProductState& other) const {
+  return impl->inner(*other.impl.get());
 }
 
 void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
