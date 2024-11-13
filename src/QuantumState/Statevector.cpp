@@ -143,7 +143,7 @@ bool Statevector::mzr(uint32_t q) {
   return outcome;
 }
 
-bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+bool Statevector::internal_measure(const PauliString& p, const std::vector<uint32_t>& qubits, bool renormalize=true) {
   if (qubits.size() != p.num_qubits) {
     throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
@@ -165,12 +165,30 @@ bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qub
   Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
 
   evolve(proj, qubits);
-  normalize();
+  if (renormalize) {
+    normalize();
+  }
 
   return outcome;
+
 }
 
-bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+std::vector<bool> Statevector::measure(const std::vector<MeasurementData>& measurements) {
+  std::vector<bool> results;
+  for (auto const& [p, qubits] : measurements) {
+    results.push_back(internal_measure(p, qubits, false));
+  }
+
+  normalize();
+
+  return results;
+}
+
+bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+  return internal_measure(p, qubits);
+}
+
+bool Statevector::internal_weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, bool renormalize=true) {
   PauliString p_ = p.superstring(qubits, num_qubits);
 
   auto pm = p.to_matrix();
@@ -190,9 +208,26 @@ bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>
   Eigen::MatrixXcd proj = (beta*t).exp();
 
   evolve(proj, qubits);
-  normalize();
+  if (renormalize) {
+    normalize();
+  }
 
   return outcome;
+}
+
+std::vector<bool> Statevector::weak_measure(const std::vector<WeakMeasurementData>& measurements) {
+  std::vector<bool> results;
+  for (auto const& [p, qubits, beta] : measurements) {
+    results.push_back(internal_weak_measure(p, qubits, beta, false));
+  }
+
+  normalize();
+
+  return results;
+}
+
+bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+  return internal_weak_measure(p, qubits, beta);
 }
 
 void Statevector::evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) {

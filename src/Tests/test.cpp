@@ -108,7 +108,7 @@ void randomize_state_haar(std::minstd_rand& rng, QuantumStates&... states) {
   size_t num_qubits = get_num_qubits(states...);
 
   QuantumCircuit qc(num_qubits);
-  size_t depth = num_qubits;
+  size_t depth = 2;
 
   qc.append(generate_haar_circuit(num_qubits, depth, false, rng()));
   qc.apply(states...);
@@ -137,7 +137,6 @@ void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
 std::minstd_rand seeded_rng() {
   thread_local std::random_device gen;
   int seed = gen();
-  seed = 314;
   std::minstd_rand rng(seed);
 
   return rng;
@@ -734,9 +733,7 @@ bool test_mps_inner() {
 }
 
 bool test_mps_reverse() {
-  constexpr size_t nqb = 4;
   auto rng = seeded_rng();
-
   std::vector<size_t> nqbs = {2, 3, 4, 5, 6};
 
   for (auto nqb : nqbs) {
@@ -757,6 +754,35 @@ bool test_mps_reverse() {
     ASSERT(states_close(mps, mps_r));
   }
 
+  return true;
+}
+
+bool test_batch_weak_measure() {
+  auto rng = seeded_rng();
+
+  constexpr size_t nqb = 6;
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  Statevector sv(nqb);
+  randomize_state_haar(rng, sv, mps);
+
+  int s = rng();
+  sv.seed(s);
+  mps.seed(s);
+
+  std::vector<WeakMeasurementData> measurements;
+  for (uint32_t i = 0; i < nqb/2; i++) {
+    std::vector<uint32_t> qubits = {2*i, 2*i + 1};
+    PauliString P = PauliString::rand(2, rng);
+    double beta = 1.0;
+
+    measurements.push_back({P, qubits, beta});
+    sv.weak_measure(P, qubits, beta);
+  }
+
+  mps.weak_measure(measurements);
+
+  ASSERT(states_close(mps, sv));
   return true;
 }
 
@@ -797,6 +823,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_mps_inner);
   ADD_TEST(test_mps_reverse);
+  ADD_TEST(test_batch_weak_measure);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

@@ -835,7 +835,7 @@ class MatrixProductStateImpl {
       return real(sumelsC(qtensor * dag(qtensor)));
     }
 
-    bool valid_state() const {
+    bool state_valid() const {
       for (size_t i = 0; i < num_qubits - 1; i++) {
         size_t d = dim(inds(singular_values[i])[0]);
         for (size_t j = 1; j <= d; j++) {
@@ -943,46 +943,6 @@ class MatrixProductStateImpl {
       return std::conj(tensor_to_scalar(contraction));
     }
 
-    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-      }
-
-      if (qubits.size() == 1 && p.to_pauli(0) == Pauli::Y) {
-        Eigen::Matrix2cd T = quantumstate_utils::H::value * quantumstate_utils::sqrtZ::value;
-        evolve(T.adjoint(), qubits[0]);
-        PauliString Z("+Z");
-        Z.set_r(p.get_r());
-        bool b = weak_measure(Z, qubits, beta, r);
-        evolve(T, qubits[0]);
-        return b;
-      }
-
-      auto pm = p.to_matrix();
-      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
-      Eigen::MatrixXcd proj0 = (id + pm)/2.0;
-
-      double prob_zero = std::abs(expectation(proj0, qubits));
-
-      bool outcome = r >= prob_zero;
-
-      Eigen::MatrixXcd t = pm;
-      if (outcome) {
-        t = -t;
-      }
-
-      Eigen::MatrixXcd proj = (beta*t).exp();
-      Eigen::MatrixXcd P = proj.pow(2);
-      std::complex<double> c = expectation(P, qubits);
-      proj = proj / std::sqrt(std::abs(c));
-      evolve(proj, qubits);
-
-      uint32_t q = *std::ranges::min_element(qubits);
-      normalize(q);
-      
-      return outcome;
-    }
-
     ITensor orthogonality_tensor_l(uint32_t i) const {
       ITensor A = A_l(i);
       return A * conj(prime(A, fmt::format("m={}",i)));
@@ -993,45 +953,55 @@ class MatrixProductStateImpl {
         return A * conj(prime(A, fmt::format("m={}",i)));
     }
 
-    void normalize(size_t q) {
-      //std::cout << fmt::format("q = {}\n\n", q);
-      //for (size_t j = 0; j < num_qubits; j++) {
-      //  std::cout << fmt::format("j = {}\n", j);
-      //  PrintData(orthogonality_tensor_l(j));
-      //  if (j != num_qubits - 1) {
-      //    PrintData(singular_values[j]);
-      //  }
-      //}
+    bool singular_values_trivial(size_t i) const {
+      return (dim(internal_idx(i, InternalDir::Right)) == 1)
+          && (std::abs(norm(singular_values[i]) - 1.0) < 1e-4);
+    }
 
+    void normalize(uint32_t q1, uint32_t q2, uint32_t lq, uint32_t rq) {
+      //std::cout << fmt::format("Calling normalize({}, {}, {}, {})\n", q1, q2, lq, rq);
       Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
 
-      // TODO check dimension of singular_values and stop propagation
-      for (uint32_t i = q; i < num_qubits - 1; i++) {
-        //if (dim(internal_idx(i, InternalDir::Right)) == 1) {
-        //  break;
-        //}
+      for (uint32_t i = q2; i < rq; i++) {
+        if (singular_values_trivial(i)) {
+          break;
+        }
 
         evolve(id, {i, i+1});
       }
 
-      for (uint32_t i = q; i > 0; i--) {
-        //if (dim(internal_idx(i-1, InternalDir::Left)) == 1) {
-        //  break;
-        //}
+      for (uint32_t i = q1; i > lq; i--) {
+        if (singular_values_trivial(i - 1)) {
+          break;
+        }
 
         evolve(id, {i-1, i});
       }
-
-      //for (size_t j = 0; j < num_qubits; j++) {
-      //  std::cout << fmt::format("j = {}\n", j);
-      //  PrintData(orthogonality_tensor_l(j));
-      //  if (j != num_qubits - 1) {
-      //    PrintData(singular_values[j]);
-      //  }
-      //}
     }
 
-    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
+    std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
+      // TODO make this generalize to unordered qubits
+      std::vector<uint32_t> right_qubit;
+      for (size_t i = 0; i < measurements.size() - 1; i++) {
+        auto [p, qubits] = measurements[i+1];
+        right_qubit.push_back(qubits[0]);
+      }
+
+      std::vector<bool> results;
+      for (size_t i = 0; i < measurements.size(); i++) {
+        auto [p, qubits] = measurements[i];
+        double r = random_vals[i];
+        results.push_back(measure(p, qubits, r, false));
+        uint32_t q1 = *std::ranges::min_element(qubits);
+        uint32_t q2 = *std::ranges::max_element(qubits);
+        uint32_t rq = (i == measurements.size() - 1) ? (num_qubits - 1) : right_qubit[i];
+        normalize(q1, q2, 0, rq);
+      }
+
+      return results;
+    }
+
+    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r, bool renormalize=true) {
       if (qubits.size() != p.num_qubits) {
         throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
       }
@@ -1072,8 +1042,11 @@ class MatrixProductStateImpl {
 
       evolve(proj, qubits);
 
-      uint32_t q = *std::ranges::min_element(qubits);
-      normalize(q);
+      if (renormalize) {
+        uint32_t q1 = *std::ranges::min_element(qubits);
+        uint32_t q2 = *std::ranges::max_element(qubits);
+        normalize(q1, q2, 0, num_qubits - 1);
+      }
 
       return outcome;
     }
@@ -1081,6 +1054,72 @@ class MatrixProductStateImpl {
     bool measure(uint32_t q, double r) {
       return measure(PauliString("Z"), {q}, r);
     }
+
+    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements, const std::vector<double>& random_vals) {
+      // TODO make this generalize to unordered qubits
+      std::vector<uint32_t> right_qubit;
+      for (size_t i = 0; i < measurements.size() - 1; i++) {
+        auto [p, qubits, beta] = measurements[i+1];
+        right_qubit.push_back(qubits[0]);
+      }
+
+      std::vector<bool> results;
+      for (size_t i = 0; i < measurements.size(); i++) {
+        auto [p, qubits, beta] = measurements[i];
+        double r = random_vals[i];
+        results.push_back(weak_measure(p, qubits, beta, r, false));
+        uint32_t q1 = *std::ranges::min_element(qubits);
+        uint32_t q2 = *std::ranges::max_element(qubits);
+        uint32_t rq = (i == measurements.size() - 1) ? (num_qubits - 1) : right_qubit[i];
+        normalize(q1, q2, 0, rq);
+      }
+
+      return results;
+    }
+
+    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r, bool renormalize=true) {
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+      }
+
+      if (qubits.size() == 1 && p.to_pauli(0) == Pauli::Y) {
+        Eigen::Matrix2cd T = quantumstate_utils::H::value * quantumstate_utils::sqrtZ::value;
+        evolve(T.adjoint(), qubits[0]);
+        PauliString Z("+Z");
+        Z.set_r(p.get_r());
+        bool b = weak_measure(Z, qubits, beta, r);
+        evolve(T, qubits[0]);
+        return b;
+      }
+
+      auto pm = p.to_matrix();
+      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+      Eigen::MatrixXcd proj0 = (id + pm)/2.0;
+
+      double prob_zero = std::abs(expectation(proj0, qubits));
+
+      bool outcome = r >= prob_zero;
+
+      Eigen::MatrixXcd t = pm;
+      if (outcome) {
+        t = -t;
+      }
+
+      Eigen::MatrixXcd proj = (beta*t).exp();
+      Eigen::MatrixXcd P = proj.pow(2);
+      std::complex<double> c = expectation(P, qubits);
+      proj = proj / std::sqrt(std::abs(c));
+      evolve(proj, qubits);
+
+      if (renormalize) {
+        uint32_t q1 = *std::ranges::min_element(qubits);
+        uint32_t q2 = *std::ranges::max_element(qubits);
+        normalize(q1, q2, 0, num_qubits - 1);
+      }
+      
+      return outcome;
+    }
+
 };
 
 class MatrixProductOperatorImpl {
@@ -1787,8 +1826,26 @@ bool MatrixProductState::mzr(uint32_t q) {
   return impl->measure(q, randf());
 }
 
+std::vector<bool> MatrixProductState::measure(const std::vector<MeasurementData>& measurements) {
+  std::vector<double> random_vals(measurements.size());
+  for (size_t i = 0; i < measurements.size(); i++) {
+    random_vals[i] = randf();
+  }
+
+  return impl->measure(measurements, random_vals);
+}
+
 bool MatrixProductState::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
   return impl->measure(p, qubits, randf());
+}
+
+std::vector<bool> MatrixProductState::weak_measure(const std::vector<WeakMeasurementData>& measurements) {
+  std::vector<double> random_vals(measurements.size());
+  for (size_t i = 0; i < measurements.size(); i++) {
+    random_vals[i] = randf();
+  }
+
+  return impl->weak_measure(measurements, random_vals);
 }
 
 bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
@@ -1797,17 +1854,17 @@ bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<ui
 
 bool MatrixProductState::debug_tests() {
   bool b1 = impl->check_orthonormality();
-  bool b2 = impl->valid_state();
+  bool b2 = impl->state_valid();
 
   if (!b1) {
-    std::cout << "Not orthonormal.\n";
+    std::cout << "MPS is not orthonormal.\n";
   }
 
   if (!b2) {
-    std::cout << "not valid.\n";
+    std::cout << "MPS has invalid singular values.\n";
   } 
 
-  return impl->check_orthonormality() && impl->valid_state();
+  return b1 && b2;
 }
 
 // ----------------------------------------------------------------------- //

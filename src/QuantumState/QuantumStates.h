@@ -18,6 +18,8 @@ class EntropyState;
 using PauliAmplitude = std::pair<PauliString, double>;
 using PauliMutationFunc = std::function<void(PauliString&, std::minstd_rand&)>;
 using ProbabilityFunc = std::function<double(double)>;
+using WeakMeasurementData = std::tuple<PauliString, std::vector<uint32_t>, double>;
+using MeasurementData = std::tuple<PauliString, std::vector<uint32_t>>;
 using magic_t = double; //std::tuple<double, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>>;
 
 class QuantumState : public EntropyState {
@@ -348,8 +350,13 @@ class Statevector : public QuantumState {
 
     bool mzr(uint32_t q, bool outcome);
 
+    bool internal_measure(const PauliString& p, const std::vector<uint32_t>& qubits, bool renormalize);
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
+    std::vector<bool> measure(const std::vector<MeasurementData>& measurements);
+
+    bool internal_weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, bool renormalize);
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
+    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
 		double norm() const;
 
@@ -477,9 +484,14 @@ class MatrixProductState : public QuantumState {
 			Statevector statevector(*this);
 			return statevector.probabilities();
 		}
+
 		virtual bool mzr(uint32_t q) override;
+
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
+    std::vector<bool> measure(const std::vector<MeasurementData>& measurements);
+
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
+    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
     bool debug_tests();
 };
