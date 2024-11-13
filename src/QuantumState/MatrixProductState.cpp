@@ -987,6 +987,12 @@ class MatrixProductStateImpl {
         right_qubit.push_back(qubits[0]);
       }
 
+      std::vector<uint32_t> left_qubit;
+      for (size_t i = 1; i < measurements.size(); i++) {
+        auto [p, qubits] = measurements[i-1];
+        left_qubit.push_back(qubits[qubits.size()-1]);
+      }
+
       std::vector<bool> results;
       for (size_t i = 0; i < measurements.size(); i++) {
         auto [p, qubits] = measurements[i];
@@ -995,7 +1001,8 @@ class MatrixProductStateImpl {
         uint32_t q1 = *std::ranges::min_element(qubits);
         uint32_t q2 = *std::ranges::max_element(qubits);
         uint32_t rq = (i == measurements.size() - 1) ? (num_qubits - 1) : right_qubit[i];
-        normalize(q1, q2, 0, rq);
+        uint32_t lq = (i == 0) ? 0 : left_qubit[i];
+        normalize(q1, q2, lq, rq);
       }
 
       return results;
@@ -1056,22 +1063,59 @@ class MatrixProductStateImpl {
     }
 
     std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements, const std::vector<double>& random_vals) {
-      // TODO make this generalize to unordered qubits
+      // Check that no measurements overlap and all measurements are on adjacent qubits
+      //auto get_qubit_range = [](const std::vector<uint32_t>& qubits) {
+      //  return std::make_pair(static_cast<int>(*std::ranges::min_element(qubits)), static_cast<int>(*std::ranges::max_element(qubits)));
+      //};
+
+      //std::vector<bool> mask(num_qubits, false);
+
+      //for (const auto& [p, qubits, beta] : measurements) {
+      //  auto [q1, q2] = get_qubit_range(qubits);
+      //  if (mask[q1] || mask[q2]) {
+      //    throw std::runtime_error("Some measurements overlap.");
+      //  }
+      //  
+      //  mask[q1] = true;
+      //  mask[q2] = true;
+
+      //  if (std::abs(q1 - q2) > 1) {
+      //    throw std::runtime_error(fmt::format("Qubits = {} are not adjacent and thus cannot be measured on MPS.", qubits));
+      //  }
+      //}
+
+      std::vector<WeakMeasurementData> measurements_sorted = measurements;
+
+      //std::sort(measurements_sorted.begin(), measurements_sorted.end(), [](const WeakMeasurementData& m1, const WeakMeasurementData& m2) {
+      //  auto [a1, a2] = get_qubit_range(m1);
+      //  auto [b1, b2] = get_qubit_range(m2);
+      //  return a1 < b1;
+      //});
+      
+      size_t num_measurements = measurements_sorted.size();
+
       std::vector<uint32_t> right_qubit;
-      for (size_t i = 0; i < measurements.size() - 1; i++) {
-        auto [p, qubits, beta] = measurements[i+1];
+      for (size_t i = 0; i < num_measurements - 1; i++) {
+        auto [p, qubits, beta] = measurements_sorted[i+1];
         right_qubit.push_back(qubits[0]);
       }
 
+      std::vector<uint32_t> left_qubit;
+      for (size_t i = 1; i < num_measurements; i++) {
+        auto [p, qubits, beta] = measurements_sorted[i-1];
+        left_qubit.push_back(qubits[qubits.size()-1]);
+      }
+
       std::vector<bool> results;
-      for (size_t i = 0; i < measurements.size(); i++) {
-        auto [p, qubits, beta] = measurements[i];
+      for (size_t i = 0; i < num_measurements; i++) {
+        auto [p, qubits, beta] = measurements_sorted[i];
         double r = random_vals[i];
         results.push_back(weak_measure(p, qubits, beta, r, false));
         uint32_t q1 = *std::ranges::min_element(qubits);
         uint32_t q2 = *std::ranges::max_element(qubits);
-        uint32_t rq = (i == measurements.size() - 1) ? (num_qubits - 1) : right_qubit[i];
-        normalize(q1, q2, 0, rq);
+        uint32_t rq = (i == num_measurements - 1) ? (num_qubits - 1) : right_qubit[i];
+        uint32_t lq = (i == 0) ? 0 : left_qubit[i];
+        normalize(q1, q2, lq, rq);
       }
 
       return results;

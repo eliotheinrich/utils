@@ -34,8 +34,22 @@ struct fmt::formatter<std::complex<double>> {
 };
 
 template <typename T, typename V>
+bool is_close_eps(double eps, T first, V second) {
+  return std::abs(first - second) < eps;
+}
+
+template <typename T, typename V, typename... Args>
+bool is_close_eps(double eps, T first, V second, Args... args) {
+  if (!is_close(first, second)) {
+    return false;
+  } else {
+    return is_close_eps(eps, first, args...);
+  }
+}
+
+template <typename T, typename V>
 bool is_close(T first, V second) {
-  return std::abs(first - second) < 1e-8;
+  return is_close_eps(1e-8, first, second);
 }
 
 template <typename T, typename V, typename... Args>
@@ -757,32 +771,90 @@ bool test_mps_reverse() {
   return true;
 }
 
+bool test_batch_measure() {
+  auto rng = seeded_rng();
+
+  constexpr size_t nqb = 8;
+
+  MatrixProductState mps1(nqb, 1u << nqb);
+  MatrixProductState mps2(nqb, 1u << nqb);
+
+  int s = rng();
+  mps1.seed(s);
+  mps2.seed(s);
+
+  for (size_t i = 0; i < 100; i++) {
+    randomize_state_haar(rng, mps1, mps2);
+    std::vector<MeasurementData> measurements;
+    for (uint32_t i = 0; i < nqb/2; i++) {
+      PauliString P;
+      std::vector<uint32_t> qubits;
+      if (rng() % 2) {
+        P = PauliString::rand(2, rng);
+        qubits = {2*i, 2*i + 1};
+      } else {
+        P = PauliString::rand(1, rng);
+        if (rng() % 2) {
+          qubits = {2*i};
+        } else {
+          qubits = {2*i + 1};
+        }
+      }
+
+      measurements.push_back({P, qubits});
+      mps1.measure(P, qubits);
+    }
+
+    mps2.measure(measurements);
+
+    auto c = std::abs(mps1.inner(mps2));
+    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
+  }
+
+  return true;
+}
+
 bool test_batch_weak_measure() {
   auto rng = seeded_rng();
 
-  constexpr size_t nqb = 6;
+  constexpr size_t nqb = 8;
 
-  MatrixProductState mps(nqb, 1u << nqb);
-  Statevector sv(nqb);
-  randomize_state_haar(rng, sv, mps);
+  MatrixProductState mps1(nqb, 1u << nqb);
+  MatrixProductState mps2(nqb, 1u << nqb);
 
   int s = rng();
-  sv.seed(s);
-  mps.seed(s);
+  mps1.seed(s);
+  mps2.seed(s);
 
-  std::vector<WeakMeasurementData> measurements;
-  for (uint32_t i = 0; i < nqb/2; i++) {
-    std::vector<uint32_t> qubits = {2*i, 2*i + 1};
-    PauliString P = PauliString::rand(2, rng);
-    double beta = 1.0;
+  for (size_t i = 0; i < 100; i++) {
+    randomize_state_haar(rng, mps1, mps2);
+    std::vector<WeakMeasurementData> measurements;
+    for (uint32_t i = 0; i < nqb/2; i++) {
+      PauliString P;
+      std::vector<uint32_t> qubits;
+      if (rng() % 2) {
+        P = PauliString::rand(2, rng);
+        qubits = {2*i, 2*i + 1};
+      } else {
+        P = PauliString::rand(1, rng);
+        if (rng() % 2) {
+          qubits = {2*i};
+        } else {
+          qubits = {2*i + 1};
+        }
+      }
+      double beta = 1.0;
 
-    measurements.push_back({P, qubits, beta});
-    sv.weak_measure(P, qubits, beta);
+      measurements.push_back({P, qubits, beta});
+      mps1.weak_measure(P, qubits, beta);
+    }
+
+    mps2.weak_measure(measurements);
+
+    auto c = std::abs(mps1.inner(mps2));
+    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
   }
 
-  mps.weak_measure(measurements);
-
-  ASSERT(states_close(mps, sv));
   return true;
 }
 
@@ -823,6 +895,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_mps_inner);
   ADD_TEST(test_mps_reverse);
+  ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure);
 
   for (const auto& [name, result] : tests) {
