@@ -143,11 +143,7 @@ bool Statevector::mzr(uint32_t q) {
   return outcome;
 }
 
-bool Statevector::internal_measure(const PauliString& p, const std::vector<uint32_t>& qubits, bool renormalize=true) {
-  if (qubits.size() != p.num_qubits) {
-    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-  }
-
+MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits) {
   Eigen::MatrixXcd pm = p.to_matrix();
   Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(1u << qubits.size(), 1u << qubits.size());
 
@@ -164,31 +160,40 @@ bool Statevector::internal_measure(const PauliString& p, const std::vector<uint3
 
   Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
 
+  return {proj, prob_zero, outcome};
+}
+
+void Statevector::internal_measure(const MeasurementOutcome& outcome, const std::vector<uint32_t>& qubits, bool renormalize) {
+  auto proj = std::get<0>(outcome);
   evolve(proj, qubits);
   if (renormalize) {
     normalize();
   }
+}
 
-  return outcome;
+bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+  if (qubits.size() != p.num_qubits) {
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+  }
 
+  auto outcome = measurement_outcome(p, qubits);
+  internal_measure(outcome, qubits, true);
+
+  return std::get<2>(outcome);
 }
 
 std::vector<bool> Statevector::measure(const std::vector<MeasurementData>& measurements) {
   std::vector<bool> results;
   for (auto const& [p, qubits] : measurements) {
-    results.push_back(internal_measure(p, qubits, false));
+    auto outcome = measurement_outcome(p, qubits);
+    results.push_back(std::get<2>(outcome));
+    internal_measure(outcome, qubits, true);
   }
-
-  normalize();
 
   return results;
 }
 
-bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
-  return internal_measure(p, qubits);
-}
-
-bool Statevector::internal_weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, bool renormalize=true) {
+MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
   PauliString p_ = p.superstring(qubits, num_qubits);
 
   auto pm = p.to_matrix();
@@ -207,27 +212,28 @@ bool Statevector::internal_weak_measure(const PauliString& p, const std::vector<
 
   Eigen::MatrixXcd proj = (beta*t).exp();
 
-  evolve(proj, qubits);
-  if (renormalize) {
-    normalize();
+  return {proj, prob_zero, outcome};
+}
+
+bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+  if (qubits.size() != p.num_qubits) {
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
 
-  return outcome;
+  auto outcome = weak_measurement_outcome(p, qubits, beta);
+  internal_measure(outcome, qubits, true);
+  return std::get<2>(outcome);
 }
 
 std::vector<bool> Statevector::weak_measure(const std::vector<WeakMeasurementData>& measurements) {
   std::vector<bool> results;
   for (auto const& [p, qubits, beta] : measurements) {
-    results.push_back(internal_weak_measure(p, qubits, beta, false));
+    auto outcome = weak_measurement_outcome(p, qubits, beta);
+    results.push_back(std::get<2>(outcome));
+    internal_measure(outcome, qubits, true);
   }
 
-  normalize();
-
   return results;
-}
-
-bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
-  return internal_weak_measure(p, qubits, beta);
 }
 
 void Statevector::evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) {

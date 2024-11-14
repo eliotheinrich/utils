@@ -198,6 +198,10 @@ static void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... 
   }
 }
 
+static inline std::pair<uint32_t, uint32_t> get_qubit_range(const std::vector<uint32_t>& qubits) {
+  return std::make_pair(static_cast<int>(*std::ranges::min_element(qubits)), static_cast<int>(*std::ranges::max_element(qubits)));
+}
+
 class MatrixProductStateImpl {
   friend class MatrixProductState;
 
@@ -483,7 +487,6 @@ class MatrixProductStateImpl {
       return true;
     }
 
-    // 1322
     std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
@@ -731,7 +734,7 @@ class MatrixProductStateImpl {
     void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
       auto i = external_indices[qubit];
       auto ip = prime(i);
-      ITensor tensor = matrix_to_tensor(gate, i, ip);
+      ITensor tensor = matrix_to_tensor(gate, ip, i);
       tensors[qubit] = noPrime(tensors[qubit]*tensor);
     }
 
@@ -850,15 +853,7 @@ class MatrixProductStateImpl {
     }
 
     double trace(size_t i) const {
-      ITensor A = A_l(i);
-
-      Index idx = findIndex(A, fmt::format("m={}", i));
-      auto I = A * conj(prime(A, idx));
-      auto I_inds = inds(I);
-      
-      auto It = I * delta(I_inds[0], I_inds[1]);
-
-      return tensor_to_scalar(It).real();
+      return this->inner(*this).real();
     }
 
 
@@ -959,7 +954,6 @@ class MatrixProductStateImpl {
     }
 
     void normalize(uint32_t q1, uint32_t q2, uint32_t lq, uint32_t rq) {
-      //std::cout << fmt::format("Calling normalize({}, {}, {}, {})\n", q1, q2, lq, rq);
       Eigen::Matrix4cd id = Eigen::Matrix4cd::Identity();
 
       for (uint32_t i = q2; i < rq; i++) {
@@ -979,60 +973,7 @@ class MatrixProductStateImpl {
       }
     }
 
-    std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
-      // TODO make this generalize to unordered qubits
-      std::vector<uint32_t> right_qubit;
-      for (size_t i = 0; i < measurements.size() - 1; i++) {
-        auto [p, qubits] = measurements[i+1];
-        right_qubit.push_back(qubits[0]);
-      }
-
-      std::vector<uint32_t> left_qubit;
-      for (size_t i = 1; i < measurements.size(); i++) {
-        auto [p, qubits] = measurements[i-1];
-        left_qubit.push_back(qubits[qubits.size()-1]);
-      }
-
-      std::vector<bool> results;
-      for (size_t i = 0; i < measurements.size(); i++) {
-        auto [p, qubits] = measurements[i];
-        double r = random_vals[i];
-        results.push_back(measure(p, qubits, r, false));
-        uint32_t q1 = *std::ranges::min_element(qubits);
-        uint32_t q2 = *std::ranges::max_element(qubits);
-        uint32_t rq = (i == measurements.size() - 1) ? (num_qubits - 1) : right_qubit[i];
-        uint32_t lq = (i == 0) ? 0 : left_qubit[i];
-        normalize(q1, q2, lq, rq);
-      }
-
-      return results;
-    }
-
-    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r, bool renormalize=true) {
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-      }
-
-      if (qubits.size() == 1) {
-        Pauli op = p.to_pauli(0);
-        if (op == Pauli::X) {
-          evolve(quantumstate_utils::H::value, qubits[0]);
-          PauliString Z("+Z");
-          Z.set_r(p.get_r());
-          bool b = measure(Z, qubits, r);
-          evolve(quantumstate_utils::H::value, qubits[0]);
-          return b;
-        } else if (op == Pauli::Y) {
-          Eigen::Matrix2cd T = quantumstate_utils::H::value * quantumstate_utils::sqrtZ::value;
-          evolve(T.adjoint(), qubits[0]);
-          PauliString Z("+Z");
-          Z.set_r(p.get_r());
-          bool b = measure(Z, qubits, r);
-          evolve(T, qubits[0]);
-          return b;
-        }
-      }
-
+    MeasurementOutcome measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double r) const {
       auto pm = p.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
@@ -1040,102 +981,99 @@ class MatrixProductStateImpl {
 
       double prob_zero = std::abs(expectation(proj0, qubits));
 
-      bool outcome = r >= prob_zero;
+      bool outcome = r > prob_zero;
 
-      proj0 = proj0/std::sqrt(prob_zero);
-      proj1 = proj1/std::sqrt(1.0 - prob_zero);
+      auto proj = outcome ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
 
-      Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
+      return {proj, prob_zero, outcome};
+    }
 
+    void apply_measure(const MeasurementOutcome& outcome, const std::vector<uint32_t>& qubits, bool renormalize) {
+      auto proj = std::get<0>(outcome);
       evolve(proj, qubits);
-
       if (renormalize) {
         uint32_t q1 = *std::ranges::min_element(qubits);
         uint32_t q2 = *std::ranges::max_element(qubits);
         normalize(q1, q2, 0, num_qubits - 1);
       }
+    }
 
-      return outcome;
+    template <typename T>
+    std::vector<T> sort_measurements(const std::vector<T>& measurements) {
+      std::vector<bool> mask(num_qubits, false);
+
+      for (const auto& m : measurements) {
+        auto [q1, q2] = get_qubit_range(std::get<1>(m));
+        if (mask[q1] || mask[q2]) {
+          throw std::runtime_error("Some measurements overlap.");
+        }
+        
+        mask[q1] = true;
+        mask[q2] = true;
+
+        if (std::abs(static_cast<int>(q1) - static_cast<int>(q2)) > 1) {
+          throw std::runtime_error(fmt::format("Qubits = {} are not adjacent and thus cannot be measured on MPS.", std::get<1>(m)));
+        }
+      }
+
+      std::vector<T> measurements_sorted = measurements;
+
+      std::sort(measurements_sorted.begin(), measurements_sorted.end(), [](const T& m1, const T& m2) {
+        auto [a1, a2] = get_qubit_range(std::get<1>(m1));
+        auto [b1, b2] = get_qubit_range(std::get<1>(m2));
+        return a1 < b1;
+      });
+
+      return measurements_sorted;
+    }
+
+
+    std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
+      auto measurements_sorted = sort_measurements(measurements);
+      size_t num_measurements = measurements_sorted.size();
+
+      if (num_measurements == 0) {
+        return {};
+      };
+
+      std::vector<uint32_t> right_qubit;
+      for (size_t i = 0; i < num_measurements - 1; i++) {
+        auto [p, qubits] = measurements_sorted[i+1];
+        auto [q1, q2] = get_qubit_range(qubits);
+        right_qubit.push_back(q2);
+      }
+
+      std::vector<bool> results;
+      for (size_t i = 0; i < num_measurements; i++) {
+        auto [p, qubits] = measurements_sorted[i];
+        auto outcome = measurement_outcome(p, qubits, random_vals[i]);
+        apply_measure(outcome, qubits, false);
+        results.push_back(std::get<2>(outcome));
+
+        auto [q1, q2] = get_qubit_range(qubits);
+        uint32_t rq = (i == num_measurements - 1) ? (num_qubits - 1) : right_qubit[i];
+        normalize(q1, q2, 0, rq);
+      }
+
+      return results;
+    }
+
+    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+      }
+
+      auto outcome = measurement_outcome(p, qubits, r);
+      apply_measure(outcome, qubits, true);
+      
+      return std::get<2>(outcome);
     }
 
     bool measure(uint32_t q, double r) {
       return measure(PauliString("Z"), {q}, r);
     }
 
-    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements, const std::vector<double>& random_vals) {
-      // Check that no measurements overlap and all measurements are on adjacent qubits
-      //auto get_qubit_range = [](const std::vector<uint32_t>& qubits) {
-      //  return std::make_pair(static_cast<int>(*std::ranges::min_element(qubits)), static_cast<int>(*std::ranges::max_element(qubits)));
-      //};
-
-      //std::vector<bool> mask(num_qubits, false);
-
-      //for (const auto& [p, qubits, beta] : measurements) {
-      //  auto [q1, q2] = get_qubit_range(qubits);
-      //  if (mask[q1] || mask[q2]) {
-      //    throw std::runtime_error("Some measurements overlap.");
-      //  }
-      //  
-      //  mask[q1] = true;
-      //  mask[q2] = true;
-
-      //  if (std::abs(q1 - q2) > 1) {
-      //    throw std::runtime_error(fmt::format("Qubits = {} are not adjacent and thus cannot be measured on MPS.", qubits));
-      //  }
-      //}
-
-      std::vector<WeakMeasurementData> measurements_sorted = measurements;
-
-      //std::sort(measurements_sorted.begin(), measurements_sorted.end(), [](const WeakMeasurementData& m1, const WeakMeasurementData& m2) {
-      //  auto [a1, a2] = get_qubit_range(m1);
-      //  auto [b1, b2] = get_qubit_range(m2);
-      //  return a1 < b1;
-      //});
-      
-      size_t num_measurements = measurements_sorted.size();
-
-      std::vector<uint32_t> right_qubit;
-      for (size_t i = 0; i < num_measurements - 1; i++) {
-        auto [p, qubits, beta] = measurements_sorted[i+1];
-        right_qubit.push_back(qubits[0]);
-      }
-
-      std::vector<uint32_t> left_qubit;
-      for (size_t i = 1; i < num_measurements; i++) {
-        auto [p, qubits, beta] = measurements_sorted[i-1];
-        left_qubit.push_back(qubits[qubits.size()-1]);
-      }
-
-      std::vector<bool> results;
-      for (size_t i = 0; i < num_measurements; i++) {
-        auto [p, qubits, beta] = measurements_sorted[i];
-        double r = random_vals[i];
-        results.push_back(weak_measure(p, qubits, beta, r, false));
-        uint32_t q1 = *std::ranges::min_element(qubits);
-        uint32_t q2 = *std::ranges::max_element(qubits);
-        uint32_t rq = (i == num_measurements - 1) ? (num_qubits - 1) : right_qubit[i];
-        uint32_t lq = (i == 0) ? 0 : left_qubit[i];
-        normalize(q1, q2, lq, rq);
-      }
-
-      return results;
-    }
-
-    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r, bool renormalize=true) {
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-      }
-
-      if (qubits.size() == 1 && p.to_pauli(0) == Pauli::Y) {
-        Eigen::Matrix2cd T = quantumstate_utils::H::value * quantumstate_utils::sqrtZ::value;
-        evolve(T.adjoint(), qubits[0]);
-        PauliString Z("+Z");
-        Z.set_r(p.get_r());
-        bool b = weak_measure(Z, qubits, beta, r);
-        evolve(T, qubits[0]);
-        return b;
-      }
-
+    MeasurementOutcome weak_measurement_outcome(const PauliString&p, const std::vector<uint32_t>& qubits, double beta, double r) const {
       auto pm = p.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
@@ -1150,20 +1088,54 @@ class MatrixProductStateImpl {
       }
 
       Eigen::MatrixXcd proj = (beta*t).exp();
-      Eigen::MatrixXcd P = proj.pow(2);
-      std::complex<double> c = expectation(P, qubits);
-      proj = proj / std::sqrt(std::abs(c));
-      evolve(proj, qubits);
 
-      if (renormalize) {
-        uint32_t q1 = *std::ranges::min_element(qubits);
-        uint32_t q2 = *std::ranges::max_element(qubits);
-        normalize(q1, q2, 0, num_qubits - 1);
-      }
-      
-      return outcome;
+      Eigen::MatrixXcd P = proj.pow(2);
+      double norm = std::sqrt(std::abs(expectation(P, qubits)));
+
+      proj = proj / norm;
+
+      return {proj, prob_zero, outcome};
     }
 
+    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
+      }
+
+      auto outcome = weak_measurement_outcome(p, qubits, beta, r);
+      apply_measure(outcome, qubits, true);
+      
+      return std::get<2>(outcome);
+    }
+
+    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements, const std::vector<double>& random_vals) {
+      auto measurements_sorted = sort_measurements(measurements);
+      size_t num_measurements = measurements_sorted.size();
+      if (num_measurements == 0) {
+        return {};
+      };
+
+      std::vector<uint32_t> right_qubit;
+      for (size_t i = 0; i < num_measurements - 1; i++) {
+        auto [p, qubits, beta] = measurements_sorted[i+1];
+        auto [q1, q2] = get_qubit_range(qubits);
+        right_qubit.push_back(q2);
+      }
+
+      std::vector<bool> results;
+      for (size_t i = 0; i < num_measurements; i++) {
+        auto [p, qubits, beta] = measurements_sorted[i];
+        auto outcome = weak_measurement_outcome(p, qubits, beta, random_vals[i]);
+        apply_measure(outcome, qubits, false);
+        results.push_back(std::get<2>(outcome));
+
+        auto [q1, q2] = get_qubit_range(qubits);
+        uint32_t rq = (i == num_measurements - 1) ? (num_qubits - 1) : right_qubit[i];
+        normalize(q1, q2, 0, rq);
+      }
+
+      return results;
+    }
 };
 
 class MatrixProductOperatorImpl {
@@ -1450,7 +1422,6 @@ class MatrixProductOperatorImpl {
       return is_identity(blocks[k].value());
     }
 
-    // 490
     std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;

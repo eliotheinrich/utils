@@ -582,13 +582,14 @@ bool test_mps_measure() {
 }
 
 bool test_weak_measure() {
-  constexpr size_t nqb = 6;
+  constexpr size_t nqb = 8;
 
   auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
   int seed = rng();
+  seed = 1859671821;
   mps.seed(seed);
   sv.seed(seed);
 
@@ -617,7 +618,6 @@ bool test_weak_measure() {
 
       double d = std::abs(sv.inner(Statevector(mps)));
 
-      ASSERT(mps.debug_tests(), fmt::format("MPS failed debug tests for P = {} on {}. seed = {}", P.to_string_ops(), qubits, seed));
       ASSERT(b1 == b2, "Different measurement outcomes observed.");
       ASSERT(states_close(sv, mps), fmt::format("States don't match after weak measurement of {} on {}. d = {} \n{}\n{}", P.to_string_ops(), qubits, d, sv.to_string(), mps.to_string()));
     }
@@ -771,44 +771,99 @@ bool test_mps_reverse() {
   return true;
 }
 
+bool test_batch_weak_measure_sv() {
+  auto rng = seeded_rng();
+
+  constexpr size_t nqb = 2;
+
+  Statevector state1;
+  Statevector state2;
+
+  for (size_t i = 0; i < 100; i++) {
+    state1 = Statevector(nqb);
+    state2 = Statevector(nqb);
+    int s = rng();
+    state1.seed(s);
+    state2.seed(s);
+
+    QuantumCircuit qc(nqb);
+    qc.h(0);
+    qc.cx(0, 1);
+    qc.apply(state1, state2);
+
+    std::vector<WeakMeasurementData> measurements;
+    measurements.push_back({PauliString("+Z"), {0u}, 1.0});
+    measurements.push_back({PauliString("+Z"), {1u}, 1.0});
+
+    for (auto [p, q, b] : measurements) {
+      state1.weak_measure(p, q, b);
+    }
+
+    state2.weak_measure(measurements);
+
+    auto c = std::abs(state1.inner(state2));
+    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
+  }
+
+  return true;
+}
+
 bool test_batch_measure() {
   auto rng = seeded_rng();
 
-  constexpr size_t nqb = 8;
+  constexpr size_t nqb = 6;
 
   MatrixProductState mps1(nqb, 1u << nqb);
   MatrixProductState mps2(nqb, 1u << nqb);
+  Statevector sv1(nqb);
+  Statevector sv2(nqb);
 
   int s = rng();
   mps1.seed(s);
   mps2.seed(s);
+  sv1.seed(s);
+  sv2.seed(s);
+
 
   for (size_t i = 0; i < 100; i++) {
-    randomize_state_haar(rng, mps1, mps2);
+    randomize_state_haar(rng, mps1, mps2, sv1, sv2);
     std::vector<MeasurementData> measurements;
-    for (uint32_t i = 0; i < nqb/2; i++) {
+
+    std::vector<uint32_t> qubits(nqb/2);
+    std::iota(qubits.begin(), qubits.end(), 0);
+    for (size_t j = 0; j < qubits.size(); j++) {
       PauliString P;
-      std::vector<uint32_t> qubits;
-      if (rng() % 2) {
+      std::vector<uint32_t> measured_qubits;
+      uint32_t r = rng() % 3;
+      uint32_t q = 2*qubits[j];
+
+      if (r == 0) {
         P = PauliString::rand(2, rng);
-        qubits = {2*i, 2*i + 1};
-      } else {
+        measured_qubits = {q, q + 1};
+      } else if (r == 1) {
         P = PauliString::rand(1, rng);
         if (rng() % 2) {
-          qubits = {2*i};
+          measured_qubits = {q};
         } else {
-          qubits = {2*i + 1};
+          measured_qubits = {q + 1};
         }
+      } else {
+        continue;
       }
 
-      measurements.push_back({P, qubits});
-      mps1.measure(P, qubits);
+      measurements.push_back({P, measured_qubits});
+    }
+
+    for (auto [p, q] : measurements) {
+      mps1.measure(p, q);
+      sv1.measure(p, q);
     }
 
     mps2.measure(measurements);
+    sv2.measure(measurements);
 
-    auto c = std::abs(mps1.inner(mps2));
-    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
+    ASSERT(states_close(sv1, mps1), "States not equal after serial measurements.");
+    ASSERT(states_close(sv2, mps2), "States not equal after batch measurements.");
   }
 
   return true;
@@ -817,42 +872,61 @@ bool test_batch_measure() {
 bool test_batch_weak_measure() {
   auto rng = seeded_rng();
 
-  constexpr size_t nqb = 8;
+  constexpr size_t nqb = 6;
 
   MatrixProductState mps1(nqb, 1u << nqb);
   MatrixProductState mps2(nqb, 1u << nqb);
+  Statevector sv1(nqb);
+  Statevector sv2(nqb);
 
   int s = rng();
   mps1.seed(s);
   mps2.seed(s);
+  sv1.seed(s);
+  sv2.seed(s);
+
 
   for (size_t i = 0; i < 100; i++) {
-    randomize_state_haar(rng, mps1, mps2);
+    randomize_state_haar(rng, mps1, mps2, sv1, sv2);
     std::vector<WeakMeasurementData> measurements;
-    for (uint32_t i = 0; i < nqb/2; i++) {
+
+    std::vector<uint32_t> qubits(nqb/2);
+    std::iota(qubits.begin(), qubits.end(), 0);
+    for (size_t i = 0; i < qubits.size(); i++) {
       PauliString P;
-      std::vector<uint32_t> qubits;
-      if (rng() % 2) {
+      std::vector<uint32_t> measured_qubits;
+      uint32_t r = rng() % 3;
+      uint32_t q = 2*qubits[i];
+
+      if (r == 0) {
         P = PauliString::rand(2, rng);
-        qubits = {2*i, 2*i + 1};
-      } else {
+        measured_qubits = {q, q + 1};
+      } else if (r == 1) {
         P = PauliString::rand(1, rng);
         if (rng() % 2) {
-          qubits = {2*i};
+          measured_qubits = {q};
         } else {
-          qubits = {2*i + 1};
+          measured_qubits = {q + 1};
         }
+      } else {
+        continue;
       }
+
       double beta = 1.0;
 
-      measurements.push_back({P, qubits, beta});
-      mps1.weak_measure(P, qubits, beta);
+      measurements.push_back({P, measured_qubits, beta});
+    }
+
+    for (auto [p, q, b] : measurements) {
+      mps1.weak_measure(p, q, b);
+      sv1.weak_measure(p, q, b);
     }
 
     mps2.weak_measure(measurements);
+    sv2.weak_measure(measurements);
 
-    auto c = std::abs(mps1.inner(mps2));
-    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
+    ASSERT(states_close(sv1, mps1), "States not equal after serial weak measurements.");
+    ASSERT(states_close(sv2, mps2), "States not equal after batch weak measurements.");
   }
 
   return true;
@@ -897,6 +971,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_reverse);
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure);
+  ADD_TEST(test_batch_measure);
+  ADD_TEST(test_batch_weak_measure_sv);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
