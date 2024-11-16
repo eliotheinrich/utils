@@ -407,7 +407,7 @@ class MatrixProductStateImpl {
     }
 
 
-    double entropy(uint32_t q) {
+    double entropy(uint32_t q, uint32_t index) {
       if (q < 0 || q > num_qubits) {
         throw std::invalid_argument("Invalid qubit passed to MatrixProductState.entropy; must have 0 <= q <= num_qubits.");
       }
@@ -416,15 +416,28 @@ class MatrixProductStateImpl {
         return 0.0;
       }
 
-      auto sv = singular_values[q-1];
-      int d = dim(inds(sv)[0]);
+      auto singular_vals = singular_values[q-1];
+      int d = dim(inds(singular_vals)[0]);
+
+      std::vector<double> sv(d);
+      for (size_t i = 0; i < d; i++) {
+        sv[i] = std::pow(elt(singular_vals, i+1, i+1), 2);
+      }
+
 
       double s = 0.0;
-      for (int i = 1; i <= d; i++) {
-        double v = std::pow(elt(sv, i, i), 2);
-        if (v >= 1e-6) {
-          s -= v * std::log(v);
+      if (index == 1) {
+        for (double v : sv) {
+          if (v >= 1e-6) {
+            s -= v * std::log(v);
+          }
         }
+      } else {
+        for (double v : sv) {
+          s += std::pow(v, index);
+        }
+        
+        s /= 1.0 - index;
       }
 
       return s;
@@ -2004,10 +2017,6 @@ std::string MatrixProductState::to_string() const {
 }
 
 double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
-	if (index != 1) {
-		throw std::invalid_argument("Can only compute von Neumann (index = 1) entropy for MPS states.");
-	}
-
 	if (qubits.size() == 0) {
 		return 0.0;
 	}
@@ -2027,7 +2036,7 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 
 	uint32_t q = sorted_qubits.back() + 1;
 
-	return impl->entropy(q);
+	return impl->entropy(q, index);
 }
 
 magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
