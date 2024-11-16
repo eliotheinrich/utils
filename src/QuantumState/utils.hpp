@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <bitset>
 
 namespace quantumstate_utils {
   constexpr double sqrt2i_ = 0.707106781186547524400844362104849;
