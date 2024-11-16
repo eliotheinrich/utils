@@ -76,6 +76,14 @@ namespace quantumstate_utils {
 		return b;
 	}
 
+  static inline std::vector<bool> to_bits(uint32_t z, size_t num_bits) {
+    std::vector<bool> bits(num_bits);
+    for (size_t i = 0; i < num_bits; i++) {
+      bits[i] = (z >> i) & 1u;
+    }
+    return bits;
+  }
+
 	inline uint32_t set_bit(uint32_t b, uint32_t j, uint32_t a, uint32_t i) {
 		uint32_t x = (a >> i) & 1u;
 		return (b & ~(1u << j)) | (x << j);

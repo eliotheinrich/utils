@@ -443,6 +443,7 @@ class MatrixProductState : public QuantumState {
 
 		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-8);
     MatrixProductState(const MatrixProductState& other);
+    MatrixProductState(const Statevector& other, uint32_t bond_dimension, double sv_threshold=1e-8);
     MatrixProductState& operator=(const MatrixProductState& other);
 
     static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
@@ -460,8 +461,6 @@ class MatrixProductState : public QuantumState {
 
     virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
-
-		void print_mps(bool print_data) const;
 
     MatrixProductOperator partial_trace(const std::vector<uint32_t>& qubits) const;
 
@@ -481,7 +480,7 @@ class MatrixProductState : public QuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
-		double mzr_prob(uint32_t q, bool outcome) const;
+    void id(uint32_t q1, uint32_t q2);
 
 		virtual std::vector<double> probabilities() const override {
 			Statevector statevector(*this);
@@ -496,6 +495,11 @@ class MatrixProductState : public QuantumState {
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta);
     std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
+		void print_mps(bool print_data) const;
+
+    void id_debug(uint32_t i, uint32_t j);
+    std::vector<size_t> orthogonal_sites() const;
+    void show_problem_sites() const;
     bool debug_tests();
 };
 
