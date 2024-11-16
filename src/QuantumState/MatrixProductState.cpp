@@ -429,7 +429,7 @@ class MatrixProductStateImpl {
       if (index == 1) {
         for (double v : sv) {
           if (v >= 1e-6) {
-            s -= v * std::log(v);
+            s -= v * std::log2(v);
           }
         }
       } else {
