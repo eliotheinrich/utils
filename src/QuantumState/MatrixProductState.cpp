@@ -1006,7 +1006,11 @@ class MatrixProductStateImpl {
         i1, i2
       );
 
-      ITensor theta = noPrime(gate_tensor*tensors[q1]*singular_values[q1]*tensors[q2]);
+      ITensor theta = tensors[q1];
+      theta *= singular_values[q1];
+      theta *= tensors[q2];
+      theta *= gate_tensor;
+      theta = noPrime(theta);
 
       std::vector<Index> u_inds{external_indices[q1]};
       std::vector<Index> v_inds{external_indices[q2]};
