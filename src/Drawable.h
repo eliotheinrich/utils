@@ -3,7 +3,7 @@
 #include <vector>
 #include <Frame.h>
 
-#include <fmt/format.h>
+#include <format>
 
 struct Color {
   float r;
