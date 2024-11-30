@@ -1,3 +1,5 @@
+#include <QuantumCircuit/PauliString.hpp>
+#include <QuantumCircuit/QuantumCircuit.h>
 #define FMT_HEADER_ONLY
 
 #include "QuantumState.h"
@@ -22,37 +24,9 @@ using namespace nanobind::literals;
 NB_MODULE(pyqtools_bindings, m) {
   std::complex<double> i(0, 1);
 
-  Eigen::Matrix2cd H; H << 1, 1, 1, -1; H /= std::sqrt(2);
-  Eigen::Matrix2cd X; X << 0, 1, 1, 0;
-  Eigen::Matrix2cd Y; Y << 0, -i, i, 0;
-  Eigen::Matrix2cd Z; Z << 1, 0, 0, -1;
-  Eigen::Matrix2cd sqrtX; sqrtX << 1, -i, -i, 1; sqrtX /= std::sqrt(2);
-  Eigen::Matrix2cd sqrtY; sqrtY << 1, -1, 1, 1; sqrtY /= std::sqrt(2);
-  Eigen::Matrix2cd sqrtZ; sqrtZ << 1, 0, 0, i;
-  Eigen::Matrix2cd sqrtXd; sqrtXd << 1, i, i, 1; sqrtXd /= std::sqrt(2);
-  Eigen::Matrix2cd sqrtYd; sqrtYd << 1, 1, -1, 1; sqrtYd /= std::sqrt(2);
-  Eigen::Matrix2cd sqrtZd; sqrtZd << 1, 0, 0, -i;
-  Eigen::Matrix2cd T; T << 1, 0, 0, std::complex<double>(1, 1)/std::sqrt(2);
-  Eigen::Matrix2cd Td; Td << 1, 0, 0, std::complex<double>(1, -1)/std::sqrt(2);
-  Eigen::Matrix4cd CX; CX << 1, 0, 0, 0,
-                             0, 1, 0, 0,
-                             0, 0, 0, 1,
-                             0, 0, 1, 0;
-  Eigen::Matrix4cd CY; CY << 1, 0, 0, 0,
-                             0, 1, 0, 0,
-                             0, 0, 0, -i,
-                             0, 0, i, 0;
-  Eigen::Matrix4cd CZ; CZ << 1, 0, 0, 0,
-                             0, 1, 0, 0,
-                             0, 0, 1, 0,
-                             0, 0, 0, -1;
-  Eigen::Matrix4cd SWAP; SWAP << 1, 0, 0, 0,
-                                 0, 0, 1, 0,
-                                 0, 1, 0, 0,
-                                 0, 0, 0, 1;
-
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
+    .def_ro("num_qubits", &PauliString::num_qubits)
     .def("__str__", &PauliString::to_string_ops)
     .def("__mul__", &PauliString::operator*)
     .def("__rmul__", &PauliString::operator*)
@@ -64,12 +38,13 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("x", &PauliString::x)
     .def("y", &PauliString::y)
     .def("z", &PauliString::z)
-    .def("s", [](PauliString& self, uint32_t q) { self.s(q); })
-    .def("sd", [](PauliString& self, uint32_t q) { self.sd(q); })
-    .def("h", [](PauliString& self, uint32_t q) { self.h(q); })
-    .def("cx", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cx(q1, q2); })
-    .def("cy", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cy(q1, q2); })
-    .def("cz", [](PauliString& self, uint32_t q1, uint32_t q2) { self.cz(q1, q2); })
+    .def("s", &PauliString::s)
+    .def("sd", &PauliString::sd)
+    .def("h", &PauliString::h)
+    .def("cx", &PauliString::cx)
+    .def("cy", &PauliString::cy)
+    .def("cz", &PauliString::cz)
+    .def("evolve", [](PauliString& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("commutes", &PauliString::commutes)
     .def("set_x", &PauliString::set_x)
     .def("set_x", [](PauliString& self, size_t i, size_t v) { self.set_x(i, static_cast<bool>(v)); })
@@ -98,6 +73,7 @@ NB_MODULE(pyqtools_bindings, m) {
   nanobind::class_<QuantumCircuit>(m, "QuantumCircuit")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit&>())
+    .def_ro("num_qubits", &QuantumCircuit::num_qubits)
     .def("__str__", &QuantumCircuit::to_string)
     .def("num_params", &QuantumCircuit::num_params)
     .def("length", &QuantumCircuit::length)
@@ -105,27 +81,46 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("add_measurement", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) { self.add_measurement(qubits); })
     .def("add_gate", [](QuantumCircuit& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.add_gate(gate, qubits); })
     .def("add_gate", [](QuantumCircuit& self, const Eigen::MatrixXcd& gate, uint32_t q) { self.add_gate(gate, q); })
-    .def("append", [](QuantumCircuit& self, const QuantumCircuit& other) { self.append(other); })
-    .def("h_gate", [H](QuantumCircuit& self, uint32_t q) { self.add_gate(H, q); })
-    .def("x_gate", [X](QuantumCircuit& self, uint32_t q) { self.add_gate(X, q); })
-    .def("y_gate", [Y](QuantumCircuit& self, uint32_t q) { self.add_gate(Y, q); })
-    .def("z_gate", [Z](QuantumCircuit& self, uint32_t q) { self.add_gate(Z, q); })
-    .def("s_gate", [sqrtZ](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtZ, q); })
-    .def("sd_gate", [sqrtZd](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtZd, q); })
-    .def("t_gate", [T](QuantumCircuit& self, uint32_t q) { self.add_gate(T, q); })
-    .def("td_gate", [Td](QuantumCircuit& self, uint32_t q) { self.add_gate(Td, q); })
-    .def("sqrtx_gate", [sqrtX](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtX, q); })
-    .def("sqrty_gate", [sqrtY](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtY, q); })
-    .def("sqrtz_gate", [sqrtZ](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtZ, q); })
-    .def("sqrtxd_gate", [sqrtXd](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtXd, q); })
-    .def("sqrtyd_gate", [sqrtYd](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtYd, q); })
-    .def("sqrtzd_gate", [sqrtZd](QuantumCircuit& self, uint32_t q) { self.add_gate(sqrtZd, q); })
-    .def("cx_gate", [CX](QuantumCircuit& self, uint32_t q1, uint32_t q2) { self.add_gate(CX, {q1, q2}); })
-    .def("cy_gate", [CY](QuantumCircuit& self, uint32_t q1, uint32_t q2) { self.add_gate(CY, {q1, q2}); })
-    .def("cz_gate", [CZ](QuantumCircuit& self, uint32_t q1, uint32_t q2) { self.add_gate(CZ, {q1, q2}); })
-    .def("swap_gate", [SWAP](QuantumCircuit& self, uint32_t q1, uint32_t q2) { self.add_gate(SWAP, {q1, q2}); })
-    .def("to_matrix", &QuantumCircuit::to_matrix);
+    .def("append", [](QuantumCircuit& self, const QuantumCircuit& other, const std::optional<std::vector<uint32_t>>& qubits) { 
+      if (qubits) {
+        self.append(other, qubits.value());
+      } else {
+        self.append(other); 
+      }
+    }, "circuit"_a, "qubits"_a = nanobind::none())
+    .def("h", &QuantumCircuit::h)
+    .def("x", &QuantumCircuit::x)
+    .def("y", &QuantumCircuit::y)
+    .def("z", &QuantumCircuit::z)
+    .def("s", &QuantumCircuit::s)
+    .def("sd", &QuantumCircuit::sd)
+    .def("t", &QuantumCircuit::t)
+    .def("td", &QuantumCircuit::td)
+    .def("sqrtX", &QuantumCircuit::sqrtX)
+    .def("sqrtY", &QuantumCircuit::sqrtY)
+    .def("sqrtZ", &QuantumCircuit::sqrtZ)
+    .def("sqrtXd", &QuantumCircuit::sqrtXd)
+    .def("sqrtYd", &QuantumCircuit::sqrtYd)
+    .def("sqrtZd", &QuantumCircuit::sqrtZd)
+    .def("cx", &QuantumCircuit::cx)
+    .def("cy", &QuantumCircuit::cy)
+    .def("cz", &QuantumCircuit::cz)
+    .def("swap", &QuantumCircuit::swap)
+    .def("adjoint", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.adjoint(params); }, "params"_a = nanobind::none())
+    .def("reverse", &QuantumCircuit::reverse)
+    .def("conjugate", &QuantumCircuit::conjugate)
+    .def("to_matrix", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.to_matrix(params); }, "params"_a = nanobind::none());
 
+  m.def("random_clifford", [](uint32_t num_qubits) { 
+    thread_local std::random_device gen;
+    std::minstd_rand rng(gen());
+    return random_clifford(num_qubits, rng);
+  });
+  m.def("single_qubit_random_clifford", [](uint32_t r) {
+    QuantumCircuit qc(1);
+    single_qubit_clifford_impl(qc, 0, r % 24);
+    return qc;
+  });
   m.def("generate_haar_circuit", &generate_haar_circuit);
   m.def("hardware_efficient_ansatz", &hardware_efficient_ansatz);
   m.def("haar_unitary", [](uint32_t num_qubits) { return haar_unitary(num_qubits); });
@@ -138,25 +133,25 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("__str__", &Statevector::to_string)
     .def("normalize", &Statevector::normalize)
     .def("entropy", &Statevector::entropy, "qubits"_a, "index"_a)
-    .def("h", [H](Statevector& self, uint32_t q) { self.evolve(H, q); })
-    .def("x", [X](Statevector& self, uint32_t q) { self.evolve(X, q); })
-    .def("y", [Y](Statevector& self, uint32_t q) { self.evolve(Y, q); })
-    .def("z", [Z](Statevector& self, uint32_t q) { self.evolve(Z, q); })
-    .def("s", [sqrtZ](Statevector& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sd", [sqrtZd](Statevector& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("t", [T](Statevector& self, uint32_t q) { self.evolve(T, q); })
-    .def("td", [Td](Statevector& self, uint32_t q) { self.evolve(Td, q); })
-    .def("sqrtx", [sqrtX](Statevector& self, uint32_t q) { self.evolve(sqrtX, q); })
-    .def("sqrty", [sqrtY](Statevector& self, uint32_t q) { self.evolve(sqrtY, q); })
-    .def("sqrtz", [sqrtZ](Statevector& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sqrtxd", [sqrtXd](Statevector& self, uint32_t q) { self.evolve(sqrtXd, q); })
-    .def("sqrtyd", [sqrtYd](Statevector& self, uint32_t q) { self.evolve(sqrtYd, q); })
-    .def("sqrtzd", [sqrtZd](Statevector& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("cx", [CX](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(CX, {q1, q2}); })
-    .def("cy", [CY](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
-    .def("cz", [CZ](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
-    .def("swap", [SWAP](Statevector& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("mzr", [](Statevector& self, uint32_t q) { return self.mzr(q); })
+    .def("h", &Statevector::h)
+    .def("x", &Statevector::x)
+    .def("y", &Statevector::y)
+    .def("z", &Statevector::z)
+    .def("s", &Statevector::s)
+    .def("sd", &Statevector::sd)
+    .def("t", &Statevector::t)
+    .def("td", &Statevector::td)
+    .def("sqrtX", &Statevector::sqrtX)
+    .def("sqrtY", &Statevector::sqrtY)
+    .def("sqrtZ", &Statevector::sqrtZ)
+    .def("sqrtXd", &Statevector::sqrtXd)
+    .def("sqrtYd", &Statevector::sqrtYd)
+    .def("sqrtZd", &Statevector::sqrtZd)
+    .def("cx", &Statevector::cx)
+    .def("cy", &Statevector::cy)
+    .def("cz", &Statevector::cz)
+    .def("swap", &Statevector::swap)
+    .def("mzr", [](Statevector& self, uint32_t q) { self.mzr(q); })
     .def("mzr", [](Statevector& self, uint32_t q, bool outcome) { return self.mzr(q, outcome); })
     .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
@@ -174,25 +169,25 @@ NB_MODULE(pyqtools_bindings, m) {
     .def_ro("num_qubits", &DensityMatrix::num_qubits)
     .def("__str__", &DensityMatrix::to_string)
     .def("entropy", &DensityMatrix::entropy, "qubits"_a, "index"_a)
-    .def("h", [H](DensityMatrix& self, uint32_t q) { self.evolve(H, q); })
-    .def("x", [X](DensityMatrix& self, uint32_t q) { self.evolve(X, q); })
-    .def("y", [Y](DensityMatrix& self, uint32_t q) { self.evolve(Y, q); })
-    .def("z", [Z](DensityMatrix& self, uint32_t q) { self.evolve(Z, q); })
-    .def("s", [sqrtZ](DensityMatrix& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sd", [sqrtZd](DensityMatrix& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("t", [T](DensityMatrix& self, uint32_t q) { self.evolve(T, q); })
-    .def("td", [Td](DensityMatrix& self, uint32_t q) { self.evolve(Td, q); })
-    .def("sqrtx", [sqrtX](DensityMatrix& self, uint32_t q) { self.evolve(sqrtX, q); })
-    .def("sqrty", [sqrtY](DensityMatrix& self, uint32_t q) { self.evolve(sqrtY, q); })
-    .def("sqrtz", [sqrtZ](DensityMatrix& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sqrtxd", [sqrtXd](DensityMatrix& self, uint32_t q) { self.evolve(sqrtXd, q); })
-    .def("sqrtyd", [sqrtYd](DensityMatrix& self, uint32_t q) { self.evolve(sqrtYd, q); })
-    .def("sqrtzd", [sqrtZd](DensityMatrix& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("cx", [CX](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(CX, {q1, q2}); })
-    .def("cy", [CY](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
-    .def("cz", [CZ](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
-    .def("swap", [SWAP](DensityMatrix& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("mzr", &DensityMatrix::measure)
+    .def("h", &DensityMatrix::h)
+    .def("x", &DensityMatrix::x)
+    .def("y", &DensityMatrix::y)
+    .def("z", &DensityMatrix::z)
+    .def("s", &DensityMatrix::s)
+    .def("sd", &DensityMatrix::sd)
+    .def("t", &DensityMatrix::t)
+    .def("td", &DensityMatrix::td)
+    .def("sqrtX", &DensityMatrix::sqrtX)
+    .def("sqrtY", &DensityMatrix::sqrtY)
+    .def("sqrtZ", &DensityMatrix::sqrtZ)
+    .def("sqrtXd", &DensityMatrix::sqrtXd)
+    .def("sqrtYd", &DensityMatrix::sqrtYd)
+    .def("sqrtZd", &DensityMatrix::sqrtZd)
+    .def("cx", &DensityMatrix::cx)
+    .def("cy", &DensityMatrix::cy)
+    .def("cz", &DensityMatrix::cz)
+    .def("swap", &DensityMatrix::swap)
+    .def("mzr", &DensityMatrix::mzr)
     .def("probabilities", &DensityMatrix::probabilities)
     .def("expectation", [](DensityMatrix& self, const PauliString& p) { return self.expectation(p); })
     .def("expectation", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
@@ -212,29 +207,28 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("__str__", &MatrixProductState::to_string)
     .def("print_mps", &MatrixProductState::print_mps)
     .def("entropy", &MatrixProductState::entropy, "qubits"_a, "index"_a)
-    .def("h", [H](MatrixProductState& self, uint32_t q) { self.evolve(H, q); })
-    .def("x", [X](MatrixProductState& self, uint32_t q) { self.evolve(X, q); })
-    .def("y", [Y](MatrixProductState& self, uint32_t q) { self.evolve(Y, q); })
-    .def("z", [Z](MatrixProductState& self, uint32_t q) { self.evolve(Z, q); })
-    .def("s", [sqrtZ](MatrixProductState& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sd", [sqrtZd](MatrixProductState& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("t", [T](MatrixProductState& self, uint32_t q) { self.evolve(T, q); })
-    .def("td", [Td](MatrixProductState& self, uint32_t q) { self.evolve(Td, q); })
-    .def("sqrtx", [sqrtX](MatrixProductState& self, uint32_t q) { self.evolve(sqrtX, q); })
-    .def("sqrty", [sqrtY](MatrixProductState& self, uint32_t q) { self.evolve(sqrtY, q); })
-    .def("sqrtz", [sqrtZ](MatrixProductState& self, uint32_t q) { self.evolve(sqrtZ, q); })
-    .def("sqrtxd", [sqrtXd](MatrixProductState& self, uint32_t q) { self.evolve(sqrtXd, q); })
-    .def("sqrtyd", [sqrtYd](MatrixProductState& self, uint32_t q) { self.evolve(sqrtYd, q); })
-    .def("sqrtzd", [sqrtZd](MatrixProductState& self, uint32_t q) { self.evolve(sqrtZd, q); })
-    .def("cx", [CX](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(CX, {q1, q2}); })
-    .def("cy", [CY](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(CY, {q1, q2}); })
-    .def("cz", [CZ](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(CZ, {q1, q2}); })
-    .def("swap", [SWAP](MatrixProductState& self, uint32_t q1, uint32_t q2) { self.evolve(SWAP, {q1, q2}); })
-    .def("mzr", [](MatrixProductState& self, uint32_t q) { return self.mzr(q); })
+    .def("h", &MatrixProductState::h)
+    .def("x", &MatrixProductState::x)
+    .def("y", &MatrixProductState::y)
+    .def("z", &MatrixProductState::z)
+    .def("s", &MatrixProductState::s)
+    .def("sd", &MatrixProductState::sd)
+    .def("t", &MatrixProductState::t)
+    .def("td", &MatrixProductState::td)
+    .def("sqrtX", &MatrixProductState::sqrtX)
+    .def("sqrtY", &MatrixProductState::sqrtY)
+    .def("sqrtZ", &MatrixProductState::sqrtZ)
+    .def("sqrtXd", &MatrixProductState::sqrtXd)
+    .def("sqrtYd", &MatrixProductState::sqrtYd)
+    .def("sqrtZd", &MatrixProductState::sqrtZd)
+    .def("cx", &MatrixProductState::cx)
+    .def("cy", &MatrixProductState::cy)
+    .def("cz", &MatrixProductState::cz)
+    .def("swap", &MatrixProductState::swap)
+    .def("mzr", &MatrixProductState::mzr)
     .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
     .def("probabilities", &MatrixProductState::probabilities)
-    .def("mzr_prob", &MatrixProductState::mzr_prob)
     .def("expectation", [](MatrixProductState& self, const PauliString& p) { return self.expectation(p); })
     .def("expectation", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("partial_trace", &MatrixProductState::partial_trace)
@@ -301,23 +295,35 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
     .def("random_clifford", &QuantumCHPState::random_clifford);
 
+  nanobind::class_<CliffordTable>(m, "CliffordTable")
+    .def("__init__", [](CliffordTable *t, const std::vector<PauliString>& p1, const std::vector<PauliString>& p2) {
+        if (p1.size() != p2.size()) {
+          throw std::runtime_error("Mismatched length of PauliStrings in filter function for CliffordTable.");
+        }
 
-  auto symm = [](const QuantumCircuit& q) {
-    PauliString p("+ZZ");
-    PauliString p_ = p;
-    q.apply(p_);
-    return p == p_;
-  };
+        auto filter = [&p1, &p2](const QuantumCircuit& qc) -> bool {
+          for (size_t i = 0; i < p1.size(); i++) {
+            PauliString q1 = p1[i];
+            PauliString q2 = p2[i];
+            qc.apply(q1);
+            if (q1 != q2) {
+              return false;
+            }
+          }
 
-  static CliffordTable z2_table = CliffordTable(symm);
-
-  m.def("random_clifford_z2", [](uint32_t num_qubits, uint32_t q1, uint32_t q2) {
-    QuantumCircuit qc(num_qubits);
-    thread_local std::random_device gen;
-    std::minstd_rand rng(gen());
-    z2_table.apply_random(rng, {q1, q2}, qc);
-    return qc;
-  });
+          return true;
+        };
+        new (t) CliffordTable(filter); 
+    })
+    .def("circuits", &CliffordTable::get_circuits)
+    .def("num_elements", &CliffordTable::num_elements)
+    .def("random_circuit", [](CliffordTable& self) {
+      thread_local std::random_device gen;
+      std::minstd_rand rng(gen());
+      QuantumCircuit qc(2);
+      self.apply_random(rng, {0, 1}, qc);
+      return qc;
+    });
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
     .def(nanobind::init<size_t, size_t>())
