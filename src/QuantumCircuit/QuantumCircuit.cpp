@@ -7,7 +7,7 @@
 std::string QuantumCircuit::to_string() const {
 	std::string s = "";
 	for (auto const &inst : instructions) {
-		s += std::visit(quantumcircuit_utils::overloaded{
+		s += std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> std::string {
 				std::string gate_str = gate->label() + " ";
 				for (auto const &q : gate->qbits) {
@@ -33,7 +33,7 @@ std::string QuantumCircuit::to_string() const {
 uint32_t QuantumCircuit::num_params() const {
 	uint32_t n = 0;
 	for (auto const &inst : instructions) {
-		n += std::visit(quantumcircuit_utils::overloaded{
+		n += std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> uint32_t { return gate->num_params(); },
 			[](Measurement m) -> uint32_t { return 0u; }
 		}, inst);
@@ -44,7 +44,7 @@ uint32_t QuantumCircuit::num_params() const {
 
 bool QuantumCircuit::is_clifford() const {
   for (auto const& inst : instructions) {
-    bool valid = std::visit(quantumcircuit_utils::overloaded{
+    bool valid = std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> uint32_t { return gate->is_clifford(); },
 			[](Measurement m) -> uint32_t { return true; }
 		}, inst);
@@ -73,7 +73,7 @@ bool QuantumCircuit::contains_measurement() const {
 
 void QuantumCircuit::apply_qubit_map(const std::vector<uint32_t>& qubits) {
   for (auto inst : instructions) {
-		std::visit(quantumcircuit_utils::overloaded{
+		std::visit(quantumcircuit_utils::overloaded {
 			[&qubits](std::shared_ptr<Gate> gate) {
         std::vector<uint32_t> _qbits(gate->num_qubits);
         for (size_t q = 0; q < gate->num_qubits; q++) {
@@ -138,7 +138,7 @@ void QuantumCircuit::append(const QuantumCircuit& other) {
     throw std::invalid_argument("Cannot append QuantumCircuits; numbers of qubits do not match.");
   }
 	for (auto const &inst : other.instructions) {
-		add_instruction(inst);
+		add_instruction(copy_instruction(inst));
 	}
 }
 
@@ -167,7 +167,7 @@ QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) co
 
 	uint32_t n = 0;
 	for (auto const &inst : instructions) {
-		std::visit(quantumcircuit_utils::overloaded{
+		std::visit(quantumcircuit_utils::overloaded {
 			[&qc, &n, &params](std::shared_ptr<Gate> gate) {
 				std::vector<double> gate_params(gate->num_params());
 
@@ -200,7 +200,7 @@ QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>&
 		QuantumCircuit qc(num_qubits);
 
 		for (uint32_t i = 0; i < instructions.size(); i++) {
-			std::visit(quantumcircuit_utils::overloaded{
+			std::visit(quantumcircuit_utils::overloaded {
 				[&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate->adjoint()); },
 				[&qc](Measurement m) { qc.add_measurement(m); }
 			}, instructions[instructions.size() - i - 1]);
@@ -212,18 +212,53 @@ QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>&
 	}
 }
 
-Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<double>>& params_opt) const {
-	bool params_passed = params_opt.has_value() && params_opt.value().size() != 0;
+QuantumCircuit QuantumCircuit::reverse() const {
+  QuantumCircuit qc(num_qubits);
+	for (uint32_t i = 0; i < instructions.size(); i++) {
+    std::visit(quantumcircuit_utils::overloaded {
+      [&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate); },
+      [&qc](Measurement m) { qc.add_measurement(m); }
+    }, instructions[instructions.size() - i - 1]);
+  }
+  return qc;
+}
 
-	if (params_passed) { // Params passed; check that they are valid and then perform adjoint.
+QuantumCircuit QuantumCircuit::conjugate(const QuantumCircuit& other) const {
+  if (num_qubits != other.num_qubits) {
+    throw std::runtime_error("Mismatch in number of qubits in QuantumCircuit.conjugate.");
+  }
+  
+  if (num_params() != 0 || other.num_params() != 0) {
+    throw std::runtime_error("Unbound parameters, cannot performon QuantumCircuit.conjugate.");
+  }
+
+  QuantumCircuit qc(num_qubits);
+  qc.append(other);
+  qc.append(*this);
+  qc.append(other.adjoint());
+  return qc;
+}
+
+Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<double>>& params_opt) const {
+  size_t nparams = num_params();
+	if (params_opt) { 
 		auto params = params_opt.value();
-		if (params.size() != num_params()) {
+		if (params.size() < nparams) {
 			throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
-		}
+		} else if (params.size() > nparams) {
+      throw std::invalid_argument("Too many parameters passed; cannot convert circuit to matrix.");
+    }
 
 		QuantumCircuit qc = bind_params(params);
 		return qc.to_matrix();
-	} else if (!params_passed && num_params() == 0) { // No parameters to bind; go ahead and build adjoint
+	} else {
+    if (nparams > 0) {
+			throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
+    }
+
+    if (num_qubits > 15) {
+      throw std::runtime_error("Cannot convert QuantumCircuit with n > 15 qubits to matrix.");
+    }
 
 		Eigen::MatrixXcd Q = Eigen::MatrixXcd::Zero(1u << num_qubits, 1u << num_qubits);
 		Q.setIdentity();
@@ -231,15 +266,13 @@ Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<doubl
 		uint32_t p = num_qubits;
 
 		for (uint32_t i = 0; i < instructions.size(); i++) {
-			std::visit(quantumcircuit_utils::overloaded{
+			std::visit(quantumcircuit_utils::overloaded {
 				[&Q, p](std::shared_ptr<Gate> gate) { Q = full_circuit_unitary(gate->define(), gate->qbits, p) * Q; },
 				[](Measurement m) { throw std::invalid_argument("Cannot convert measurement to matrix."); }
 			}, instructions[i]);
 		}
 
 		return Q;
-	} else {
-		throw std::invalid_argument("Params passed but nothing to bind.");
 	}
 }
 

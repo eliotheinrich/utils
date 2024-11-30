@@ -355,3 +355,14 @@ struct Measurement {
 };
 
 typedef std::variant<std::shared_ptr<Gate>, Measurement> Instruction;
+
+static Instruction copy_instruction(const Instruction& inst) {
+  return std::visit(quantumcircuit_utils::overloaded {
+    [](std::shared_ptr<Gate> gate) {
+      return Instruction(gate->clone());
+    },
+    [](Measurement m) {
+      return Instruction(Measurement(m.qbits));
+    }
+  }, inst);
+}

@@ -58,27 +58,71 @@ class QuantumCircuit {
     void h(uint32_t q) {
       add_gate("h", {q});
     }
+
     void s(uint32_t q) {
       add_gate("s", {q});
     }
+
+    void sd(uint32_t q) {
+      add_gate("sd", {q});
+    }
+
+    void t(uint32_t q) {
+      add_gate("t", {q});
+    }
+
+    void td(uint32_t q) {
+      add_gate("td", {q});
+    }
+
     void x(uint32_t q) {
       add_gate("x", {q});
     }
+
     void y(uint32_t q) {
       add_gate("y", {q});
     }
+
     void z(uint32_t q) {
       add_gate("z", {q});
     }
+
+    void sqrtX(uint32_t q) {
+      add_gate("sqrtX", {q});
+    }
+
+    void sqrtY(uint32_t q) {
+      add_gate("sqrtY", {q});
+    }
+
+    void sqrtZ(uint32_t q) {
+      add_gate("sqrtZ", {q});
+    }
+
+    void sqrtXd(uint32_t q) {
+      add_gate("sqrtXd", {q});
+    }
+
+    void sqrtYd(uint32_t q) {
+      add_gate("sqrtYd", {q});
+    }
+
+    void sqrtZd(uint32_t q) {
+      add_gate("sqrtZd", {q});
+    }
+
     void cx(uint32_t q1, uint32_t q2) {
       add_gate("cx", {q1, q2});
     }
+
     void cy(uint32_t q1, uint32_t q2) {
       add_gate("cy", {q1, q2});
     }
+
     void cz(uint32_t q1, uint32_t q2) {
       add_gate("cz", {q1, q2});
     }
+
     void swap(uint32_t q1, uint32_t q2) {
       add_gate("swap", {q1, q2});
     }
@@ -93,6 +137,8 @@ class QuantumCircuit {
     QuantumCircuit bind_params(const std::vector<double>& params) const;
 
     QuantumCircuit adjoint(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
+    QuantumCircuit reverse() const;
+    QuantumCircuit conjugate(const QuantumCircuit& other) const;
 
     Eigen::MatrixXcd to_matrix(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
 };

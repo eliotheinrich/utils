@@ -413,6 +413,10 @@ class PauliString {
         throw std::runtime_error("Provided circuit is not Clifford.");
       }
 
+      if (qc.num_qubits != num_qubits) {
+        throw std::runtime_error(fmt::format("Cannot evolve a Paulistring with {} qubits with a QuantumCircuit with {} qubits.", num_qubits, qc.num_qubits));
+      }
+
 			for (auto const &inst : qc.instructions) {
 				evolve(inst);
 			}
@@ -435,10 +439,26 @@ class PauliString {
             y(gate->qbits[0]);
           } else if (name == "Z") {
             z(gate->qbits[0]);
+          } else if (name == "sqrtX") {
+            sqrtX(gate->qbits[0]);
+          } else if (name == "sqrtY") {
+            sqrtY(gate->qbits[0]);
+          } else if (name == "sqrtZ") {
+            sqrtZ(gate->qbits[0]);
+          } else if (name == "sqrtXd") {
+            sqrtXd(gate->qbits[0]);
+          } else if (name == "sqrtYd") {
+            sqrtYd(gate->qbits[0]);
+          } else if (name == "sqrtZd") {
+            sqrtZd(gate->qbits[0]);
           } else if (name == "CX") {
             cx(gate->qbits[0], gate->qbits[1]);
+          } else if (name == "CY") {
+            cy(gate->qbits[0], gate->qbits[1]);
           } else if (name == "CZ") {
             cz(gate->qbits[0], gate->qbits[1]);
+          } else if (name == "SWAP") {
+            swap(gate->qbits[0], gate->qbits[1]);
           } else {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to PauliString.evolve.", name));
           }
@@ -499,6 +519,36 @@ class PauliString {
       s(a);
     }
 
+    void sqrtX(uint32_t a) {
+      sd(a);
+      h(a);
+      sd(a);
+    }
+
+    void sqrtXd(uint32_t a) {
+      s(a);
+      h(a);
+      s(a);
+    }
+
+    void sqrtY(uint32_t a) {
+      z(a);
+      h(a);
+    }
+
+    void sqrtYd(uint32_t a) {
+      h(a);
+      z(a);
+    }
+
+    void sqrtZ(uint32_t a) {
+      s(a);
+    }
+
+    void sqrtZd(uint32_t a) {
+      sd(a);
+    }
+
     void cx(uint32_t a, uint32_t b) {
       uint8_t xza = get_xz(a);
       bool xa = (xza >> 0u) & 1u;
@@ -529,6 +579,12 @@ class PauliString {
       h(b);
       cx(a, b);
       h(b);
+    }
+
+    void swap(uint32_t a, uint32_t b) {
+      cx(a, b);
+      cx(b, a);
+      cx(a, b);
     }
 
     bool commutes_at(PauliString &p, uint32_t i) const {
@@ -698,96 +754,99 @@ class PauliString {
     }
 };
 
+
 template <class T>
 void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
   // r == 0 is identity, so do nothing in this case
-  if (r == 1) {
+  // Conjugates are marked as comments next to each case
+  if (r == 1) { // 1
     qobj.x(q);
-  } else if (r == 2) {
+  } else if (r == 2) { // 2
     qobj.y(q);
-  } else if (r == 3) {
+  } else if (r == 3) { // 3
     qobj.z(q);
-  } else if (r == 4) {
+  } else if (r == 4) { // 8
     qobj.h(q);
     qobj.s(q);
     qobj.h(q);
     qobj.s(q);
-  } else if (r == 5) {
+  } else if (r == 5) { // 11
     qobj.h(q);
     qobj.s(q);
     qobj.h(q);
     qobj.s(q);
     qobj.x(q);
-  } else if (r == 6) {
+  } else if (r == 6) { // 9
     qobj.h(q);
     qobj.s(q);
     qobj.h(q);
     qobj.s(q);
     qobj.y(q);
-  } else if (r == 7) {
+  } else if (r == 7) { // 10
     qobj.h(q);
-    qobj.s(q);
-    qobj.h(q);
-    qobj.s(q);
-    qobj.z(q);
-  } else if (r == 8) {
-    qobj.h(q);
-    qobj.s(q);
-  } else if (r == 9) {
-    qobj.h(q);
-    qobj.s(q);
-    qobj.x(q);
-  } else if (r == 10) {
-    qobj.h(q);
-    qobj.s(q);
-    qobj.y(q);
-  } else if (r == 11) {
-    qobj.h(q);
-    qobj.s(q);
-    qobj.z(q);
-  } else if (r == 12) {
-    qobj.h(q);
-  } else if (r == 13) {
-    qobj.h(q);
-    qobj.x(q);
-  } else if (r == 14) {
-    qobj.h(q);
-    qobj.y(q);
-  } else if (r == 15) {
-    qobj.h(q);
-    qobj.z(q);
-  } else if (r == 16) {
-    qobj.s(q);
-    qobj.h(q);
-    qobj.s(q);
-  } else if (r == 17) {
-    qobj.s(q);
-    qobj.h(q);
-    qobj.s(q);
-    qobj.x(q);
-  } else if (r == 18) {
-    qobj.s(q);
-    qobj.h(q);
-    qobj.s(q);
-    qobj.y(q);
-  } else if (r == 19) {
     qobj.s(q);
     qobj.h(q);
     qobj.s(q);
     qobj.z(q);
-  } else if (r == 20) {
+  } else if (r == 8) { // 4
+    qobj.h(q);
     qobj.s(q);
-  } else if (r == 21) {
+  } else if (r == 9) { // 6
+    qobj.h(q);
     qobj.s(q);
     qobj.x(q);
-  } else if (r == 22) {
+  } else if (r == 10) { // 7
+    qobj.h(q);
     qobj.s(q);
     qobj.y(q);
-  } else if (r == 23) {
+  } else if (r == 11) { // 5
+    qobj.h(q);
+    qobj.s(q);
+    qobj.z(q);
+  } else if (r == 12) { // 12
+    qobj.h(q);
+  } else if (r == 13) { // 15
+    qobj.h(q);
+    qobj.x(q);
+  } else if (r == 14) { // 14
+    qobj.h(q);
+    qobj.y(q);
+  } else if (r == 15) { // 13
+    qobj.h(q);
+    qobj.z(q);
+  } else if (r == 16) { // 17
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+  } else if (r == 17) { // 16
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 18) { // 18
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 19) { // 19
+    qobj.s(q);
+    qobj.h(q);
+    qobj.s(q);
+    qobj.z(q);
+  } else if (r == 20) { // 23
+    qobj.s(q);
+  } else if (r == 21) { // 21
+    qobj.s(q);
+    qobj.x(q);
+  } else if (r == 22) { // 22
+    qobj.s(q);
+    qobj.y(q);
+  } else if (r == 23) { // 20
     qobj.s(q);
     qobj.z(q);
   }
 }
+
 
 template<typename... Args>
 void reduce_paulis(const PauliString& p1, const PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
@@ -881,14 +940,9 @@ class CliffordTable {
     std::vector<TableauBasis> circuits;
 
   public:
-    CliffordTable(std::optional<std::function<bool(const QuantumCircuit&)>> mask_opt = std::nullopt) {
-      std::function<bool(const QuantumCircuit&)> mask;
-      if (mask_opt) {
-        mask = mask_opt.value();
-      } else {
-        mask = [](const QuantumCircuit& qc) -> bool { return true; };
-      }
+    CliffordTable()=default;
 
+    CliffordTable(std::function<bool(const QuantumCircuit&)> filter) : circuits() {
       std::vector<std::pair<PauliString, PauliString>> basis;
 
       for (size_t s1 = 1; s1 < 16; s1++) {
@@ -902,10 +956,10 @@ class CliffordTable {
             continue;
           }
 
-          basis.push_back({ X, Z });
+          basis.push_back({ X,  Z });
           basis.push_back({ X, -Z });
-          basis.push_back({ -X, Z });
-          basis.push_back({ -X, -Z });
+          basis.push_back({-X,  Z });
+          basis.push_back({-X, -Z });
         }
       }
 
@@ -915,15 +969,34 @@ class CliffordTable {
           QuantumCircuit qc(2);
           reduce_paulis(X, Z, qubits, qc);
           single_qubit_clifford_impl(qc, 0, r);
-          if (mask(qc)) {
+          if (filter(qc)) {
             circuits.push_back(std::make_tuple(X, Z, r));
           }
         }
       }
     }
 
+    CliffordTable(const CliffordTable& other) : circuits(other.circuits) {}
+
     size_t num_elements() const {
-      return 24 * circuits.size();
+      return circuits.size();
+    }
+
+    QuantumCircuit get_circuit(uint32_t r) const {
+      QuantumCircuit qc(2);
+      auto [X, Z, r2] = circuits[r];
+
+      reduce_paulis(X, Z, {0, 1}, qc);
+      single_qubit_clifford_impl(qc, 0, r2);
+
+      return qc;
+    }
+
+    std::vector<QuantumCircuit> get_circuits() const {
+      std::vector<QuantumCircuit> circuits(num_elements());
+      size_t r = 0;
+      std::generate(circuits.begin(), circuits.end(), [&r, this]() { return get_circuit(r++); });
+      return circuits;
     }
 
     template <typename... Args>

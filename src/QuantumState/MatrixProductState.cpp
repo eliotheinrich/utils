@@ -1029,8 +1029,8 @@ class MatrixProductStateImpl {
 
       auto [U, D, V] = svd(theta, u_inds, v_inds, 
           {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-          "LeftTags=",fmt::format("Internal,Left,n={}", q1),
-          "RightTags=",fmt::format("Internal,Right,n={}", q1)});
+           "LeftTags=",fmt::format("Internal,Left,n={}", q1),
+           "RightTags=",fmt::format("Internal,Right,n={}", q1)});
 
       internal_indices[2*q1] = commonIndex(U, D);
       internal_indices[2*q2 - 1] = commonIndex(V, D);

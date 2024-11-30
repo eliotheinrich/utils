@@ -957,6 +957,19 @@ bool test_statevector_to_mps() {
   return true;
 }
 
+bool test_quantumcircuit_append() {
+  constexpr size_t nqb = 6;
+  QuantumCircuit V(2);
+  V.cx(0, 1);
+
+  QuantumCircuit qc(nqb);
+  for (uint32_t i = 0; i < nqb - 1; i++) {
+    qc.append(V, {i, i+1});
+  }
+
+  return true;
+}
+
 #define ADD_TEST(x)                     \
 if (run_all) {                          \
   tests[#x "()"] = x();                 \
@@ -998,6 +1011,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_weak_measure);
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
+  ADD_TEST(test_quantumcircuit_append);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
