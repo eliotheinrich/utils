@@ -126,9 +126,12 @@ class QuantumCircuit {
     void swap(uint32_t q1, uint32_t q2) {
       add_gate("swap", {q1, q2});
     }
+
     void mzr(uint32_t q) {
       add_measurement(q);
     }
+
+    void random_clifford(const std::vector<uint32_t>& qubits, std::minstd_rand& rng);
 
     void append(const QuantumCircuit& other);
     void append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits);

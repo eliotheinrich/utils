@@ -510,13 +510,13 @@ bool test_partial_trace() {
       return qubits_;
     };
 
-    auto rho0 = rho.partial_trace({});
-    auto rhoA = rho.partial_trace(qubitsA);
-    auto rhoB = rhoA.partial_trace(qubitsB);
+    auto rho0 = rho.partial_trace_density_matrix({});
+    auto rhoA = rho.partial_trace_density_matrix(qubitsA);
+    auto rhoB = rhoA.partial_trace_density_matrix(qubitsB);
 
-    auto mpo0 = mps.partial_trace({});
-    auto mpoA = mps.partial_trace(qubitsA);
-    auto mpoB = mpoA.partial_trace(qubitsB);
+    auto mpo0 = mps.partial_trace_mpo({});
+    auto mpoA = mps.partial_trace_mpo(qubitsA);
+    auto mpoB = mpoA.partial_trace_mpo(qubitsB);
 
     PauliString P = PauliString::rand(nqb, rng);
 
@@ -707,7 +707,7 @@ bool test_mpo_sample_paulis() {
   
   MatrixProductState mps(nqb, 1u << nqb);
   randomize_state_haar(rng, mps);
-  MatrixProductOperator mpo = mps.partial_trace({});
+  MatrixProductOperator mpo = mps.partial_trace_mpo({});
 
   int seed = rng();
   mps.seed(seed);
@@ -724,11 +724,11 @@ bool test_mpo_sample_paulis() {
     ASSERT(P1 == P2 && is_close(t1, t2), fmt::format("Paulis <{}> = {:.3f} and <{}> = {:.3f} do not match in sample_paulis.", P1.to_string_ops(), t1, P2.to_string_ops(), t2));
   }
 
-  mpo = mps.partial_trace({0, 1, 2});
+  mpo = mps.partial_trace_mpo({0, 1, 2});
 
   auto paulis = mpo.sample_paulis(1);
 
-  mpo = mps.partial_trace({0, 1, 5});
+  mpo = mps.partial_trace_mpo({0, 1, 5});
   bool found_error = false;
   try {
     paulis = mpo.sample_paulis(1);
@@ -970,6 +970,19 @@ bool test_quantumcircuit_append() {
   return true;
 }
 
+bool test_partial_trace_ptr() {
+  constexpr size_t nqb = 4;
+  auto rng = seeded_rng();
+
+  DensityMatrix rho(nqb);
+  randomize_state_haar(rng, rho);
+
+  auto rhoA = rho.partial_trace({0, 1});
+  std::cout << rhoA->to_string() << "\n";
+
+  return true;
+}
+
 #define ADD_TEST(x)                     \
 if (run_all) {                          \
   tests[#x "()"] = x();                 \
@@ -1012,6 +1025,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_quantumcircuit_append);
+  ADD_TEST(test_partial_trace_ptr);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

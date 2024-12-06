@@ -4,6 +4,9 @@
 #include "QuantumState.h"
 #include "QuantumCircuit.h"
 
+#include <iostream>
+#include <string>
+
 class QuantumStateSampler {
   public:
     enum sre_method_t {
@@ -52,6 +55,8 @@ class QuantumStateSampler {
       magic_mutual_information_subsystem_size = dataframe::utils::get<int>(params, "magic_mutual_information_subsystem_size", system_size/4);
       subsystem_offset_A = dataframe::utils::get<int>(params, "subsystem_offset_A", 0);
       subsystem_offset_B = dataframe::utils::get<int>(params, "subsystem_offset_B", system_size - magic_mutual_information_subsystem_size);
+
+      sample_bipartite_magic_mutual_information = dataframe::utils::get<int>(params, "sample_bipartite_magic_mutual_information", false);
     }
 
     ~QuantumStateSampler()=default;
@@ -102,6 +107,7 @@ class QuantumStateSampler {
 
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
       ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
+
       switch (sre_method) {
         case sre_method_t::MonteCarlo:
           return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
@@ -151,7 +157,7 @@ class QuantumStateSampler {
           qubitsB[i] = i + subsystem_offset_B;
         }
 
-        magic_t magic_sample;
+        double magic_sample;
         switch (sre_method) {
           case sre_method_t::Exhaustive:
             magic_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
@@ -168,6 +174,27 @@ class QuantumStateSampler {
         }
 
         dataframe::utils::emplace(samples, "magic_mutual_information", magic_sample);
+      }
+
+      if (sample_bipartite_magic_mutual_information) {
+        std::vector<double> magic_samples;
+
+        switch (sre_method) {
+          case sre_method_t::Exhaustive:
+            magic_samples = state->bipartite_magic_mutual_information_exhaustive();
+            break;
+          case sre_method_t::MonteCarlo:
+            magic_samples = state->bipartite_magic_mutual_information_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
+            break;
+          case sre_method_t::Exact:
+            magic_samples = state->bipartite_magic_mutual_information_exact(sre_num_samples);
+            break;
+          case sre_method_t::Virtual:
+            magic_samples = state->bipartite_magic_mutual_information(sre_num_samples);
+            break;
+        }
+
+        dataframe::utils::emplace(samples, "magic_mutual_information", magic_samples);
       }
     }
 
@@ -193,6 +220,7 @@ class QuantumStateSampler {
     size_t magic_mutual_information_subsystem_size;
     size_t subsystem_offset_A;
     size_t subsystem_offset_B;
+    bool sample_bipartite_magic_mutual_information;
 
     PauliMutationFunc mutation;
 

@@ -2,7 +2,6 @@ add_library(quantum_state
     QuantumStates.cpp
     Statevector.cpp
     DensityMatrix.cpp
-    UnitaryState.cpp
     MatrixProductState.cpp
 )
 

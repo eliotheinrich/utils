@@ -62,6 +62,10 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
   return rho.entropy(qubits, index);
 }
 
+std::shared_ptr<QuantumState> Statevector::partial_trace(const std::vector<uint32_t>& qubits) const {
+  DensityMatrix rho(*this);
+  return rho.partial_trace(qubits);
+}
 
 double Statevector::expectation(const PauliString& p) const {
   if (p.num_qubits != num_qubits) {

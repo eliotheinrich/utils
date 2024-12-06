@@ -25,8 +25,12 @@ class FreeFermionState : public EntropyState {
       particles_at({});
     }
 
+    size_t system_size() const {
+      return L;
+    }
+
     void particles_at(const std::vector<size_t>& sites) {
-      std::cout << fmt::format("PARTICLES AT {}\n", sites);
+      //std::cout << fmt::format("PARTICLES AT {}\n", sites);
       for (auto i : sites) {
         if (i > L) {
           throw std::invalid_argument(fmt::format("Invalid site. Must be within 0 < i < {}", L));
@@ -74,7 +78,7 @@ class FreeFermionState : public EntropyState {
     }
 
     void swap(size_t i, size_t j) {
-      std::cout << "calling swap\n";
+      //std::cout << "calling swap\n";
       amplitudes.row(i).swap(amplitudes.row(j));
       if (!particles_conserved) {
         amplitudes.row(i + L).swap(amplitudes.row(j + L));
@@ -245,13 +249,13 @@ class FreeFermionState : public EntropyState {
       }
 
       size_t k = outcome ? i + L : i;
-      std::cout << "from forced_projective_measurement, amplitudes = \n" << amplitudes << "\n";
+      //std::cout << "from forced_projective_measurement, amplitudes = \n" << amplitudes << "\n";
 
       size_t i0;
       double d = 0.0;
       for (size_t j = 0; j < L; j++) {
         double dj = std::abs(amplitudes(k, j));
-        std::cout << fmt::format("a({}, {}) = {}\n", k, j, dj);
+        //std::cout << fmt::format("a({}, {}) = {}\n", k, j, dj);
         if (dj > d) {
           d = dj;
           i0 = j;
@@ -259,8 +263,8 @@ class FreeFermionState : public EntropyState {
       }
 
       if (!(d > 0)) {
-        std::cout << amplitudes << "\n";
-        std::cout << fmt::format("called forced_projective_measurement({}, {}), c = {}\n", i, outcome, occupation());
+        //std::cout << amplitudes << "\n";
+        //std::cout << fmt::format("called forced_projective_measurement({}, {}), c = {}\n", i, outcome, occupation());
         throw std::runtime_error("Found no positive amplitudes to determine i0.");
       }
 
@@ -285,7 +289,7 @@ class FreeFermionState : public EntropyState {
     bool projective_measurement(size_t i, double r) {
       double c = occupation(i);
       bool outcome = (r < c);
-      std::cout << fmt::format("calling projective measurement: {}, {}, {}\n", r, c, outcome);
+      //std::cout << fmt::format("calling projective measurement: {}, {}, {}\n", r, c, outcome);
 
       forced_projective_measurement(i, outcome);
 
@@ -309,26 +313,17 @@ class FreeFermionState : public EntropyState {
       }
 
       return d;
-
-      //auto c = occupation();
-      //return c[i];
-      //size_t d = particles_conserved ? 0 : L;
-      //auto p = amplitudes(Eigen::indexing::all, i + d).adjoint() * amplitudes(Eigen::indexing::all, i + d);
-      //std::cout << fmt::format("{} vs {}", std::abs(p(0, 0)), c[i]);
-      //return std::abs(p(0, 0));
     }
 
     std::vector<double> occupation() const {
       auto C = correlation_matrix();
-      std::cout << "C = \n" << C << "\n";
+      //std::cout << "C = \n" << C << "\n";
       std::vector<double> n(L);
 
       int d = particles_conserved ? 0 : L;
       for (size_t i = 0; i < L; i++) {
         n[i] = std::abs(C(i + d, i + d));
       }
-
-      //std::cout << fmt::format("c(n) = {}\n", n);
 
       return n;
     }

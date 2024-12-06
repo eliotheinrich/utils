@@ -1,10 +1,10 @@
-#include <QuantumCircuit/PauliString.hpp>
-#include <QuantumCircuit/QuantumCircuit.h>
 #define FMT_HEADER_ONLY
 
 #include "QuantumState.h"
+#include "QuantumCircuit.h"
 #include "CliffordState.h"
 #include "BinaryPolynomial.h"
+#include "FreeFermion.h"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/tuple.h>
@@ -106,6 +106,11 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", &QuantumCircuit::cy)
     .def("cz", &QuantumCircuit::cz)
     .def("swap", &QuantumCircuit::swap)
+    .def("random_clifford", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) {
+      thread_local std::random_device gen;
+      std::minstd_rand rng(gen());
+      self.random_clifford(qubits, rng);
+    })
     .def("adjoint", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.adjoint(params); }, "params"_a = nanobind::none())
     .def("reverse", &QuantumCircuit::reverse)
     .def("conjugate", &QuantumCircuit::conjugate)
@@ -151,6 +156,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", &Statevector::cy)
     .def("cz", &Statevector::cz)
     .def("swap", &Statevector::swap)
+    .def("random_clifford", &Statevector::random_clifford)
     .def("mzr", [](Statevector& self, uint32_t q) { self.mzr(q); })
     .def("mzr", [](Statevector& self, uint32_t q, bool outcome) { return self.mzr(q, outcome); })
     .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
@@ -187,6 +193,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", &DensityMatrix::cy)
     .def("cz", &DensityMatrix::cz)
     .def("swap", &DensityMatrix::swap)
+    .def("random_clifford", &DensityMatrix::random_clifford)
     .def("mzr", &DensityMatrix::mzr)
     .def("probabilities", &DensityMatrix::probabilities)
     .def("expectation", [](DensityMatrix& self, const PauliString& p) { return self.expectation(p); })
@@ -225,6 +232,7 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("cy", &MatrixProductState::cy)
     .def("cz", &MatrixProductState::cz)
     .def("swap", &MatrixProductState::swap)
+    .def("random_clifford", &MatrixProductState::random_clifford)
     .def("mzr", &MatrixProductState::mzr)
     .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
@@ -324,6 +332,21 @@ NB_MODULE(pyqtools_bindings, m) {
       self.apply_random(rng, {0, 1}, qc);
       return qc;
     });
+
+  nanobind::class_<FreeFermionState>(m, "FreeFermionState")
+    .def("__init__", [](FreeFermionState *s, size_t system_size) {
+      new (s) FreeFermionState(system_size, true);
+    })
+    .def("system_size", &FreeFermionState::system_size)
+    .def("__str__", &FreeFermionState::to_string)
+    .def("particles_at", &FreeFermionState::particles_at)
+    .def("swap", &FreeFermionState::swap)
+    .def("entropy", &FreeFermionState::entropy)
+    .def("evolve", [](FreeFermionState& self, const Eigen::MatrixXcd& U, double t) { self.evolve(U, t); }, "U"_a, "t"_a = 1.0)
+    .def("num_particles", &FreeFermionState::num_particles)
+    .def("correlation_matrix", &FreeFermionState::correlation_matrix)
+    .def("occupation", [](FreeFermionState& self, size_t i) { return self.occupation(i); });
+
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
     .def(nanobind::init<size_t, size_t>())

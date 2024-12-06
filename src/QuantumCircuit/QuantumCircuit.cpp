@@ -185,6 +185,10 @@ QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) co
 	return qc;
 }
 
+void QuantumCircuit::random_clifford(const std::vector<uint32_t>& qubits, std::minstd_rand& rng) {
+  random_clifford_impl(qubits, rng, *this);
+}
+
 QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>& params_opt) const {
 	bool params_passed = params_opt.has_value() && params_opt.value().size() != 0;
 
