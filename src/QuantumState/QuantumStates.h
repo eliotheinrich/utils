@@ -22,7 +22,7 @@ using WeakMeasurementData = std::tuple<PauliString, std::vector<uint32_t>, doubl
 using MeasurementData = std::tuple<PauliString, std::vector<uint32_t>>;
 using MeasurementOutcome = std::tuple<Eigen::MatrixXcd, double, bool>;
 
-class QuantumState : public EntropyState {
+class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
 	protected:
     std::minstd_rand rng;
 
