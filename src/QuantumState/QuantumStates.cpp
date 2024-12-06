@@ -288,8 +288,8 @@ double QuantumState::magic_mutual_information_exhaustive(const std::vector<uint3
 }
 
 std::vector<double> QuantumState::bipartite_magic_mutual_information_exhaustive() {
-  std::vector<double> magic(num_qubits/2);
-  for (size_t i = 0; i < num_qubits/2; i++) {
+  std::vector<double> magic(num_qubits/2 - 1);
+  for (size_t i = 1; i < num_qubits/2; i++) {
     std::vector<uint32_t> qubitsA(i);
     std::iota(qubitsA.begin(), qubitsA.end(), 0);
 
@@ -375,8 +375,8 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_montecarlo(
   auto samples1 = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p1, mutation);
   auto samples2 = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p2, mutation);
 
-  std::vector<double> magic(num_qubits/2);
-  for (size_t i = 0; i < num_qubits/2; i++) {
+  std::vector<double> magic(num_qubits/2 - 1);
+  for (size_t i = 1; i < num_qubits/2; i++) {
     std::vector<uint32_t> qubitsA(i);
     std::iota(qubitsA.begin(), qubitsA.end(), 0);
 
@@ -408,8 +408,8 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_exact(size_
   auto samples1 = sample_paulis_exact(num_samples, p1);
   auto samples2 = sample_paulis_exact(num_samples, p2);
 
-  std::vector<double> magic(num_qubits/2);
-  for (size_t i = 0; i < num_qubits/2; i++) {
+  std::vector<double> magic(num_qubits/2 - 1);
+  for (size_t i = 1; i < num_qubits/2; i++) {
     std::vector<uint32_t> qubitsA(i);
     std::iota(qubitsA.begin(), qubitsA.end(), 0);
 
@@ -423,8 +423,8 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_exact(size_
 }
 
 std::vector<double> QuantumState::bipartite_magic_mutual_information(size_t num_samples) {
-  std::vector<double> magic(num_qubits/2);
-  for (size_t i = 0; i < num_qubits/2; i++) {
+  std::vector<double> magic(num_qubits/2 - 1);
+  for (size_t i = 1; i < num_qubits/2; i++) {
     std::vector<uint32_t> qubitsA(i);
     std::iota(qubitsA.begin(), qubitsA.end(), 0);
 

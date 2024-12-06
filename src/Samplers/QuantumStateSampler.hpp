@@ -194,7 +194,7 @@ class QuantumStateSampler {
             break;
         }
 
-        dataframe::utils::emplace(samples, "magic_mutual_information", magic_samples);
+        dataframe::utils::emplace(samples, "bipartite_magic_mutual_information", magic_samples);
       }
     }
 
