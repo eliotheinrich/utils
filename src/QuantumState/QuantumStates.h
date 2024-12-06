@@ -224,7 +224,6 @@ class DensityMatrix : public QuantumState {
 		DensityMatrix(const QuantumCircuit& circuit);
 
 		DensityMatrix(const DensityMatrix& rho);
-    DensityMatrix(const DensityMatrix&& rho);
 
     DensityMatrix(const MatrixProductState& mps);
 

@@ -18,10 +18,6 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 	data = rho.data;
 }
 
-DensityMatrix::DensityMatrix(const DensityMatrix&& rho) : QuantumState(rho.num_qubits) {
-	data = std::move(rho.data);
-}
-
 DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {}
 
 DensityMatrix::DensityMatrix(const MatrixProductOperator& mpo) : DensityMatrix(mpo.coefficients()) {}

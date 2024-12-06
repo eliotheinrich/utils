@@ -204,6 +204,9 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("magic_mutual_information_exact", &DensityMatrix::magic_mutual_information_exact)
     .def("magic_mutual_information_montecarlo", &DensityMatrix::magic_mutual_information_montecarlo)
     .def("magic_mutual_information_exhaustive", &DensityMatrix::magic_mutual_information_exhaustive)
+    .def("bipartite_magic_mutual_information_exact", &DensityMatrix::magic_mutual_information_exact)
+    .def("bipartite_magic_mutual_information_montecarlo", &DensityMatrix::magic_mutual_information_montecarlo)
+    .def("bipartite_magic_mutual_information_exhaustive", &DensityMatrix::magic_mutual_information_exhaustive)
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -246,6 +249,10 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
     .def("magic_mutual_information_montecarlo", &MatrixProductState::magic_mutual_information_montecarlo)
     .def("magic_mutual_information_exhaustive", &MatrixProductState::magic_mutual_information_exhaustive)
+    .def("bipartite_magic_mutual_information", &MatrixProductState::magic_mutual_information)
+    .def("bipartite_magic_mutual_information_exact", &MatrixProductState::magic_mutual_information_exact)
+    .def("bipartite_magic_mutual_information_montecarlo", &MatrixProductState::magic_mutual_information_montecarlo)
+    .def("bipartite_magic_mutual_information_exhaustive", &MatrixProductState::magic_mutual_information_exhaustive)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -258,9 +265,11 @@ NB_MODULE(pyqtools_bindings, m) {
     .def("sample_paulis_exhaustive", &MatrixProductOperator::sample_paulis_exhaustive)
     .def("sample_paulis_montecarlo", &MatrixProductOperator::sample_paulis_montecarlo)
     .def("magic_mutual_information_exact", &MatrixProductOperator::magic_mutual_information_exact)
-    .def("magic_mutual_information_exact", &MatrixProductOperator::magic_mutual_information_exact)
     .def("magic_mutual_information_montecarlo", &MatrixProductOperator::magic_mutual_information_montecarlo)
     .def("magic_mutual_information_exhaustive", &MatrixProductOperator::magic_mutual_information_exhaustive)
+    .def("bipartite_magic_mutual_information_exact", &MatrixProductOperator::magic_mutual_information_exact)
+    .def("bipartite_magic_mutual_information_montecarlo", &MatrixProductOperator::magic_mutual_information_montecarlo)
+    .def("bipartite_magic_mutual_information_exhaustive", &MatrixProductOperator::magic_mutual_information_exhaustive)
     .def("__str__", &MatrixProductOperator::to_string);
 
   m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
