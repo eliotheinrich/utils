@@ -18,15 +18,9 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 	data = rho.data;
 }
 
-DensityMatrix::DensityMatrix(const UnitaryState& U) : DensityMatrix(U.num_qubits) {
-  evolve(U.unitary);
-}
+DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {}
 
-DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {
-}
-
-DensityMatrix::DensityMatrix(const MatrixProductOperator& mpo) : DensityMatrix(mpo.coefficients()) {
-}
+DensityMatrix::DensityMatrix(const MatrixProductOperator& mpo) : DensityMatrix(mpo.coefficients()) {}
 
 DensityMatrix::DensityMatrix(const Eigen::MatrixXcd& data) : data(data) {
   size_t nrows = data.rows();
@@ -49,7 +43,7 @@ std::string DensityMatrix::to_string() const {
 	return fmt::format("DensityMatrix({}):\n{}\n", num_qubits, ss.str());
 }
 
-DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_qubits) const {
+DensityMatrix DensityMatrix::partial_trace_density_matrix(const std::vector<uint32_t>& traced_qubits) const {
 	std::vector<uint32_t> remaining_qubits;
 	for (uint32_t q = 0; q < num_qubits; q++) {
 		if (!std::count(traced_qubits.begin(), traced_qubits.end(), q)) {
@@ -94,16 +88,9 @@ DensityMatrix DensityMatrix::partial_trace(const std::vector<uint32_t>& traced_q
 	return reduced_rho;
 }
 
-magic_t DensityMatrix::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
-  return magic_mutual_information_montecarlo_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
-}
-
-magic_t DensityMatrix::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
-  return magic_mutual_information_exhaustive_impl<DensityMatrix>(*this, qubitsA, qubitsB);
-}
-
-magic_t DensityMatrix::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  return magic_mutual_information_exact_impl<DensityMatrix>(*this, qubitsA, qubitsB, num_samples);
+// TODO make sure that this is a move
+std::shared_ptr<QuantumState> DensityMatrix::partial_trace(const std::vector<uint32_t>& qubits) const {
+  return std::make_shared<DensityMatrix>(std::move(partial_trace_density_matrix(qubits)));
 }
 
 double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
@@ -133,7 +120,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 	}
 
 
-	DensityMatrix rho_a = partial_trace(traced_qubits);
+	DensityMatrix rho_a = partial_trace_density_matrix(traced_qubits);
 
 	if (index == 0) {
 		uint32_t rank = 0;

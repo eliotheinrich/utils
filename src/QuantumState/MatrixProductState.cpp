@@ -970,10 +970,9 @@ class MatrixProductStateImpl {
         return;
       }
 
-      if (qubits.size() != 2) {
+      if ((qubits.size()) != 2 || (gate.rows() != gate.cols()) || (gate.rows() != (1u << qubits.size()))) {
         throw std::invalid_argument("Can only evolve two-qubit gates in MPS simulation.");
       }
-
 
       uint32_t q1 = std::min(qubits[0], qubits[1]);
       uint32_t q2 = std::max(qubits[0], qubits[1]);
@@ -1762,6 +1761,7 @@ class MatrixProductOperatorImpl {
 
       for (size_t k = 0; k < num_qubits; k++) {
         if (!block_trivial(k)) {
+          PrintData(blocks[k].value());
           throw std::runtime_error("Encountered nontrivial block in MatrixProductOperator.sample_pauli.");
         }
 
@@ -2043,7 +2043,7 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q, index);
 }
 
-magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
   auto contiguous = [](const std::vector<uint32_t>& v) {
     auto v_r = v;
     std::sort(v_r.begin(), v_r.end());
@@ -2076,16 +2076,18 @@ magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>
     }
   }
 
-  auto stateA = partial_trace(qubitsB);
-  MatrixProductState state_(*this);
-  state_.reverse();
+  auto stateA = partial_trace_mpo(qubitsA);
 
   std::vector<uint32_t> qubitsB_ = qubitsB;
   for (size_t i = 0; i < qubitsB_.size(); i++) {
     qubitsB_[i] = num_qubits - qubitsB_[i] - 1;
   }
 
-  auto stateB = state_.partial_trace(qubitsB_);
+  std::sort(qubitsB_.begin(), qubitsB_.end());
+
+  MatrixProductState state_(*this);
+  state_.reverse();
+  auto stateB = state_.partial_trace_mpo(qubitsB_);
 
   auto samplesAB = sample_paulis(num_samples);
   auto samplesA = stateA.sample_paulis(num_samples);
@@ -2096,18 +2098,6 @@ magic_t MatrixProductState::magic_mutual_information(const std::vector<uint32_t>
   double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB);
 
   return MAB - MA - MB;
-}
-
-magic_t MatrixProductState::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
-  return magic_mutual_information_montecarlo_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
-}
-
-magic_t MatrixProductState::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
-  return magic_mutual_information_exhaustive_impl<MatrixProductState>(*this, qubitsA, qubitsB);
-}
-
-magic_t MatrixProductState::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  return magic_mutual_information_exact_impl<MatrixProductState>(*this, qubitsA, qubitsB, num_samples);
 }
 
 std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
@@ -2126,7 +2116,11 @@ void MatrixProductState::print_mps(bool print_data=false) const {
   impl->print_mps(print_data);
 }
 
-MatrixProductOperator MatrixProductState::partial_trace(const std::vector<uint32_t>& qubits) const {
+std::shared_ptr<QuantumState> MatrixProductState::partial_trace(const std::vector<uint32_t>& qubits) const {
+  return std::make_shared<MatrixProductOperator>(*this, qubits);
+}
+
+MatrixProductOperator MatrixProductState::partial_trace_mpo(const std::vector<uint32_t>& qubits) const {
   return MatrixProductOperator(*this, qubits);
 }
 
@@ -2277,19 +2271,11 @@ double MatrixProductOperator::expectation(const PauliString& p) const {
   return impl->expectation(p);
 }
 
-magic_t MatrixProductOperator::magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
-  return magic_mutual_information_montecarlo_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
+std::shared_ptr<QuantumState> MatrixProductOperator::partial_trace(const std::vector<uint32_t>& qubits) const {
+  return std::make_shared<MatrixProductOperator>(*this, qubits);
 }
 
-magic_t MatrixProductOperator::magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB) {
-  return magic_mutual_information_exhaustive_impl<MatrixProductOperator>(*this, qubitsA, qubitsB);
-}
-
-magic_t MatrixProductOperator::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  return magic_mutual_information_exact_impl<MatrixProductOperator>(*this, qubitsA, qubitsB, num_samples);
-}
-
-MatrixProductOperator MatrixProductOperator::partial_trace(const std::vector<uint32_t>& qubits) const {
+MatrixProductOperator MatrixProductOperator::partial_trace_mpo(const std::vector<uint32_t>& qubits) const {
   return MatrixProductOperator(*this, qubits);
 }
 
