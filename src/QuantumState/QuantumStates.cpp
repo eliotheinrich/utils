@@ -383,7 +383,7 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_montecarlo(
     std::vector<uint32_t> qubitsB(num_qubits - i);
     std::iota(qubitsB.begin(), qubitsB.end(), i);
 
-    magic[i] = process_magic_samples(std::shared_ptr<QuantumState>(this), qubitsA, qubitsB, samples1, samples2);
+    magic[i] = process_magic_samples(shared_from_this(), qubitsA, qubitsB, samples1, samples2);
   }
   
   return magic;
@@ -416,7 +416,7 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_exact(size_
     std::vector<uint32_t> qubitsB(num_qubits - i);
     std::iota(qubitsB.begin(), qubitsB.end(), i);
 
-    magic[i] = process_magic_samples(std::shared_ptr<QuantumState>(this), qubitsA, qubitsB, samples1, samples2);
+    magic[i] = process_magic_samples(shared_from_this(), qubitsA, qubitsB, samples1, samples2);
   }
   
   return magic;
