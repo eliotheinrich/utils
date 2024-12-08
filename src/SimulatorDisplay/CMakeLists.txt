@@ -4,7 +4,7 @@ set(GLAD_PATH $ENV{GLAD_PATH})
 include_directories("${GLAD_PATH}/include")
 
 set(SOURCE_FILES
-  SimulatorDisplay.cpp
+  Animator.cpp
   Shader.cpp
 )
 

@@ -1,13 +1,18 @@
-if (DEFINED PYQTOOLS_BUILDING_TEST)
-    add_executable(pyqtools_test
-        test.cpp
-    )
+if (DEFINED QUTILS_BUILDING_TEST)
+  add_executable(qutils_test
+      test.cpp
+  )
 
-    set_target_properties(pyqtools_test PROPERTIES 
-        LINKER_LANGUAGE CXX 
-        POSITION_INDEPENDENT_CODE ON
-    )
+  set_target_properties(qutils_test PROPERTIES 
+      LINKER_LANGUAGE CXX 
+      POSITION_INDEPENDENT_CODE ON
+  )
+  
+  set(qutils_test_libs quantum_state clifford_state linear_code ${LAPACKBLAS} itensor fmt::fmt)
+  if (DEFINED BUILD_GLFW)
+    list(APPEND qutils_test_libs simulator_display)
+  endif()
 
-    target_link_libraries(pyqtools_test PRIVATE quantum_state clifford_state linear_code ${LAPACKBLAS} itensor fmt::fmt)
-    target_include_directories(pyqtools_test PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
+  target_link_libraries(qutils_test PRIVATE ${qutils_test_libs})
+  target_include_directories(qutils_test PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
 endif()

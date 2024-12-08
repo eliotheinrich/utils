@@ -7,6 +7,7 @@
 #include <Display.h>
 #include <EntropyState.hpp>
 #include <Samplers.h>
+#include <Simulator.hpp>
 
 #include <sstream>
 #include <iostream>
@@ -335,7 +336,7 @@ class FreeFermionState : public EntropyState {
     }
 };
 
-class FreeFermionSimulator : public Drawable {
+class FreeFermionSimulator : public Simulator {
   private:
     EntropySampler sampler;
 
@@ -346,7 +347,7 @@ class FreeFermionSimulator : public Drawable {
 
   public:
     std::shared_ptr<FreeFermionState> state;
-    FreeFermionSimulator(dataframe::Params& params, uint32_t num_threads) : Drawable(params), sampler(params) {
+    FreeFermionSimulator(dataframe::Params& params, uint32_t num_threads) : Simulator(params), sampler(params) {
       L = dataframe::utils::get<int>(params, "system_size");
       sample_correlations = dataframe::utils::get<int>(params, "sample_correlations", 0);
     }

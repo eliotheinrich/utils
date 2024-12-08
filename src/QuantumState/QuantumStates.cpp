@@ -48,9 +48,6 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_exact(size_t num_samples
 static void single_qubit_random_mutation_at_site(PauliString& p, std::minstd_rand& rng, size_t j) {
   size_t g = rng() % 4;
 
-  bool b1 = g % 2;
-  bool b2 = g < 2;
-  
   if (g == 0) {
     p.set_x(j, 0);
     p.set_z(j, 0);
@@ -265,9 +262,6 @@ double QuantumState::magic_mutual_information_exhaustive(const std::vector<uint3
   auto power = [](double s, const PauliAmplitude& p, double pow) {
     return s + std::pow(p.second, pow);
   };
-
-  auto power2 = std::bind(power, std::placeholders::_1, std::placeholders::_2, 2.0);
-  auto power4 = std::bind(power, std::placeholders::_1, std::placeholders::_2, 4.0);
 
   auto power_vec = [&power](const std::vector<PauliAmplitude>& samples, double pow) {
     auto powfunc = std::bind(power, std::placeholders::_1, std::placeholders::_2, pow);
