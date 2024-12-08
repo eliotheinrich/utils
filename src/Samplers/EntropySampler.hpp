@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <numeric>
 #include <assert.h>
+#include <memory>
 
 class EntropySampler {
   public:
