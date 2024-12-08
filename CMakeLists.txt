@@ -107,7 +107,7 @@ add_subdirectory(${MISC_DIR})
 add_subdirectory(${SAMPLERS_DIR})
 add_subdirectory(${TEST_DIR})
 
-if (BUILDING_PYQTOOLS)
+if (BUILDING_PYQUTILS)
     find_package(Python 3.10 
         REQUIRED COMPONENTS Interpreter Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule
@@ -122,16 +122,22 @@ if (BUILDING_PYQTOOLS)
     find_package(nanobind CONFIG REQUIRED)
 
     nanobind_add_module(
-        pyqtools_bindings
+        qutils_bindings
         STABLE_ABI
         NB_STATIC
-        src/PyUtils.cpp
+        src/PyQutils.hpp
+        src/PyQutils.cpp
     )
 
-    target_link_libraries(pyqtools_bindings PUBLIC quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS})
+    set(qutils_libs quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS})
+    if (DEFINED BUILD_GLFW)
+      list(APPEND qutils_libs simulator_display)
+    endif()
+
+    target_link_libraries(qutils_bindings PUBLIC ${qutils_libs})
 
     install(
-        TARGETS pyqtools_bindings
-        LIBRARY DESTINATION pyqtools
+        TARGETS qutils_bindings
+        LIBRARY DESTINATION qutils
     )
 endif()
