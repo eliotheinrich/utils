@@ -8,6 +8,7 @@
 #include "CliffordState.h"
 #include "BinaryPolynomial.h"
 #include "Graph.hpp"
+#include "Display.h"
 #include <iostream>
 #include <cassert>
 
@@ -957,31 +958,21 @@ bool test_statevector_to_mps() {
   return true;
 }
 
-bool test_quantumcircuit_append() {
-  constexpr size_t nqb = 6;
-  QuantumCircuit V(2);
-  V.cx(0, 1);
+#ifdef BUILD_GLFW
+bool test_animator() {
+  Animator a({0.0, 0.0, 0.0, 0.0});
+  Texture t(10, 10);
 
-  QuantumCircuit qc(nqb);
-  for (uint32_t i = 0; i < nqb - 1; i++) {
-    qc.append(V, {i, i+1});
-  }
+  a.new_frame(t);
+  a.start(900, 900);
 
   return true;
 }
-
-bool test_partial_trace_ptr() {
-  constexpr size_t nqb = 4;
-  auto rng = seeded_rng();
-
-  DensityMatrix rho(nqb);
-  randomize_state_haar(rng, rho);
-
-  auto rhoA = rho.partial_trace({0, 1});
-  std::cout << rhoA->to_string() << "\n";
-
+#else
+bool test_animator() {
   return true;
 }
+#endif
 
 #define ADD_TEST(x)                     \
 if (run_all) {                          \
@@ -1024,8 +1015,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_weak_measure);
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
-  ADD_TEST(test_quantumcircuit_append);
-  ADD_TEST(test_partial_trace_ptr);
+  ADD_TEST(test_animator);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

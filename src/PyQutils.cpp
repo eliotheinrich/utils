@@ -1,27 +1,9 @@
 #define FMT_HEADER_ONLY
-
-#include "QuantumState.h"
-#include "QuantumCircuit.h"
-#include "CliffordState.h"
-#include "BinaryPolynomial.h"
-#include "FreeFermion.h"
-
-#include <nanobind/nanobind.h>
-#include <nanobind/stl/tuple.h>
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/optional.h>
-#include <nanobind/stl/variant.h>
-#include <nanobind/stl/vector.h>
-#include <nanobind/stl/bind_map.h>
-#include <nanobind/stl/shared_ptr.h>
-#include <nanobind/stl/complex.h>
-#include <nanobind/stl/pair.h>
-#include <nanobind/ndarray.h>
-#include <nanobind/eigen/dense.h>
+#include <PyQutils.hpp>
 
 using namespace nanobind::literals;
 
-NB_MODULE(pyqtools_bindings, m) {
+NB_MODULE(qutils_bindings, m) {
   std::complex<double> i(0, 1);
 
   nanobind::class_<PauliString>(m, "PauliString")
@@ -402,4 +384,20 @@ NB_MODULE(pyqtools_bindings, m) {
         return self.truncate(_sites);
       })
     .def("generator_locality", &GeneratorMatrix::generator_locality);
+
+#ifdef BUILD_GLFW
+  nanobind::class_<FrameData>(m, "FrameData")
+    .def(nanobind::init<int, std::vector<int>>())
+    .def_ro("status_code", &FrameData::status_code)
+    .def_ro("keys", &FrameData::keys);
+
+  nanobind::class_<Animator>(m, "GLFWAnimator")
+    .def("__init__", [](Animator *s, float r, float g, float b, float alpha) {
+      new (s) Animator({r, g, b, alpha});
+    })
+    .def("is_paused", &Animator::is_paused)
+    .def("new_frame", [](Animator& self, const std::vector<float>& texture, size_t n, size_t m) { return self.new_frame(texture, n, m); })
+    .def("new_frame", [](Animator& self, const std::vector<std::vector<std::vector<float>>>& data) { return self.new_frame(Texture(data)); })
+    .def("start", &Animator::start);
+#endif
 }

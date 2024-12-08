@@ -463,7 +463,7 @@ class PauliString {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to PauliString.evolve.", name));
           }
 				},
-				[this](Measurement m) { 
+				[](Measurement m) { 
           throw std::runtime_error(fmt::format("Cannot mzr a single PauliString."));
 				},
 			}, inst);

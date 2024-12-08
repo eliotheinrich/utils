@@ -1643,7 +1643,6 @@ class MatrixProductOperatorImpl {
       std::sort(sorted_qubits.begin(), sorted_qubits.end());
 
       size_t num_traced_qubits = traced_qubits.size();
-      size_t num_physical_qubits = mpo.num_qubits - num_traced_qubits;
 
       // Mask of physical qubits vs traced qubits
       std::vector<bool> mask(mpo.num_qubits, true);
@@ -1929,8 +1928,6 @@ class MatrixProductOperatorImpl {
             assignments[2*j + 1] = ((z1 >> j) & 1u) + 1;
             assignments[2*j] = ((z2 >> j) & 1u) + 1;
           }
-
-          auto c = eltC(contraction, assignments);
 
           data(z1, z2) = eltC(contraction, assignments);
         }

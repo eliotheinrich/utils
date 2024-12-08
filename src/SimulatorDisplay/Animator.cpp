@@ -1,7 +1,9 @@
-#include "SimulatorDisplay.h"
+#include "Animator.h"
 #include <unistd.h>
+#include <map>
 
 #include <functional>
+#include <future>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -10,16 +12,24 @@ static void framebuffer_size_callback(GLFWwindow* window, int width, int height)
   glViewport(0, 0, width, height);
 }
 
-class SimulatorDisplay::InputProcessImpl {
+class Animator::WindowImpl {
+  public:
+    GLFWwindow* impl;
+    WindowImpl(GLFWwindow* impl) : impl(impl) {}
+};
+
+class Animator::InputProcessImpl {
   private:
-    using KeyMap = std::map<int, std::function<void(SimulatorDisplay&, GLFWwindow*)>>;
+    using KeyMap = std::map<int, std::function<void(Animator&, GLFWwindow*)>>;
     KeyMap keymap;
     std::map<int, double> prevtime;
 
+    std::vector<int> key_buffer;
+
   public:
     InputProcessImpl() {
-      keymap[GLFW_KEY_SPACE] = [](SimulatorDisplay& sim, GLFWwindow* window) { sim.paused = !sim.paused; };
-      keymap[GLFW_KEY_ESCAPE] = [](SimulatorDisplay& sim, GLFWwindow* window) { glfwSetWindowShouldClose(window, true); };
+      keymap[GLFW_KEY_SPACE] = [](Animator& sim, GLFWwindow* window) { sim.paused = !sim.paused; };
+      keymap[GLFW_KEY_ESCAPE] = [](Animator& sim, GLFWwindow* window) { glfwSetWindowShouldClose(window, true); };
     }
 
     double update_key_time(int key_code, double time) {
@@ -34,31 +44,46 @@ class SimulatorDisplay::InputProcessImpl {
 
     auto get_key_callback() {
       auto callback = [](GLFWwindow *window, int key, int scancode, int action, int mods) {
-        auto& self = *static_cast<SimulatorDisplay*>(glfwGetWindowUserPointer(window));
+        auto& self = *static_cast<Animator*>(glfwGetWindowUserPointer(window));
         if (action == GLFW_RELEASE) {
           if (self.input_processor->keymap.contains(key)) {
             auto func = self.input_processor->keymap[key];
             func(self, window);
           }
 
-          self.simulator->callback(key);
+          self.input_processor->key_buffer.push_back(key);
         }
       };
 
       return callback;
     }
+
+    const std::vector<int> get_key_buffer() const {
+      return key_buffer;
+    }
+
+    void clear_key_buffer() {
+      key_buffer.clear();
+    }
 };
 
-SimulatorDisplay::SimulatorDisplay(std::unique_ptr<Drawable> state, size_t steps_per_update, size_t fps) : steps_per_update(steps_per_update), fps(fps) {
+Animator::Animator(const Color& background_color) : background_color(background_color) {
   // Setting up state variables
-  simulator = std::move(state);
   paused = false;
-  background_color = {0.0, 0.0, 0.0, 0.0};
 
+  frame_data = Texture();
   input_processor = std::make_unique<InputProcessImpl>();
 }
 
-void SimulatorDisplay::init_buffers() {
+Animator::~Animator() {
+  glDeleteVertexArrays(1, &VAO);
+  glDeleteBuffers(1, &VBO);
+  glDeleteBuffers(1, &EBO);
+
+  glfwTerminate();
+}
+
+void Animator::init_buffers() {
   // Setting up GL variables
   glGenVertexArrays(1, &VAO);
   glGenBuffers(1, &VBO);
@@ -75,7 +100,7 @@ void SimulatorDisplay::init_buffers() {
   glEnableVertexAttribArray(1);
 
   float vertices[] = {
-    // positions         // texture coords
+    // positions         // frame_data coords
     1.0f,  1.0f, 0.0f,   1.0f, 1.0f,   // top right
     1.0f, -1.0f, 0.0f,   1.0f, 0.0f,   // bottom right
     -1.0f, -1.0f, 0.0f,   0.0f, 0.0f,   // bottom left
@@ -112,14 +137,7 @@ void SimulatorDisplay::init_buffers() {
   shader.set_int("tex", 0);
 }
 
-SimulatorDisplay::~SimulatorDisplay() {
-  glDeleteVertexArrays(1, &VAO);
-  glDeleteBuffers(1, &VBO);
-  glDeleteBuffers(1, &EBO);
-}
-
-
-void SimulatorDisplay::animate(size_t width, size_t height) {
+void Animator::start(size_t width, size_t height) {
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -129,13 +147,14 @@ void SimulatorDisplay::animate(size_t width, size_t height) {
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-  GLFWwindow* window = glfwCreateWindow(width, height, "Simulator", NULL, NULL);
-  if (window == NULL) {
+  GLFWwindow* glfw_window = glfwCreateWindow(width, height, "Simulator", NULL, NULL);
+  window = std::make_unique<WindowImpl>(glfw_window);
+  if (window->impl == NULL) {
     std::cout << "Failed to create GLFW window" << std::endl;
     glfwTerminate();
     return;
   }
-  glfwMakeContextCurrent(window); 
+  glfwMakeContextCurrent(window->impl); 
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Failed to initialize GLAD" << std::endl;
@@ -145,36 +164,27 @@ void SimulatorDisplay::animate(size_t width, size_t height) {
   init_buffers();
 
   glViewport(0, 0, width, height);
-  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);  
+  glfwSetFramebufferSizeCallback(window->impl, framebuffer_size_callback);  
 
-  glfwSetWindowUserPointer(window, this);
+  glfwSetWindowUserPointer(window->impl, this);
   auto key_callback = input_processor->get_key_callback();
-  glfwSetKeyCallback(window, key_callback);
+  glfwSetKeyCallback(window->impl, key_callback);
+}
 
-  double t1, t2, dt;
-  double target_dt = 1.0/fps;
-
-  std::vector<double> times(100);
-  while (!glfwWindowShouldClose(window)) {
-    t1 = glfwGetTime();
-
+FrameData Animator::new_frame(const Texture& new_data) {
+  if (!paused) {
+    frame_data = new_data;
     glClearColor(background_color.r, background_color.g, background_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // Do physics and poll texture
-    if (!paused) {
-      simulator->timesteps(steps_per_update);
-    }
-    Texture texture = simulator->get_texture();
-
-    // Draw texture
+    // Draw frame_data
     shader.use();
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glBindTexture(GL_TEXTURE_2D, texture_idx);  
     glActiveTexture(GL_TEXTURE0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.n, texture.m, 0, GL_RGBA, GL_FLOAT, texture.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame_data.n, frame_data.m, 0, GL_RGBA, GL_FLOAT, (void*) frame_data.data());
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -182,24 +192,18 @@ void SimulatorDisplay::animate(size_t width, size_t height) {
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    glfwSwapBuffers(window);
-    glfwPollEvents();    
-
-    // Fix framerate
-    t2 = glfwGetTime();
-    dt = t2 - t1;
-
-    times.push_back(dt);
-    times.erase(times.begin());
-    double avg = 0.0;
-    for (auto t : times) {
-      avg += t;
-    }
-    //std::cout << fmt::format("dt = {}\n", avg/100);
-    if (dt < target_dt) {
-      usleep((target_dt - dt)*1e6);
-    }
+    glfwSwapBuffers(window->impl);
   }
+  
+  glfwPollEvents();
 
-  glfwTerminate();
+  int status_code = glfwWindowShouldClose(window->impl) ? 0 : 1;
+  std::vector<int> keys = input_processor->get_key_buffer();
+  input_processor->clear_key_buffer();
+  return {status_code, keys};
+}
+
+FrameData Animator::new_frame(const std::vector<float>& new_data, size_t n, size_t m) {
+  Texture texture(new_data, n, m);
+  return new_frame(texture);
 }

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <Simulator.hpp>
+#include <QuantumState.h>
+
 #include "CliffordState.hpp"
 #include "Tableau.hpp"
 
@@ -149,13 +152,25 @@ class QuantumCHPState : public CliffordState {
     void set_z(size_t i, size_t j, bool v) {
       tableau.set_z(i, j, v);
     }
-};
 
-#include <glaze/glaze.hpp>
+    Texture get_texture(Color x_color, Color z_color, Color y_color) {
+      size_t N = num_qubits*num_qubits;
+      Texture texture(num_qubits, num_qubits);
 
-template<>
-struct glz::meta<QuantumCHPState> {
-  static constexpr auto value = glz::object(
-    "tableau", &QuantumCHPState::tableau
-  );
+      for (size_t r = 0; r < num_qubits; r++) {
+        for (size_t i = 0; i < num_qubits; i++) {
+          bool zi = tableau.get_z(r + num_qubits, i);
+          bool xi = tableau.get_x(r + num_qubits, i);
+          if (zi && xi) {
+            texture.set(r, i, y_color);
+          } else if (zi) {
+            texture.set(r, i, z_color);
+          } else if (xi) {
+            texture.set(r, i, x_color);
+          }
+        }
+      }
+
+      return texture;
+    }
 };
