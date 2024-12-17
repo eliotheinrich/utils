@@ -13,8 +13,6 @@
 
 #define QS_ATOL 1e-8
 
-class EntropyState;
-
 using PauliAmplitude = std::pair<PauliString, double>;
 using PauliMutationFunc = std::function<void(PauliString&, std::minstd_rand&)>;
 using ProbabilityFunc = std::function<double(double)>;
@@ -56,14 +54,14 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
       throw std::runtime_error("Virtual magic_mutual_information called on a state which has not implemented it.");
     }
-    double magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
-    double magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB);
-    double magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples);
+    virtual double magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
+    virtual double magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB);
+    virtual double magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples);
 
     virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples);
-    std::vector<double> bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
-    std::vector<double> bipartite_magic_mutual_information_exhaustive();
-    std::vector<double> bipartite_magic_mutual_information_exact(size_t num_samples);
+    virtual std::vector<double> bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
+    virtual std::vector<double> bipartite_magic_mutual_information_exhaustive();
+    virtual std::vector<double> bipartite_magic_mutual_information_exact(size_t num_samples);
 
     static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
 
@@ -369,13 +367,19 @@ class MatrixProductState : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
 
     virtual std::vector<PauliAmplitude> sample_paulis(size_t num_samples) override;
+
     virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
+
+    //virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples) override;
+    virtual std::vector<double> bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
 
     MatrixProductOperator partial_trace_mpo(const std::vector<uint32_t>& qubits) const;
     virtual std::shared_ptr<QuantumState> partial_trace(const std::vector<uint32_t>& qubits) const override;
 
     virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
+    std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
+    std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
 
 		std::complex<double> coefficients(uint32_t z) const;
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
@@ -461,3 +465,11 @@ class MatrixProductOperator : public QuantumState {
       throw std::runtime_error("evolve not implemented for MatrixProductOperator.");
     }
 };
+
+double calculate_magic(
+  const std::vector<double>& tA2, const std::vector<double>& tB2, const std::vector<double> tAB2,
+  const std::vector<double>& tA4, const std::vector<double>& tB4, const std::vector<double> tAB4
+);
+
+void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
+

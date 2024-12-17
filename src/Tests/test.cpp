@@ -39,6 +39,11 @@ bool is_close_eps(double eps, T first, V second) {
   return std::abs(first - second) < eps;
 }
 
+template <typename T, typename V>
+bool is_close(T first, V second) {
+  return is_close_eps(1e-8, first, second);
+}
+
 template <typename T, typename V, typename... Args>
 bool is_close_eps(double eps, T first, V second, Args... args) {
   if (!is_close(first, second)) {
@@ -46,11 +51,6 @@ bool is_close_eps(double eps, T first, V second, Args... args) {
   } else {
     return is_close_eps(eps, first, args...);
   }
-}
-
-template <typename T, typename V>
-bool is_close(T first, V second) {
-  return is_close_eps(1e-8, first, second);
 }
 
 template <typename T, typename V, typename... Args>
@@ -958,6 +958,78 @@ bool test_statevector_to_mps() {
   return true;
 }
 
+bool test_pauli_expectation_sweep() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 8;
+
+  MatrixProductState mps(nqb, 1u << 8);
+  Statevector sv(nqb);
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(rng, mps, sv);
+  }
+
+  for (size_t i = 0; i < 20; i++) {
+    randomize_state_haar(rng, mps, sv);
+    PauliString P = PauliString::rand(nqb, rng);
+    size_t q1_ = rng() % nqb;
+    size_t q2_ = rng() % nqb;
+    while (q2_ == q1_) {
+      q2_ = rng() % nqb;
+    }
+    size_t q1 = std::min(q1_, q2_);
+    size_t q2 = std::max(q1_, q2_);
+    std::vector<double> expectation1 = mps.pauli_expectation_left_sweep(P, q1, q2);
+    std::vector<double> expectation2;
+    std::vector<double> expectation2_sv;
+    std::vector<uint32_t> sites(q1);
+    std::iota(sites.begin(), sites.end(), 0);
+    for (uint32_t i = q1; i < q2; i++) {
+      sites.push_back(i);
+      double c = mps.expectation(P.substring(sites));
+      expectation2.push_back(c);
+
+      //std::cout << fmt::format("<{}> on {} = {}\n", P.to_string_ops(), sites, c);
+
+      c = sv.expectation(P.substring(sites));
+      expectation2_sv.push_back(c);
+    }
+
+    ASSERT(expectation1.size() == expectation2.size(), "Did not get the same number of values.");
+    for (size_t j = 0; j < expectation1.size(); j++) {
+      ASSERT(is_close_eps(1e-4, std::abs(expectation1[j]), std::abs(expectation2[j]), std::abs(expectation2_sv[j])), 
+          fmt::format("Partial expectations did not match on left sweep: \nexp1 = {}\nexp2 = {}\nexp2_sv = {}\n", expectation1, expectation2, expectation2_sv));
+    }
+
+    expectation1 = mps.pauli_expectation_right_sweep(P, q1, q2);
+    expectation2.clear();
+    expectation2_sv.clear();
+    sites.clear();
+
+    sites = std::vector<uint32_t>(nqb - q2 - 1);
+    std::iota(sites.begin(), sites.end(), q2 + 1);
+    std::reverse(sites.begin(), sites.end());
+
+    for (uint32_t i = q2; i > q1; i--) {
+      sites.push_back(i);
+      double c = mps.expectation(P.substring(sites));
+      expectation2.push_back(c);
+
+      //std::cout << fmt::format("(<{}> on {} = {}\n", P.to_string_ops(), sites, c);
+
+      c = sv.expectation(P.substring(sites));
+      expectation2_sv.push_back(c);
+    }
+
+    ASSERT(expectation1.size() == expectation2.size(), "Did not get the same number of values.");
+    for (size_t j = 0; j < expectation1.size(); j++) {
+      ASSERT(is_close_eps(1e-4, std::abs(expectation1[j]), std::abs(expectation2[j]), std::abs(expectation2_sv[j])), 
+          fmt::format("Partial expectations did not match on right sweep: \nexp1 = {}\nexp2 = {}\nexp2_sv = {}\n", expectation1, expectation2, expectation2_sv));
+    }
+  }
+
+  return true;
+}
+
 #ifdef BUILD_GLFW
 bool test_animator() {
   Animator a({0.0, 0.0, 0.0, 0.0});
@@ -1015,7 +1087,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_weak_measure);
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
-  ADD_TEST(test_animator);
+  ADD_TEST(test_pauli_expectation_sweep);
+  //ADD_TEST(test_animator);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
