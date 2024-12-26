@@ -52,6 +52,7 @@ class QuantumStateSampler {
       }
 
       sample_magic_mutual_information = dataframe::utils::get<int>(params, "sample_magic_mutual_information", false);
+      save_mmi_samples = dataframe::utils::get<int>(params, "save_mmi_samples", false);
       magic_mutual_information_subsystem_size = dataframe::utils::get<int>(params, "magic_mutual_information_subsystem_size", system_size/4);
       subsystem_offset_A = dataframe::utils::get<int>(params, "subsystem_offset_A", 0);
       subsystem_offset_B = dataframe::utils::get<int>(params, "subsystem_offset_B", system_size - magic_mutual_information_subsystem_size);
@@ -108,16 +109,43 @@ class QuantumStateSampler {
     std::vector<PauliAmplitude> take_sre_samples(const std::shared_ptr<QuantumState>& state) {
       ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
 
-      switch (sre_method) {
-        case sre_method_t::MonteCarlo:
-          return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
-        case sre_method_t::Exhaustive:
-          return state->sample_paulis_exhaustive();
-        case sre_method_t::Exact:
-          return state->sample_paulis_exact(sre_num_samples, prob);
-        case sre_method_t::Virtual:
-          return state->sample_paulis(sre_num_samples);
+      if (sre_method == sre_method_t::MonteCarlo) {
+        return state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
+      } else if (sre_method == sre_method_t::Exhaustive) {
+        return state->sample_paulis_exhaustive();
+      } else if (sre_method == sre_method_t::Exact) {
+        return state->sample_paulis_exact(sre_num_samples, prob);
+      } else if (sre_method == sre_method_t::Virtual) {
+        return state->sample_paulis(sre_num_samples);
       }
+    }
+
+    void add_mmi_samples(dataframe::data_t &samples, const std::vector<MMIMonteCarloSamples>& data) const {
+      std::vector<std::vector<double>> tA2;
+      std::vector<std::vector<double>> tB2;
+      std::vector<std::vector<double>> tAB2;
+
+      std::vector<std::vector<double>> tA4;
+      std::vector<std::vector<double>> tB4;
+      std::vector<std::vector<double>> tAB4;
+
+      for (auto const [t2, t4] : data) {
+        auto [tA2_, tB2_, tAB2_] = t2;
+        auto [tA4_, tB4_, tAB4_] = t4;
+        tA2.push_back(tA2_);
+        tB2.push_back(tB2_);
+        tAB2.push_back(tAB2_);
+        tA4.push_back(tA4_);
+        tB4.push_back(tB4_);
+        tAB4.push_back(tAB4_);
+      }
+
+      dataframe::utils::emplace(samples, "magic_mutual_information_tA2", tA2);
+      dataframe::utils::emplace(samples, "magic_mutual_information_tB2", tB2);
+      dataframe::utils::emplace(samples, "magic_mutual_information_tAB2", tAB2);
+      dataframe::utils::emplace(samples, "magic_mutual_information_tA4", tA4);
+      dataframe::utils::emplace(samples, "magic_mutual_information_tB4", tB4);
+      dataframe::utils::emplace(samples, "magic_mutual_information_tAB4", tAB4);
     }
 
     void add_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
@@ -157,44 +185,52 @@ class QuantumStateSampler {
           qubitsB[i] = i + subsystem_offset_B;
         }
 
-        double magic_sample;
-        switch (sre_method) {
-          case sre_method_t::Exhaustive:
-            magic_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
-            break;
-          case sre_method_t::MonteCarlo:
-            magic_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
-            break;
-          case sre_method_t::Exact:
-            magic_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
-            break;
-          case sre_method_t::Virtual:
-            magic_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
-            break;
+        double mmi_sample;
+        if (sre_method == sre_method_t::Exhaustive) {
+          mmi_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
+        } else if (sre_method == sre_method_t::MonteCarlo) {
+          auto mmi_data = state->magic_mutual_information_samples_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
+          if (save_mmi_samples) {
+            add_mmi_samples(samples, {mmi_data});
+          }
+          mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
+        } else if (sre_method == sre_method_t::Exact) {
+          auto mmi_data = state->magic_mutual_information_samples_exact(qubitsA, qubitsB, sre_num_samples);
+          if (save_mmi_samples) {
+            add_mmi_samples(samples, {mmi_data});
+          }
+          mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
+        } else if (sre_method == sre_method_t::Virtual) {
+          mmi_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
         }
 
-        dataframe::utils::emplace(samples, "magic_mutual_information", magic_sample);
+        dataframe::utils::emplace(samples, "magic_mutual_information", mmi_sample);
       }
 
       if (sample_bipartite_magic_mutual_information) {
-        std::vector<double> magic_samples;
+        std::vector<double> mmi_samples;
 
-        switch (sre_method) {
-          case sre_method_t::Exhaustive:
-            magic_samples = state->bipartite_magic_mutual_information_exhaustive();
-            break;
-          case sre_method_t::MonteCarlo:
-            magic_samples = state->bipartite_magic_mutual_information_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
-            break;
-          case sre_method_t::Exact:
-            magic_samples = state->bipartite_magic_mutual_information_exact(sre_num_samples);
-            break;
-          case sre_method_t::Virtual:
-            magic_samples = state->bipartite_magic_mutual_information(sre_num_samples);
-            break;
+        if (sre_method == sre_method_t::Exhaustive) {
+          mmi_samples = state->bipartite_magic_mutual_information_exhaustive();
+        } else if (sre_method = sre_method_t::MonteCarlo) {
+          auto mmi_data = state->bipartite_magic_mutual_information_samples_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
+          if (save_mmi_samples) {
+            add_mmi_samples(samples, mmi_data);
+          }
+          mmi_samples.resize(mmi_data.size());
+          std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MMIMonteCarloSamples& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
+        } else if (sre_method == sre_method_t::Exact) {
+          auto mmi_data = state->bipartite_magic_mutual_information_samples_exact(sre_num_samples);
+          if (save_mmi_samples) {
+            add_mmi_samples(samples, mmi_data);
+          }
+          mmi_samples.resize(mmi_data.size());
+          std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MMIMonteCarloSamples& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
+        } else if (sre_method == sre_method_t::Virtual) {
+          mmi_samples = state->bipartite_magic_mutual_information(sre_num_samples);
         }
 
-        dataframe::utils::emplace(samples, "bipartite_magic_mutual_information", magic_samples);
+        dataframe::utils::emplace(samples, "bipartite_magic_mutual_information", mmi_samples);
       }
     }
 
@@ -217,6 +253,7 @@ class QuantumStateSampler {
     size_t sre_mc_equilibration_timesteps;
 
     bool sample_magic_mutual_information;
+    bool save_mmi_samples;
     size_t magic_mutual_information_subsystem_size;
     size_t subsystem_offset_A;
     size_t subsystem_offset_B;
@@ -250,3 +287,4 @@ class QuantumStateSampler {
       return indices;
     }
 };
+

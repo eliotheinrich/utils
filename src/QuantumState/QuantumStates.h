@@ -16,9 +16,13 @@
 using PauliAmplitude = std::pair<PauliString, double>;
 using PauliMutationFunc = std::function<void(PauliString&, std::minstd_rand&)>;
 using ProbabilityFunc = std::function<double(double)>;
+using MonteCarloSamples = std::array<std::vector<double>, 3>;
+using MMIMonteCarloSamples = std::array<MonteCarloSamples, 2>;
+
 using WeakMeasurementData = std::tuple<PauliString, std::vector<uint32_t>, double>;
 using MeasurementData = std::tuple<PauliString, std::vector<uint32_t>>;
 using MeasurementOutcome = std::tuple<Eigen::MatrixXcd, double, bool>;
+
 
 class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
 	protected:
@@ -51,32 +55,35 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 			rng.seed(s);
 		}
 
-    virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-      throw std::runtime_error("Virtual magic_mutual_information called on a state which has not implemented it.");
-    }
-    virtual double magic_mutual_information_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
-    virtual double magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB);
-    virtual double magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples);
-
-    virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples);
-    virtual std::vector<double> bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
-    virtual std::vector<double> bipartite_magic_mutual_information_exhaustive();
-    virtual std::vector<double> bipartite_magic_mutual_information_exact(size_t num_samples);
-
-    static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
-
     std::vector<PauliAmplitude> sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
     std::vector<PauliAmplitude> sample_paulis_exhaustive();
     std::vector<PauliAmplitude> sample_paulis_exact(size_t num_samples, ProbabilityFunc prob);
 
     virtual std::vector<PauliAmplitude> sample_paulis(size_t num_samples) {
-      ProbabilityFunc prob = [](double t) -> double { return std::pow(t, 2.0); };
-      return sample_paulis_montecarlo(num_samples, 5*num_qubits, prob);
+      throw std::runtime_error("Attempted to call virtual sample_paulis on state which does not provide an implementation.");
     }
+
+    static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
+
+    static double calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples);
+
+    virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+      throw std::runtime_error("Virtual magic_mutual_information called on a state which does not provide an implementation.");
+    }
+    virtual MMIMonteCarloSamples magic_mutual_information_samples_montecarlo(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
+    virtual MMIMonteCarloSamples magic_mutual_information_samples_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples);
+    virtual double magic_mutual_information_exhaustive(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB);
+
+    virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples);
+    virtual std::vector<MMIMonteCarloSamples> bipartite_magic_mutual_information_samples_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
+    virtual std::vector<MMIMonteCarloSamples> bipartite_magic_mutual_information_samples_exact(size_t num_samples);
+    virtual std::vector<double> bipartite_magic_mutual_information_exhaustive();
 
     virtual std::shared_ptr<QuantumState> partial_trace(const std::vector<uint32_t>& qubits) const=0;
 
     virtual double expectation(const PauliString& p) const=0;
+    virtual std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
+    virtual std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
 
 		virtual std::string to_string() const=0;
 
@@ -370,16 +377,13 @@ class MatrixProductState : public QuantumState {
 
     virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) override;
 
-    //virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples) override;
-    virtual std::vector<double> bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
-
     MatrixProductOperator partial_trace_mpo(const std::vector<uint32_t>& qubits) const;
     virtual std::shared_ptr<QuantumState> partial_trace(const std::vector<uint32_t>& qubits) const override;
 
     virtual double expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
-    std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
-    std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const;
+    virtual std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const override;
+    virtual std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const override;
 
 		std::complex<double> coefficients(uint32_t z) const;
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;
@@ -466,7 +470,7 @@ class MatrixProductOperator : public QuantumState {
     }
 };
 
-double calculate_magic(
+double calculate_magic_from_montecarlo_samples(
   const std::vector<double>& tA2, const std::vector<double>& tB2, const std::vector<double> tAB2,
   const std::vector<double>& tA4, const std::vector<double>& tB4, const std::vector<double> tAB4
 );

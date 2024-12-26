@@ -1,6 +1,39 @@
 #include "QuantumStates.h"
 #include <stdexcept>
 
+std::vector<double> QuantumState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
+  uint32_t q1 = std::min(q1_, q2_);
+  uint32_t q2 = std::max(q1_, q2_);
+  std::vector<double> expectations;
+  
+  std::vector<uint32_t> sites(q1);
+  std::iota(sites.begin(), sites.end(), 0);
+  for (uint32_t i = q1; i < q2; i++) {
+    sites.push_back(i);
+    double c = expectation(P.substring(sites));
+    expectations.push_back(c);
+  }
+
+  return expectations;
+}
+
+std::vector<double> QuantumState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
+  uint32_t q1 = std::min(q1_, q2_);
+  uint32_t q2 = std::max(q1_, q2_);
+  std::vector<double> expectations;
+  
+  std::vector<uint32_t> sites(num_qubits - q2 - 1);
+  std::iota(sites.begin(), sites.end(), q2 + 1);
+  std::reverse(sites.begin(), sites.end());
+  for (uint32_t i = q2; i > q1; i--) {
+    sites.push_back(i);
+    double c = expectation(P.substring(sites));
+    expectations.push_back(c);
+  }
+
+  return expectations;
+}
+
 std::vector<PauliAmplitude> QuantumState::sample_paulis_exhaustive() {
   if (num_qubits > 15) {
     throw std::runtime_error("Cannot do exhaustive Pauli sampling for n > 15 qubits.");
@@ -122,7 +155,6 @@ static void random_bit_mutation(PauliString& p, std::minstd_rand& rng) {
   size_t j = rng() % (2*p.num_qubits);
   p.set(j, !p.get(j));
 }
-
 
 std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
   PauliMutationFunc mutation = single_qubit_random_mutation;
@@ -298,11 +330,10 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_exhaustive(
   return magic;
 }
 
-double calculate_magic(
-  const std::vector<double>& tA2, const std::vector<double>& tB2, const std::vector<double> tAB2,
-  const std::vector<double>& tA4, const std::vector<double>& tB4, const std::vector<double> tAB4
-) {
-  //std::cout << fmt::format("tA2 = {}\ntB2 = {}\ntAB2 = {}\ntA4 = {}\ntB4 = {}\ntAB4 = {}\n\n", tA2, tB2, tAB2, tA4, tB4, tAB4);
+double QuantumState::calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples) {
+  const auto [t2, t4] = samples;
+  const auto [tA2, tB2, tAB2] = t2;
+  const auto [tA4, tB4, tAB4] = t4;
   if (tA2.size() != tB2.size() || tB2.size() != tAB2.size()) {
     throw std::invalid_argument(fmt::format("Invalid sample sizes passed to calculate_magic. tA2.size() = {}, tB2.size() = {}, tAB2.size() = {}", tA2.size(), tB2.size(), tAB2.size()));
   }
@@ -329,7 +360,7 @@ double calculate_magic(
   return I - W;
 }
 
-static double process_magic_samples(
+static MMIMonteCarloSamples process_magic_samples(
     std::shared_ptr<QuantumState> stateAB, 
     const std::vector<uint32_t>& _qubitsA, const std::vector<uint32_t>& _qubitsB, 
     const std::vector<PauliAmplitude>& samples1, const std::vector<PauliAmplitude>& samples2
@@ -337,7 +368,7 @@ static double process_magic_samples(
   auto stateA = stateAB->partial_trace(_qubitsB);
   auto stateB = stateAB->partial_trace(_qubitsA);
 
-  auto extract_amplitudes = [&](const std::vector<PauliAmplitude>& samples) {
+  auto extract_amplitudes = [&](const std::vector<PauliAmplitude>& samples) -> MonteCarloSamples {
     std::vector<double> tA;
     std::vector<double> tB;
     std::vector<double> tAB;
@@ -345,22 +376,18 @@ static double process_magic_samples(
       PauliString PA = P.substring(_qubitsA, true);
       PauliString PB = P.substring(_qubitsB, true);
 
-      //std::cout << fmt::format("<{}> on _{} = {}\n", P.to_string_ops(), _qubitsA, std::abs(stateA->expectation(PA))); 
-      //std::cout << fmt::format("<{}> on _{} = {}\n", P.to_string_ops(), _qubitsB, std::abs(stateB->expectation(PB))); 
       tA.push_back(std::abs(stateA->expectation(PA)));
       tB.push_back(std::abs(stateB->expectation(PB)));
       tAB.push_back(std::abs(t));
     }
 
-    return std::make_tuple(tA, tB, tAB);
+    return {tA, tB, tAB};
   };
 
-  auto [tA2, tB2, tAB2] = extract_amplitudes(samples1);
-  auto [tA4, tB4, tAB4] = extract_amplitudes(samples2);
-  return calculate_magic(tA2, tB2, tAB2, tA4, tB4, tAB4);
+  return {extract_amplitudes(samples1), extract_amplitudes(samples2)};
 }
 
-double QuantumState::magic_mutual_information_montecarlo(
+MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_montecarlo(
     const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB,
     size_t num_samples, size_t equilibration_timesteps, 
     std::optional<PauliMutationFunc> mutation_opt
@@ -382,37 +409,7 @@ double QuantumState::magic_mutual_information_montecarlo(
   return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
 }
 
-std::vector<double> QuantumState::bipartite_magic_mutual_information_montecarlo(
-    size_t num_samples, size_t equilibration_timesteps, 
-    std::optional<PauliMutationFunc> mutation_opt
-) {
-  PauliMutationFunc mutation = single_qubit_random_mutation;
-  if (mutation_opt) {
-    mutation = mutation_opt.value();
-  }
-
-  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
-  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
-  auto samples1 = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p1, mutation);
-  auto samples2 = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p2, mutation);
-
-  std::vector<double> magic(num_qubits/2 - 1);
-  for (size_t i = 0; i < magic.size(); i++) {
-    size_t j = i + 1;
-    std::vector<uint32_t> qubitsA(j);
-    std::iota(qubitsA.begin(), qubitsA.end(), 0);
-
-    std::vector<uint32_t> qubitsB(num_qubits - j);
-    std::iota(qubitsB.begin(), qubitsB.end(), j);
-
-    auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, num_qubits);
-    magic[i] = process_magic_samples(shared_from_this(), _qubitsA, _qubitsB, samples1, samples2);
-  }
-  
-  return magic;
-}
-
-double QuantumState::magic_mutual_information_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
   auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, num_qubits);
 
   auto stateAB = partial_trace(_qubits);
@@ -425,26 +422,84 @@ double QuantumState::magic_mutual_information_exact(const std::vector<uint32_t>&
   return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
 }
 
-std::vector<double> QuantumState::bipartite_magic_mutual_information_exact(size_t num_samples) {
-  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
-  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
-  auto samples1 = sample_paulis_exact(num_samples, p1);
-  auto samples2 = sample_paulis_exact(num_samples, p2);
-
-  std::vector<double> magic(num_qubits/2 - 1);
-  for (size_t i = 0; i < magic.size(); i++) {
-    size_t j = i + 1;
-    std::vector<uint32_t> qubitsA(j);
-    std::iota(qubitsA.begin(), qubitsA.end(), 0);
-
-    std::vector<uint32_t> qubitsB(num_qubits - j);
-    std::iota(qubitsB.begin(), qubitsB.end(), j);
-
-    auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, num_qubits);
-    magic[i] = process_magic_samples(shared_from_this(), _qubitsA, _qubitsB, samples1, samples2);
+std::vector<MMIMonteCarloSamples> QuantumState::bipartite_magic_mutual_information_samples_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
+  PauliMutationFunc mutation = single_qubit_random_mutation;
+  if (mutation_opt) {
+    mutation = mutation_opt.value();
   }
-  
-  return magic;
+
+  auto get_samples = [&](ProbabilityFunc p) {
+    auto pauli_samples = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p, mutation);
+
+    std::vector<MonteCarloSamples> samples(num_qubits/2 - 1);
+
+    for (size_t i = 0; i < num_samples; i++) {
+      auto const [P, t] = pauli_samples[i];
+
+      std::vector<double> tA = QuantumState::pauli_expectation_left_sweep(P, 0, num_qubits/2);
+      std::vector<double> tB = QuantumState::pauli_expectation_right_sweep(P, num_qubits/2, 0);
+      std::reverse(tB.begin(), tB.end());
+
+      for (size_t j = 0; j < num_qubits/2 - 1; j++) {
+        samples[j][0].push_back(tA[j]);
+        samples[j][1].push_back(tB[j]);
+        samples[j][2].push_back(t);
+      }
+    }
+
+    return samples;
+  };
+
+  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
+  auto t2 = get_samples(p1);
+  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
+  auto t4 = get_samples(p2);
+
+  std::vector<MMIMonteCarloSamples> samples;
+  for (size_t n = 0; n < num_qubits/2 - 1; n++) {
+    samples.push_back({t2[n], t4[n]});
+  }
+
+  return samples;
+}
+
+std::vector<MMIMonteCarloSamples> QuantumState::bipartite_magic_mutual_information_samples_exact(size_t num_samples) {
+  auto get_samples = [&](ProbabilityFunc p) {
+    // for a fixed probability function
+    // returns a std::vector<MonteCarloSamples>
+    // at the end, rearrange into pairs
+    auto pauli_samples = sample_paulis_exact(num_samples, p);
+
+    std::vector<MonteCarloSamples> samples(num_qubits/2 - 1);
+
+    for (size_t i = 0; i < num_samples; i++) {
+      auto const [P, t] = pauli_samples[i];
+
+      std::vector<double> tA = pauli_expectation_left_sweep(P, 0, num_qubits/2);
+      std::vector<double> tB = pauli_expectation_right_sweep(P, num_qubits/2, 0);
+      std::reverse(tB.begin(), tB.end());
+
+      for (size_t j = 0; j < num_qubits/2 - 1; j++) {
+        samples[j][0].push_back(tA[j]);
+        samples[j][1].push_back(tB[j]);
+        samples[j][2].push_back(t);
+      }
+    }
+
+    return samples;
+  };
+
+  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
+  auto t2 = get_samples(p1);
+  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
+  auto t4 = get_samples(p2);
+
+  std::vector<MMIMonteCarloSamples> samples;
+  for (size_t n = 0; n < num_qubits/2 - 1; n++) {
+    samples.push_back({t2[n], t4[n]});
+  }
+
+  return samples;
 }
 
 std::vector<double> QuantumState::bipartite_magic_mutual_information(size_t num_samples) {

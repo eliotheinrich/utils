@@ -849,7 +849,6 @@ class MatrixProductStateImpl {
         expectation.push_back(trace_tensor(L, R));
 
         qubits.push_back(i);
-        //std::cout << fmt::format("(S) <{}> on {} = {}\n", P.to_string_ops(), qubits, trace_tensor(L, R));
       }
 
       return expectation;
@@ -2247,49 +2246,6 @@ std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const Pauli
 
 std::vector<double> MatrixProductState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
   return impl->pauli_expectation_right_sweep(P, q1, q2);
-}
-
-// See about bipartite_magic_mutual_information (same reason as above; MatrixProductState.sample_pauli only works for PDF ~ <P>^2
-std::vector<double> MatrixProductState::bipartite_magic_mutual_information_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
-  //return QuantumState::bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps, mutation_opt);
-  PauliMutationFunc mutation = single_qubit_random_mutation;
-  if (mutation_opt) {
-    mutation = mutation_opt.value();
-  }
-
-  auto get_samples = [&](ProbabilityFunc p) {
-    auto samples = sample_paulis_montecarlo(num_samples, equilibration_timesteps, p, mutation);
-    std::vector<std::vector<double>> tA(num_qubits/2 - 1, std::vector<double>(num_samples));
-    std::vector<std::vector<double>> tB(num_qubits/2 - 1, std::vector<double>(num_samples));
-    std::vector<std::vector<double>> tAB(num_qubits/2 - 1, std::vector<double>(num_samples));
-    for (size_t i = 0; i < num_samples; i++) {
-      auto const [P, t] = samples[i];
-      auto tA_ = impl->pauli_expectation_left_sweep(P, 0, num_qubits/2);
-      auto tB_ = impl->pauli_expectation_right_sweep(P, num_qubits/2, 0);
-      std::reverse(tB_.begin(), tB_.end());
-
-      for (size_t j = 0; j < num_qubits/2 - 1; j++) {
-        tA[j][i] = tA_[j];
-        tB[j][i] = tB_[j];
-        tAB[j][i] = t;
-      }
-    }
-
-    return std::make_tuple(tA, tB, tAB);
-  };
-
-  ProbabilityFunc p1 = [](double t) -> double { return std::pow(t, 2.0); };
-  auto [tA2, tB2, tAB2] = get_samples(p1);
-  ProbabilityFunc p2 = [](double t) -> double { return std::pow(t, 4.0); };
-  auto [tA4, tB4, tAB4] = get_samples(p2);
-
-  std::vector<double> magic(num_qubits/2 - 1);
-
-  for (size_t i = 0; i < magic.size(); i++) {
-    magic[i] = calculate_magic(tA2[i], tB2[i], tAB2[i], tA4[i], tB4[i], tAB4[i]);
-  }
-
-  return magic;
 }
 
 std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
