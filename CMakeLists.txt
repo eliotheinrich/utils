@@ -17,7 +17,7 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 set(PFFFT_DIR $ENV{PFFFT_DIR})
 find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
-add_compile_definitions(PFFFT_ENABLE_DOUBLE)
+add_compile_definitions(PFFFT_ENABLE_DOUBLE FMT_HEADER_ONLY)
 
 find_package(fmt)
 find_package(openblas)

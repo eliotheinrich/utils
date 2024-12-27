@@ -1,4 +1,3 @@
-#define FMT_HEADER_ONLY
 #include <PyQutils.hpp>
 
 using namespace nanobind::literals;
