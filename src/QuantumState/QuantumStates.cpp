@@ -436,8 +436,8 @@ std::vector<MMIMonteCarloSamples> QuantumState::bipartite_magic_mutual_informati
     for (size_t i = 0; i < num_samples; i++) {
       auto const [P, t] = pauli_samples[i];
 
-      std::vector<double> tA = QuantumState::pauli_expectation_left_sweep(P, 0, num_qubits/2);
-      std::vector<double> tB = QuantumState::pauli_expectation_right_sweep(P, num_qubits/2, 0);
+      std::vector<double> tA = pauli_expectation_left_sweep(P, 0, num_qubits/2);
+      std::vector<double> tB = pauli_expectation_right_sweep(P, num_qubits/2, 0);
       std::reverse(tB.begin(), tB.end());
 
       for (size_t j = 0; j < num_qubits/2 - 1; j++) {
