@@ -365,6 +365,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("generator_locality", &GeneratorMatrix::generator_locality);
 
 #ifdef BUILD_GLFW
+  constexpr int BUILT_WITH_GLFW = 1;
   nanobind::class_<FrameData>(m, "FrameData")
     .def(nanobind::init<int, std::vector<int>>())
     .def_ro("status_code", &FrameData::status_code)
@@ -378,5 +379,8 @@ NB_MODULE(qutils_bindings, m) {
     .def("new_frame", [](Animator& self, const std::vector<float>& texture, size_t n, size_t m) { return self.new_frame(texture, n, m); })
     .def("new_frame", [](Animator& self, const std::vector<std::vector<std::vector<float>>>& data) { return self.new_frame(Texture(data)); })
     .def("start", &Animator::start);
+#else
+  constexpr int BUILT_WITH_GLFW = 0;
 #endif
+  m.attr("QUTILS_BUILT_WITH_GLFW") = BUILT_WITH_GLFW;
 }

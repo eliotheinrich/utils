@@ -213,7 +213,7 @@ class QuantumStateSampler {
 
         if (sre_method == sre_method_t::Exhaustive) {
           mmi_samples = state->bipartite_magic_mutual_information_exhaustive();
-        } else if (sre_method = sre_method_t::MonteCarlo) {
+        } else if (sre_method == sre_method_t::MonteCarlo) {
           auto mmi_data = state->bipartite_magic_mutual_information_samples_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           if (save_mmi_samples) {
             add_mmi_samples(samples, mmi_data);
