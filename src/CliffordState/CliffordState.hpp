@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Frame.h"
 #include "QuantumCircuit.h"
 
 #include <algorithm>

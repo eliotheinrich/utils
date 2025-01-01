@@ -1,7 +1,8 @@
 #pragma once
 
-#include <Frame.h>
 #include "EntropyState.hpp"
+
+#include <Frame.h>
 
 #include <cstdint>
 #include <sstream>
@@ -12,7 +13,7 @@
 
 class EntropySampler {
   public:
-    EntropySampler(dataframe::Params &params) {  
+    EntropySampler(dataframe::ExperimentParams &params) {  
       renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "renyi_indices", "2"));
 
       system_size = dataframe::utils::get<int>(params, "system_size");

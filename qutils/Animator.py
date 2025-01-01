@@ -1,6 +1,8 @@
 from qutils.qutils_bindings import GLFWAnimator, QUTILS_BUILT_WITH_GLFW
 from time import time, sleep
 
+import inspect
+
 if QUTILS_BUILT_WITH_GLFW:
     class SimulatorAnimator:
         def __init__(self, simulator, background_color=None, fps=60, steps_per_frame=1):

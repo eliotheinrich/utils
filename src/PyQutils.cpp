@@ -3,7 +3,7 @@
 using namespace nanobind::literals;
 
 NB_MODULE(qutils_bindings, m) {
-  std::complex<double> i(0, 1);
+  nanobind::bind_map<dataframe::data_t>(m, "data_t");
 
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
@@ -235,7 +235,17 @@ NB_MODULE(qutils_bindings, m) {
 
   m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
 
-  nanobind::class_<QuantumCHPState>(m, "QuantumCHPState")
+  nanobind::class_<EntropyState>(m, "EntropyState");
+
+  nanobind::class_<EntropySampler>(m, "EntropySampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntropyState> state) {
+      dataframe::data_t samples;
+      sampler.add_samples(samples, state);
+      return samples;
+    });
+
+  nanobind::class_<QuantumCHPState, EntropyState>(m, "QuantumCHPState")
     .def(nanobind::init<uint32_t>())
     .def_ro("num_qubits", &QuantumCHPState::num_qubits)
     .def("__str__", &QuantumCHPState::to_string)
@@ -247,6 +257,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("get_z", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.get_z(i, j); })
     .def("tableau", [](QuantumCHPState& self) { return self.tableau.to_matrix(); })
     .def("partial_rank", &QuantumCHPState::partial_rank)
+    .def("evolve", [](QuantumCHPState& self, const QuantumCircuit& circuit) { circuit.apply(self); })
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
     .def("s", [](QuantumCHPState& self, uint32_t q) { self.s(q); })
     .def("sd", [](QuantumCHPState& self, uint32_t q) { self.sd(q); })
@@ -271,7 +282,22 @@ NB_MODULE(qutils_bindings, m) {
     .def("mzr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.mzr_expectation(q); })
     .def("to_statevector", &QuantumCHPState::to_statevector)
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
-    .def("random_clifford", &QuantumCHPState::random_clifford);
+    .def("random_clifford", &QuantumCHPState::random_clifford)
+    .def("get_texture", 
+    [](QuantumCHPState& state, 
+        const std::vector<float>& color_x, const std::vector<float>& color_z, const std::vector<float>& color_y
+    ) -> std::tuple<std::vector<float>, size_t, size_t> {
+      if ((color_x.size() != 3) || (color_z.size() != 3) || (color_y.size() != 3)) {
+        throw std::runtime_error(fmt::format("Color must have size 3. Colors have sizes {}, {}, and {}.", color_x.size(), color_y.size(), color_z.size()));
+      }
+
+      Texture texture = state.get_texture({color_x[0], color_x[1], color_x[2], 1.0},
+                                          {color_z[0], color_z[1], color_z[1], 1.0},
+                                          {color_y[0], color_y[1], color_y[1], 1.0});
+
+      const float* data = texture.data();
+      return {std::vector<float>{data, data + texture.len()}, texture.n, texture.m};
+    });
 
   nanobind::class_<CliffordTable>(m, "CliffordTable")
     .def("__init__", [](CliffordTable *t, const std::vector<PauliString>& p1, const std::vector<PauliString>& p2) {

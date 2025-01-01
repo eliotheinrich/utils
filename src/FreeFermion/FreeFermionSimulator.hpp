@@ -347,7 +347,7 @@ class FreeFermionSimulator : public Simulator {
 
   public:
     std::shared_ptr<FreeFermionState> state;
-    FreeFermionSimulator(dataframe::Params& params, uint32_t num_threads) : Simulator(params), sampler(params) {
+    FreeFermionSimulator(dataframe::ExperimentParams& params, uint32_t num_threads) : Simulator(params), sampler(params) {
       L = dataframe::utils::get<int>(params, "system_size");
       sample_correlations = dataframe::utils::get<int>(params, "sample_correlations", 0);
     }

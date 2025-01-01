@@ -27,7 +27,7 @@ class QuantumStateSampler {
       }
     }
 
-    QuantumStateSampler(dataframe::Params& params) {
+    QuantumStateSampler(dataframe::ExperimentParams& params) {
       system_size = dataframe::utils::get<int>(params, "system_size");
 
       num_bins = dataframe::utils::get<int>(params, "num_bins", 100);

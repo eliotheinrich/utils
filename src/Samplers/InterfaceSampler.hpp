@@ -43,7 +43,7 @@ class InterfaceSampler {
     }
 
   public:
-    InterfaceSampler(dataframe::Params& params) {
+    InterfaceSampler(dataframe::ExperimentParams& params) {
       system_size = dataframe::utils::get<int>(params, "system_size");
 
       sample_surface = dataframe::utils::get<int>(params, "sample_surface", false);

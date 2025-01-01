@@ -24,7 +24,7 @@
 
 #define EXPORT_SIMULATOR(A)                                                               \
   nanobind::class_<A>(m, #A)                                                              \
-    .def(nanobind::init<dataframe::Params&, uint32_t>())                                  \
+    .def(nanobind::init<dataframe::ExperimentParams&, uint32_t>())                        \
     .def("init", [](                                                                      \
           A& self,                                                                        \
           const std::optional<nanobind::bytes>& data = std::nullopt) {                    \
@@ -55,7 +55,7 @@
 
 #define EXPORT_CONFIG(A)                                              \
   nanobind::class_<A>(m, #A)                                          \
-  .def(nanobind::init<dataframe::Params&>())                          \
+  .def(nanobind::init<dataframe::ExperimentParams&>())                \
   .def("compute", [](A& self, uint32_t num_threads) {                 \
       dataframe::DataSlide slide = self.compute(num_threads);         \
       std::vector<dataframe::byte_t> _bytes = slide.to_bytes();       \

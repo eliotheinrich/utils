@@ -29,7 +29,7 @@ class LinearCodeSampler {
 
 
   public:
-    LinearCodeSampler(dataframe::Params& params) {
+    LinearCodeSampler(dataframe::ExperimentParams& params) {
       inplace = dataframe::utils::get<int>(params, "inplace", false);
 
       sample_rank = dataframe::utils::get<int>(params, "sample_rank", false);
