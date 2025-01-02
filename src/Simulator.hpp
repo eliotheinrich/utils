@@ -111,8 +111,8 @@ class Simulator {
       timesteps(num_steps);
     }
 
-    virtual dataframe::data_t take_samples() {
-      return dataframe::data_t();
+    virtual dataframe::SampleMap take_samples() {
+      return dataframe::SampleMap();
     }
 
     virtual std::vector<dataframe::byte_t> serialize() const {

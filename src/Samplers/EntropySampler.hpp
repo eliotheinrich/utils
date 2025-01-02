@@ -56,7 +56,7 @@ class EntropySampler {
 
     ~EntropySampler()=default;
 
-    void add_entropy_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_entropy_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<double> entropy_samples;
       if (spatially_average) {
         entropy_samples = spatial_entropy_samples(partition_size, index, state);
@@ -67,7 +67,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, key, entropy_samples);
     }
 
-    void add_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_mutual_information_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<double> entropy_table = compute_entropy_table(index, state);
       std::vector<std::vector<double>> mutual_information_samples(num_eta_bins);
       for (uint32_t x1 = 0; x1 < system_size; x1++) {
@@ -97,7 +97,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, key, mutual_information_samples);
     }
 
-    void add_fixed_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_fixed_mutual_information_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<uint32_t> interval1 = to_interval(x1, x2);
       std::vector<uint32_t> interval2 = to_interval(x3, x4);
       std::vector<uint32_t> interval3 = to_combined_interval(x1, x2, x3, x4);
@@ -107,7 +107,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, key, mutual_information);
     }
 
-    void add_variable_mutual_information_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_variable_mutual_information_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<std::vector<double>> mutual_information_samples(system_size/2);
       for (uint32_t i = 0; i < system_size/2; i++) {
         std::vector<uint32_t> sites(2*i);
@@ -134,7 +134,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, "variable_mutual_information", mutual_information_samples);
     }
 
-    void add_entropy_all_partition_sizes(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_entropy_all_partition_sizes(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<std::vector<double>> entropy_samples(system_size);
       for (uint32_t i = 0; i < system_size; i++) {
         std::vector<double> s;
@@ -151,7 +151,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, key, entropy_samples);
     }
 
-    void add_correlation_distance_samples(dataframe::data_t &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
+    void add_correlation_distance_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntropyState> state) const {
       std::vector<std::vector<double>> bins(num_distance_bins, std::vector<double>());
       std::vector<size_t> counts(num_distance_bins, 0);
       for (size_t x1 = 0; x1 < system_size; x1++) {
@@ -175,7 +175,7 @@ class EntropySampler {
       dataframe::utils::emplace(samples, key, bins);
     }
 
-    void add_samples(dataframe::data_t &samples, std::shared_ptr<EntropyState> state) {
+    void add_samples(dataframe::SampleMap &samples, std::shared_ptr<EntropyState> state) {
       for (auto const &i : renyi_indices) {
         if (sample_entropy) {
           add_entropy_samples(samples, i, state);

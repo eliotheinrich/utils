@@ -1,10 +1,6 @@
 #include <PyQutils.hpp>
 
-using namespace nanobind::literals;
-
 NB_MODULE(qutils_bindings, m) {
-  nanobind::bind_map<dataframe::data_t>(m, "data_t");
-
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
     .def_ro("num_qubits", &PauliString::num_qubits)
@@ -240,7 +236,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<EntropySampler>(m, "EntropySampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntropyState> state) {
-      dataframe::data_t samples;
+      dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;
     });

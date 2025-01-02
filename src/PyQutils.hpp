@@ -15,12 +15,14 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
-#include <nanobind/stl/bind_map.h>
+#include <nanobind/stl/map.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/complex.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/eigen/dense.h>
+
+using namespace nanobind::literals;
 
 #define EXPORT_SIMULATOR(A)                                                               \
   nanobind::class_<A>(m, #A)                                                              \

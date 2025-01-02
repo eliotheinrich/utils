@@ -66,7 +66,7 @@ class QuantumStateSampler {
       mutation = f;
     }
 
-    void add_probability_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_probability_samples(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
       if (state->num_qubits > 31) {
         throw std::runtime_error("Cannot generate probabilities for n > 31 qubits.");
       }
@@ -97,7 +97,7 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "probabilities", probability_probs);
     }
 
-    void add_bitstring_distribution(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_bitstring_distribution(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
       if (state->num_qubits > 31) {
         throw std::runtime_error("Cannot generate bitstring distribution for n > 31 qubits.");
       }
@@ -120,7 +120,7 @@ class QuantumStateSampler {
       }
     }
 
-    void add_mmi_samples(dataframe::data_t &samples, const std::vector<MMIMonteCarloSamples>& data) const {
+    void add_mmi_samples(dataframe::SampleMap &samples, const std::vector<MMIMonteCarloSamples>& data) const {
       std::vector<std::vector<double>> tA2;
       std::vector<std::vector<double>> tB2;
       std::vector<std::vector<double>> tAB2;
@@ -149,7 +149,7 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "magic_mutual_information_tAB4", tAB4);
     }
 
-    void add_samples(dataframe::data_t &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_samples(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
       if (sample_probabilities) {
         add_probability_samples(samples, state);
       }

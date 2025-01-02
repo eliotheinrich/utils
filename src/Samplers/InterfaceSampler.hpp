@@ -127,7 +127,7 @@ class InterfaceSampler {
       return sum/(2.0*width);
     }
 
-    void add_surface_samples(dataframe::data_t &samples, const std::vector<int>& surface) const {
+    void add_surface_samples(dataframe::SampleMap &samples, const std::vector<int>& surface) const {
       size_t num_sites = surface.size();
 
       std::vector<double> surface_d(num_sites);
@@ -136,7 +136,7 @@ class InterfaceSampler {
       dataframe::utils::emplace(samples, "surface", surface_d);
     }
 
-    void add_avalanche_samples(dataframe::data_t &samples) {
+    void add_avalanche_samples(dataframe::SampleMap &samples) {
       uint32_t total_avalanches = 0;
       for (uint32_t i = 0; i < num_bins; i++) {
         total_avalanches += avalanche_sizes[i];
@@ -158,12 +158,12 @@ class InterfaceSampler {
 
     std::vector<double> structure_function(const std::vector<int>& surface) const;
   
-    void add_structure_function_samples(dataframe::data_t &samples, const std::vector<int> &surface) const {
+    void add_structure_function_samples(dataframe::SampleMap &samples, const std::vector<int> &surface) const {
       std::vector<double> sk = structure_function(surface);
       dataframe::utils::emplace(samples, "structure", sk);
     }
 
-    void add_rugosity_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+    void add_rugosity_samples(dataframe::SampleMap& samples, const std::vector<int>& surface) const {
       uint32_t num_sites = surface.size();
       size_t size = std::min(num_sites/2, max_width) - 1;
 
@@ -182,7 +182,7 @@ class InterfaceSampler {
       return (d1 == d2) && (std::abs(d1) == 1);
     }
 
-    void add_staircase_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+    void add_staircase_samples(dataframe::SampleMap& samples, const std::vector<int>& surface) const {
       size_t num_sites = surface.size();
 
       std::vector<double> staircase_counts(num_sites, 0.0);
@@ -210,7 +210,7 @@ class InterfaceSampler {
       dataframe::utils::emplace(samples, "staircases", staircase_counts);
     }
 
-    void add_threshold_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+    void add_threshold_samples(dataframe::SampleMap& samples, const std::vector<int>& surface) const {
       double m = 0.0;
       size_t num_sites = surface.size();
       for (size_t i = 0; i < num_sites; i++) {
@@ -245,13 +245,13 @@ class InterfaceSampler {
       return {e1, e2};
     }
 
-    void add_edge_samples(dataframe::data_t& samples, const std::vector<int>& surface) const {
+    void add_edge_samples(dataframe::SampleMap& samples, const std::vector<int>& surface) const {
       auto [e1, e2] = find_edges(surface);
       dataframe::utils::emplace(samples, "edge_positions", {static_cast<double>(e1), static_cast<double>(e2)});
     }
 
 
-    void add_samples(dataframe::data_t &samples, const std::vector<int>& surface) {
+    void add_samples(dataframe::SampleMap &samples, const std::vector<int>& surface) {
       if (sample_surface) {
         add_surface_samples(samples, surface);
       }

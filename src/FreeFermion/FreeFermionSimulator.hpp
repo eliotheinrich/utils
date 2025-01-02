@@ -388,7 +388,7 @@ class FreeFermionSimulator : public Simulator {
       return texture;
     }
 
-    void add_correlation_samples(dataframe::data_t& samples) const {
+    void add_correlation_samples(dataframe::SampleMap& samples) const {
       auto C = state->correlation_matrix();
       std::vector<std::vector<double>> correlations(L, std::vector<double>(L));
 
@@ -403,8 +403,8 @@ class FreeFermionSimulator : public Simulator {
       dataframe::utils::emplace(samples, "correlations", correlations);
     }
 
-    virtual dataframe::data_t take_samples() override {
-      dataframe::data_t samples;
+    virtual dataframe::SampleMap take_samples() override {
+      dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
 
       if (sample_correlations) {
