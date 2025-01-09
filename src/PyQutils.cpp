@@ -107,7 +107,9 @@ NB_MODULE(qutils_bindings, m) {
   m.def("hardware_efficient_ansatz", &hardware_efficient_ansatz);
   m.def("haar_unitary", [](uint32_t num_qubits) { return haar_unitary(num_qubits); });
 
-  nanobind::class_<Statevector>(m, "Statevector")
+  nanobind::class_<QuantumState>(m, "QuantumState");
+
+  nanobind::class_<Statevector, QuantumState>(m, "Statevector")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
     .def(nanobind::init<MatrixProductState>())
@@ -146,7 +148,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<DensityMatrix>(m, "DensityMatrix")
+  nanobind::class_<DensityMatrix, QuantumState>(m, "DensityMatrix")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
     .def_ro("num_qubits", &DensityMatrix::num_qubits)
@@ -182,7 +184,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<MatrixProductState>(m, "MatrixProductState")
+  nanobind::class_<MatrixProductState, QuantumState>(m, "MatrixProductState")
     .def(nanobind::init<uint32_t, uint32_t, double>(), "num_qubits"_a, "bond_dimension"_a, "sv_threshold"_a=1e-4)
     .def_ro("num_qubits", &MatrixProductState::num_qubits)
     .def("__str__", &MatrixProductState::to_string)
@@ -220,7 +222,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<MatrixProductOperator>(m, "MatrixProductOperator")
+  nanobind::class_<MatrixProductOperator, QuantumState>(m, "MatrixProductOperator")
     .def(nanobind::init<const MatrixProductState&, const std::vector<uint32_t>&>())
     .def_ro("num_qubits", &MatrixProductOperator::num_qubits)
     .def("partial_trace", &MatrixProductOperator::partial_trace)
@@ -235,7 +237,35 @@ NB_MODULE(qutils_bindings, m) {
 
   nanobind::class_<EntropySampler>(m, "EntropySampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      EntropySampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
     .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntropyState> state) {
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, state);
+      return samples;
+    });
+
+  nanobind::class_<InterfaceSampler>(m, "InterfaceSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      InterfaceSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("take_samples", [](InterfaceSampler& sampler, const std::vector<int>& surface) {
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, surface);
+      return samples;
+    });
+
+  nanobind::class_<QuantumStateSampler>(m, "QuantumStateSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      QuantumStateSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("take_samples", [](QuantumStateSampler& sampler, const std::shared_ptr<QuantumState>& state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;
@@ -279,8 +309,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("to_statevector", &QuantumCHPState::to_statevector)
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
     .def("random_clifford", &QuantumCHPState::random_clifford)
-    .def("get_texture", 
-    [](QuantumCHPState& state, 
+    .def("get_texture", [](QuantumCHPState& state, 
         const std::vector<float>& color_x, const std::vector<float>& color_z, const std::vector<float>& color_y
     ) -> std::tuple<std::vector<float>, size_t, size_t> {
       if ((color_x.size() != 3) || (color_z.size() != 3) || (color_y.size() != 3)) {

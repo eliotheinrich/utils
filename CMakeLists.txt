@@ -129,7 +129,7 @@ if (BUILDING_PYQUTILS)
         src/PyQutils.cpp
     )
 
-    set(qutils_libs quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS})
+    set(qutils_libs quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS} dataframe)
     if (DEFINED BUILD_GLFW)
       list(APPEND qutils_libs simulator_display)
     endif()

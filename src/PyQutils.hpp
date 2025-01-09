@@ -27,6 +27,11 @@ using namespace nanobind::literals;
 #define EXPORT_SIMULATOR(A)                                                               \
   nanobind::class_<A>(m, #A)                                                              \
     .def(nanobind::init<dataframe::ExperimentParams&, uint32_t>())                        \
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params,             \
+                                         uint32_t num_threads) {                          \
+      A simulator(params, num_threads);                                                   \
+      return std::make_pair(simulator, params);                                           \
+    })                                                                                    \
     .def("init", [](                                                                      \
           A& self,                                                                        \
           const std::optional<nanobind::bytes>& data = std::nullopt) {                    \
