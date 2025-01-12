@@ -2374,6 +2374,39 @@ bool MatrixProductState::debug_tests() {
   return b;
 }
 
+std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_t num_samples) { 
+  auto pauli_samples = sample_paulis(num_samples);
+
+  size_t N = num_qubits/2 - 1;
+  std::vector<std::vector<double>> samplesA(N);
+  std::vector<std::vector<double>> samplesB(N);
+  std::vector<std::vector<double>> samplesAB(N);
+
+  for (size_t i = 0; i < num_samples; i++) {
+    auto const [P, t] = pauli_samples[i];
+
+    std::vector<double> tA = pauli_expectation_left_sweep(P, 0, num_qubits/2);
+    std::vector<double> tB = pauli_expectation_right_sweep(P, num_qubits/2, 0);
+    std::reverse(tB.begin(), tB.end());
+
+    for (size_t j = 0; j < N; j++) {
+      samplesA[j].push_back(tA[j]);
+      samplesB[j].push_back(tB[j]);
+      samplesAB[j].push_back(t);
+    }
+  }
+
+  std::vector<double> magic(N);
+  for (size_t j = 0; j < N; j++) {
+    double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA[j]);
+    double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB[j]);
+    double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB[j]);
+    magic[j] = MA + MB - MAB;
+  }
+
+  return magic;
+}
+
 // ----------------------------------------------------------------------- //
 // ------------ MatrixProductOperator implementation --------------------- //
 // ----------------------------------------------------------------------- //

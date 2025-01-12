@@ -64,6 +64,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     }
 
     static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
+    static double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples);
 
     static double calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples);
 
@@ -384,6 +385,8 @@ class MatrixProductState : public QuantumState {
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const;
     virtual std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const override;
     virtual std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const override;
+
+    virtual std::vector<double> bipartite_magic_mutual_information(size_t num_samples) override;
 
 		std::complex<double> coefficients(uint32_t z) const;
 		Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const;

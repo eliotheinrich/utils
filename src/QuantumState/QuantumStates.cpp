@@ -198,10 +198,14 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_sa
 
 double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples) {
   std::vector<double> amplitude_samples;
-  for (const auto &[P, p] : samples) {
+  for (const auto &[_, p] : samples) {
     amplitude_samples.push_back(p);
   }
 
+  return QuantumState::stabilizer_renyi_entropy(index, amplitude_samples);
+}
+
+double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<double>& amplitude_samples) {
   if (index == 1) {
     double q = 0.0;
     for (size_t i = 0; i < amplitude_samples.size(); i++) {
@@ -209,7 +213,7 @@ double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<Pa
       q += std::log(p*p);
     }
 
-    q = q/samples.size();
+    q = q/amplitude_samples.size();
     return -q;
   } else {
     double q = 0.0;
@@ -228,7 +232,7 @@ double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<Pa
 // 2.) Qubits not in A, renumbered within the AB subsystem. That is, stateB = state.partial_trace(_qubits).partial_trace(_qubitsA)
 // 3.) " for qubits not B.
 static std::tuple<std::vector<uint32_t>, std::vector<uint32_t>, std::vector<uint32_t>> retrieve_traced_qubits(
-    const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits
+  const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits
 ) {
   std::vector<bool> mask(num_qubits, false);
 
@@ -361,9 +365,9 @@ double QuantumState::calculate_magic_mutual_information_from_samples(const MMIMo
 }
 
 static MMIMonteCarloSamples process_magic_samples(
-    std::shared_ptr<QuantumState> stateAB, 
-    const std::vector<uint32_t>& _qubitsA, const std::vector<uint32_t>& _qubitsB, 
-    const std::vector<PauliAmplitude>& samples1, const std::vector<PauliAmplitude>& samples2
+  std::shared_ptr<QuantumState> stateAB, 
+  const std::vector<uint32_t>& _qubitsA, const std::vector<uint32_t>& _qubitsB, 
+  const std::vector<PauliAmplitude>& samples1, const std::vector<PauliAmplitude>& samples2
 ) {
   auto stateA = stateAB->partial_trace(_qubitsB);
   auto stateB = stateAB->partial_trace(_qubitsA);
@@ -388,9 +392,9 @@ static MMIMonteCarloSamples process_magic_samples(
 }
 
 MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_montecarlo(
-    const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB,
-    size_t num_samples, size_t equilibration_timesteps, 
-    std::optional<PauliMutationFunc> mutation_opt
+  const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB,
+  size_t num_samples, size_t equilibration_timesteps, 
+  std::optional<PauliMutationFunc> mutation_opt
 ) {
   PauliMutationFunc mutation = single_qubit_random_mutation;
   if (mutation_opt) {
@@ -409,7 +413,9 @@ MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_montecarlo(
   return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
 }
 
-MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_exact(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_exact(
+  const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples
+) {
   auto [_qubits, _qubitsA, _qubitsB] = retrieve_traced_qubits(qubitsA, qubitsB, num_qubits);
 
   auto stateAB = partial_trace(_qubits);
@@ -422,7 +428,9 @@ MMIMonteCarloSamples QuantumState::magic_mutual_information_samples_exact(const 
   return process_magic_samples(stateAB, _qubitsA, _qubitsB, samples1, samples2);
 }
 
-std::vector<MMIMonteCarloSamples> QuantumState::bipartite_magic_mutual_information_samples_montecarlo(size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt) {
+std::vector<MMIMonteCarloSamples> QuantumState::bipartite_magic_mutual_information_samples_montecarlo(
+  size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt
+) {
   PauliMutationFunc mutation = single_qubit_random_mutation;
   if (mutation_opt) {
     mutation = mutation_opt.value();
