@@ -44,7 +44,7 @@ class QuantumStateSampler {
       sample_stabilizer_renyi_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_renyi_entropy", false);
       save_sre_samples = dataframe::utils::get<int>(params, "save_sre_samples", 0);
       sre_num_samples = dataframe::utils::get<int>(params, "sre_num_samples", 1000);
-      sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "montecarlo"));
+      sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "virtual"));
       sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps", 5*system_size);
 
       if (sample_stabilizer_renyi_entropy) {
@@ -118,6 +118,8 @@ class QuantumStateSampler {
       } else if (sre_method == sre_method_t::Virtual) {
         return state->sample_paulis(sre_num_samples);
       }
+
+      throw std::runtime_error("Did not implement an sre_method in QuantumStateSampler.");
     }
 
     void add_mmi_samples(dataframe::SampleMap &samples, const std::vector<MMIMonteCarloSamples>& data) const {
@@ -260,7 +262,7 @@ class QuantumStateSampler {
     size_t subsystem_offset_B;
     bool sample_bipartite_magic_mutual_information;
 
-    PauliMutationFunc mutation;
+    std::optional<PauliMutationFunc> mutation;
 
     uint32_t get_bin_idx(double s) const {
       if ((s < min_prob) || (s > max_prob)) {
