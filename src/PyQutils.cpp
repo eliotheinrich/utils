@@ -141,6 +141,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
     .def("probabilities", [](Statevector& self) { return self.probabilities(); })
+    .def("partial_trace", &Statevector::partial_trace)
     .def("inner", &Statevector::inner)
     .def("expectation", [](Statevector& self, const PauliString& p) { return self.expectation(p); })
     .def("expectation", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
@@ -175,6 +176,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("random_clifford", &DensityMatrix::random_clifford)
     .def("mzr", &DensityMatrix::mzr)
     .def("probabilities", &DensityMatrix::probabilities)
+    .def("partial_trace", &DensityMatrix::partial_trace)
     .def("expectation", [](DensityMatrix& self, const PauliString& p) { return self.expectation(p); })
     .def("expectation", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("sample_paulis_exact", &DensityMatrix::sample_paulis_exact)
@@ -354,18 +356,45 @@ NB_MODULE(qutils_bindings, m) {
       return qc;
     });
 
-  nanobind::class_<FreeFermionState>(m, "FreeFermionState")
-    .def("__init__", [](FreeFermionState *s, size_t system_size) {
-      new (s) FreeFermionState(system_size, true);
-    })
+  nanobind::class_<FreeFermionState, EntropyState>(m, "FreeFermionState")
+    .def("__init__", [](FreeFermionState *s, size_t system_size, bool particles_conserved) {
+      new (s) FreeFermionState(system_size, particles_conserved);
+    }, "system_size"_a, "particles_conserved"_a = true)
     .def("system_size", &FreeFermionState::system_size)
     .def("__str__", &FreeFermionState::to_string)
     .def("particles_at", &FreeFermionState::particles_at)
     .def("swap", &FreeFermionState::swap)
     .def("entropy", &FreeFermionState::entropy)
-    .def("evolve", [](FreeFermionState& self, const Eigen::MatrixXcd& U, double t) { self.evolve(U, t); }, "U"_a, "t"_a = 1.0)
+    .def("prepare_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H) { return self.prepare_hamiltonian(H); })
+    .def("prepare_hamiltonian_", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B) { return self.prepare_hamiltonian(A, B); })
+    .def("evolve_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H, double t) { self.evolve_hamiltonian(H, t); }, "H"_a, "t"_a = 1.0)
+    .def("evolve_hamiltonian_", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t) { self.evolve_hamiltonian(A, B, t); }, "A"_a, "B"_a, "t"_a = 1.0)
+    .def("evolve", [](FreeFermionState& self, const Eigen::MatrixXcd& U) { self.evolve(U); }, "U"_a)
+    .def("weak_measure_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H, double beta) { self.weak_measurement_hamiltonian(H, beta); }, "H"_a, "beta"_a = 1.0)
+    .def("weak_measure_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta) { self.weak_measurement_hamiltonian(A, B, beta); }, "A"_a, "B"_a, "beta"_a = 1.0)
+    .def("weak_measure", [](FreeFermionState& self, const Eigen::MatrixXcd& U) { self.weak_measurement(U); }, "H"_a)
+    .def("mzr", [](FreeFermionState& self, size_t i) {
+      thread_local std::random_device gen;
+      std::minstd_rand rng(gen());
+      double r = rng()/RAND_MAX;
+      return self.projective_measurement(i, rng()/RAND_MAX);
+    })
     .def("num_particles", &FreeFermionState::num_particles)
     .def("correlation_matrix", &FreeFermionState::correlation_matrix)
+    .def("correlation_samples", [](FreeFermionState& self) {
+      auto C = self.correlation_matrix();
+      std::vector<std::vector<double>> correlations(self.system_size(), std::vector<double>(self.system_size()));
+
+      for (size_t r = 0; r < self.system_size(); r++) {
+        // Average over space
+        for (size_t i = 0; i < self.system_size(); i++) {
+          double c = std::abs(C(i, (i + r) % self.system_size()));
+          correlations[r][i] = c*c;
+        }
+      }
+
+      return correlations;
+    })
     .def("occupation", [](FreeFermionState& self, size_t i) { return self.occupation(i); });
 
 

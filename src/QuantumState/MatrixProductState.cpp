@@ -903,7 +903,6 @@ class MatrixProductStateImpl {
         expectation.push_back(trace_tensor(L, R));
 
         qubits.push_back(i);
-        //std::cout << fmt::format("(S) <{}> on {} = {}\n", P.to_string_ops(), qubits, trace_tensor(L, R));
       }
 
       return expectation;
@@ -2023,6 +2022,17 @@ class MatrixProductOperatorImpl {
       return sign*tensor_to_scalar(contraction).real();
     }
 
+    // Check that MPO is bipartite, with the traced qubits on the left side 
+    bool left_bipartite() const {
+      for (size_t i = 0; i < num_qubits; i++) {
+        if (!block_trivial(i)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+
     std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
@@ -2030,10 +2040,6 @@ class MatrixProductOperatorImpl {
       ITensor L = left_block / std::sqrt(tensor_to_scalar(left_block * left_block).real());
 
       for (size_t k = 0; k < num_qubits; k++) {
-        if (!block_trivial(k)) {
-          throw std::runtime_error("Encountered nontrivial block in MatrixProductOperator.sample_pauli.");
-        }
-
         std::vector<double> probs(4);
         std::vector<ITensor> tensors(4);
 
@@ -2070,6 +2076,9 @@ class MatrixProductOperatorImpl {
     }
 
     std::vector<PauliAmplitude> sample_paulis(size_t num_samples, std::minstd_rand& rng) const {
+      if (!left_bipartite()) {
+        throw std::runtime_error("Cannot sample_paulis for a non-left-bipartite MPO.");
+      }
       std::vector<PauliAmplitude> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
@@ -2216,8 +2225,6 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
     }
   }
 
-  auto stateA = partial_trace_mpo(qubitsA);
-
   std::vector<uint32_t> qubitsB_ = qubitsB;
   for (size_t i = 0; i < qubitsB_.size(); i++) {
     qubitsB_[i] = num_qubits - qubitsB_[i] - 1;
@@ -2225,26 +2232,31 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
 
   std::sort(qubitsB_.begin(), qubitsB_.end());
 
-  MatrixProductState state_(*this);
-  state_.reverse();
-  auto stateB = state_.partial_trace_mpo(qubitsB_);
+  //MatrixProductState state_(*this);
+  //state_.reverse();
+  //auto stateB = state_.partial_trace_mpo(qubitsB_);
+  auto stateA = partial_trace_mpo(qubitsA);
+  auto stateB = partial_trace_mpo(qubitsB);
 
   auto samplesAB = sample_paulis(num_samples);
   auto samplesA = stateA.sample_paulis(num_samples);
   auto samplesB = stateB.sample_paulis(num_samples);
 
-  double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB);
-  double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA);
-  double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB);
+        //  std::tie(samplesA, MA) = compute_sre_montecarlo(index, pauli_samplesA, qubitsA.size());
+  double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA, stateA.num_qubits);
+  double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB, stateB.num_qubits);
+  double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB, num_qubits);
 
   return MAB - MA - MB;
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
+  return QuantumState::pauli_expectation_left_sweep(P, q1, q2);
   return impl->pauli_expectation_left_sweep(P, q1, q2);
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
+  return QuantumState::pauli_expectation_right_sweep(P, q1, q2);
   return impl->pauli_expectation_right_sweep(P, q1, q2);
 }
 
@@ -2398,10 +2410,7 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_
 
   std::vector<double> magic(N);
   for (size_t j = 0; j < N; j++) {
-    double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA[j]);
-    double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB[j]);
-    double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB[j]);
-    magic[j] = MA + MB - MAB;
+    magic[j] = QuantumState::calculate_magic_mutual_information_from_chi_samples({samplesA[j], samplesB[j], samplesAB[j]});
   }
 
   return magic;

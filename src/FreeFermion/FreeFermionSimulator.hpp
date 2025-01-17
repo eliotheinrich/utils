@@ -213,35 +213,43 @@ class FreeFermionState : public EntropyState {
       return hamiltonian;
     }
 
-    void evolve(const Eigen::MatrixXcd& H, double t=1.0) {
+    void evolve_hamiltonian(const Eigen::MatrixXcd& H, double t=1.0) {
       auto hamiltonian = prepare_hamiltonian(H);
       auto U = (std::complex<double>(0.0, -t)*hamiltonian).exp();
+      evolve(U);
+    }
+
+    void evolve(const Eigen::MatrixXcd& U) {
       amplitudes = U * amplitudes;
     }
 
-    void evolve(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
+    void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
       if (particles_conserved) {
         throw std::invalid_argument("Cannot call evolve(A, B) for particle-conserving simulation.");
       }
 
       auto hamiltonian = prepare_hamiltonian(A, B);
-      evolve(hamiltonian, t);
+      evolve_hamiltonian(hamiltonian, t);
     }
 
-    void weak_measurement(const Eigen::MatrixXcd& H, double beta=1.0) {
-      auto hamiltonian = prepare_hamiltonian(H);
-      auto U = (std::complex<double>(beta, 0.0)*hamiltonian).exp();
+    void weak_measurement(const Eigen::MatrixXcd& U) {
       amplitudes = U * amplitudes;
       orthogonalize();
     }
 
-    void weak_measurement(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) {
+    void weak_measurement_hamiltonian(const Eigen::MatrixXcd& H, double beta=1.0) {
+      auto hamiltonian = prepare_hamiltonian(H);
+      auto U = (std::complex<double>(beta, 0.0)*hamiltonian).exp();
+      weak_measurement(U);
+    }
+
+    void weak_measurement_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) {
       if (particles_conserved) {
         throw std::invalid_argument("Cannot call weak_measurement(A, B) for particle-conserving simulation.");
       }
 
       auto hamiltonian = prepare_hamiltonian(A, B);
-      weak_measurement(hamiltonian, beta);
+      weak_measurement_hamiltonian(hamiltonian, beta);
     }
 
     void forced_projective_measurement(size_t i, bool outcome) {
@@ -250,13 +258,11 @@ class FreeFermionState : public EntropyState {
       }
 
       size_t k = outcome ? i + L : i;
-      //std::cout << "from forced_projective_measurement, amplitudes = \n" << amplitudes << "\n";
 
       size_t i0;
       double d = 0.0;
       for (size_t j = 0; j < L; j++) {
         double dj = std::abs(amplitudes(k, j));
-        //std::cout << fmt::format("a({}, {}) = {}\n", k, j, dj);
         if (dj > d) {
           d = dj;
           i0 = j;
@@ -264,8 +270,6 @@ class FreeFermionState : public EntropyState {
       }
 
       if (!(d > 0)) {
-        //std::cout << amplitudes << "\n";
-        //std::cout << fmt::format("called forced_projective_measurement({}, {}), c = {}\n", i, outcome, occupation());
         throw std::runtime_error("Found no positive amplitudes to determine i0.");
       }
 
@@ -289,11 +293,9 @@ class FreeFermionState : public EntropyState {
 
     bool projective_measurement(size_t i, double r) {
       double c = occupation(i);
-      bool outcome = (r < c);
-      //std::cout << fmt::format("calling projective measurement: {}, {}, {}\n", r, c, outcome);
+      bool outcome = r < c;
 
       forced_projective_measurement(i, outcome);
-
       return outcome;
     }
 

@@ -63,10 +63,11 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       throw std::runtime_error("Attempted to call virtual sample_paulis on state which does not provide an implementation.");
     }
 
-    static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
-    static double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples);
+    static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples, size_t num_qubits);
+    static double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples, size_t num_qubits);
 
     static double calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples);
+    static double calculate_magic_mutual_information_from_chi_samples(const MonteCarloSamples& samples);
 
     virtual double magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
       throw std::runtime_error("Virtual magic_mutual_information called on a state which does not provide an implementation.");
@@ -472,11 +473,6 @@ class MatrixProductOperator : public QuantumState {
       throw std::runtime_error("evolve not implemented for MatrixProductOperator.");
     }
 };
-
-double calculate_magic_from_montecarlo_samples(
-  const std::vector<double>& tA2, const std::vector<double>& tB2, const std::vector<double> tAB2,
-  const std::vector<double>& tA4, const std::vector<double>& tB4, const std::vector<double> tAB4
-);
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
 
