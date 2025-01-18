@@ -196,16 +196,16 @@ std::vector<PauliAmplitude> QuantumState::sample_paulis_montecarlo(size_t num_sa
   return samples;
 }
 
-double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples, size_t num_qubits) {
+double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples) {
   std::vector<double> amplitude_samples;
   for (const auto &[_, p] : samples) {
     amplitude_samples.push_back(p);
   }
 
-  return QuantumState::stabilizer_renyi_entropy(index, amplitude_samples, num_qubits);
+  return stabilizer_renyi_entropy(index, amplitude_samples);
 }
 
-double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<double>& amplitude_samples, size_t num_qubits) {
+double QuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<double>& amplitude_samples) {
   if (index == 1) {
     double q = 0.0;
     for (size_t i = 0; i < amplitude_samples.size(); i++) {
@@ -354,9 +354,13 @@ double QuantumState::calculate_magic_mutual_information_from_chi_samples(const M
   }
   W = -std::log(W/num_samples);
 
-  double M2 = QuantumState::stabilizer_renyi_entropy(2, tAB, 1);
+  double q = 0.0;
+  for (size_t i = 0; i < num_samples; i++) {
+    q += std::pow(tAB[i], 2.0);
+  }
+  double M2 = -std::log(q/num_samples);
 
-  return I - W - M2;
+  return I - W + M2;
 }
 
 
@@ -406,8 +410,8 @@ static MMIMonteCarloSamples process_magic_mutual_information_samples(
       PauliString PA = P.substring(_qubitsA, true);
       PauliString PB = P.substring(_qubitsB, true);
 
-      tA.push_back(std::abs(stateAB->expectation(PA)));
-      tB.push_back(std::abs(stateAB->expectation(PB)));
+      tA.push_back(std::abs(stateA->expectation(PA)));
+      tB.push_back(std::abs(stateB->expectation(PB)));
       tAB.push_back(std::abs(t));
     }
 

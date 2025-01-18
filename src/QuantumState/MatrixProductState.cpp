@@ -2232,20 +2232,17 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
 
   std::sort(qubitsB_.begin(), qubitsB_.end());
 
-  //MatrixProductState state_(*this);
-  //state_.reverse();
-  //auto stateB = state_.partial_trace_mpo(qubitsB_);
   auto stateA = partial_trace_mpo(qubitsA);
   auto stateB = partial_trace_mpo(qubitsB);
 
   auto samplesAB = sample_paulis(num_samples);
+  // Why does this work for MPO states? Should only work if left-bipartite?
   auto samplesA = stateA.sample_paulis(num_samples);
   auto samplesB = stateB.sample_paulis(num_samples);
 
-        //  std::tie(samplesA, MA) = compute_sre_montecarlo(index, pauli_samplesA, qubitsA.size());
-  double MA = QuantumState::stabilizer_renyi_entropy(2, samplesA, stateA.num_qubits);
-  double MB = QuantumState::stabilizer_renyi_entropy(2, samplesB, stateB.num_qubits);
-  double MAB = QuantumState::stabilizer_renyi_entropy(2, samplesAB, num_qubits);
+  double MA = stateA.stabilizer_renyi_entropy(2, samplesA);
+  double MB = stateB.stabilizer_renyi_entropy(2, samplesB);
+  double MAB = stabilizer_renyi_entropy(2, samplesAB);
 
   return MAB - MA - MB;
 }

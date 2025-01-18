@@ -155,17 +155,17 @@ class QuantumStateSampler {
         return amplitudes;
       };
 
-      auto compute_sre_montecarlo = [&extract_amplitudes](const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples, size_t num_qubits) {
+      auto compute_sre_montecarlo = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
-          double M = QuantumState::stabilizer_renyi_entropy(index, amplitudes, num_qubits);
+          double M = state->stabilizer_renyi_entropy(index, amplitudes);
           stabilizer_renyi_entropy.push_back(M);
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
 
-      auto compute_sre_exhaustive = [&extract_amplitudes](const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples, size_t num_qubits) {
+      auto compute_sre_exhaustive = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
@@ -184,7 +184,7 @@ class QuantumStateSampler {
             M = std::log(M)/(1.0 - index);
           }
 
-          stabilizer_renyi_entropy.push_back(M - num_qubits*std::log(2));
+          stabilizer_renyi_entropy.push_back(M - state->num_qubits*std::log(2));
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
@@ -195,16 +195,16 @@ class QuantumStateSampler {
         std::vector<double> amplitudes;
         if (sre_method == sre_method_t::Exhaustive) {
           auto pauli_samples = state->sample_paulis_exhaustive();
-          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_exhaustive(renyi_indices, pauli_samples, state->num_qubits);
+          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_exhaustive(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::MonteCarlo) {
           auto pauli_samples = state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
-          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(renyi_indices, pauli_samples, state->num_qubits);
+          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::Exact) {
           auto pauli_samples = state->sample_paulis_exact(sre_num_samples, prob);
-          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(renyi_indices, pauli_samples, state->num_qubits);
+          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::Virtual) {
           auto pauli_samples= state->sample_paulis(sre_num_samples);
-          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(renyi_indices, pauli_samples, state->num_qubits);
+          std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         }
 
         if (save_sre_samples) {

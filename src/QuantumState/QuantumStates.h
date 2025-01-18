@@ -63,8 +63,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       throw std::runtime_error("Attempted to call virtual sample_paulis on state which does not provide an implementation.");
     }
 
-    static double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples, size_t num_qubits);
-    static double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples, size_t num_qubits);
+    double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
+    double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples);
 
     static double calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples);
     static double calculate_magic_mutual_information_from_chi_samples(const MonteCarloSamples& samples);

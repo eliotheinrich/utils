@@ -1,6 +1,5 @@
 #include <random>
 
-#define FMT_HEADER_ONLY
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
@@ -1014,8 +1013,6 @@ bool test_pauli_expectation_sweep() {
       double c = mps.expectation(P.substring(sites));
       expectation2.push_back(c);
 
-      //std::cout << fmt::format("(<{}> on {} = {}\n", P.to_string_ops(), sites, c);
-
       c = sv.expectation(P.substring(sites));
       expectation2_sv.push_back(c);
     }
@@ -1027,6 +1024,36 @@ bool test_pauli_expectation_sweep() {
     }
   }
 
+  return true;
+}
+
+bool test_magic_mutual_information_mpo() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 8;
+
+  std::shared_ptr<MatrixProductState> mps = std::make_shared<MatrixProductState>(nqb, 1u << 8);
+  std::shared_ptr<Statevector> sv = std::make_shared<Statevector>(nqb);
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(rng, *mps.get(), *sv.get());
+  }
+
+
+  dataframe::ExperimentParams params;
+  int sample_magic_mutual_information = 1;
+  int subsystem_size = 5;
+  params["system_size"] = static_cast<int>(nqb);
+  params["sre_method"] = "exhaustive";
+  params["sample_magic_mutual_information"] = sample_magic_mutual_information;
+  params["magic_mutual_information_subsystem_size"] = subsystem_size;
+  QuantumStateSampler sampler(params);
+
+  dataframe::SampleMap samples;
+  sampler.add_samples(samples, mps);
+  
+  for (const auto [key, vals] : samples) {
+    std::cout << fmt::format("{}: {}\n", key, vals);
+  }
+  
   return true;
 }
 
@@ -1088,7 +1115,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_pauli_expectation_sweep);
-  //ADD_TEST(test_animator);
+  ADD_TEST(test_animator);
+  ADD_TEST(test_magic_mutual_information_mpo);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

@@ -18,6 +18,7 @@
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/eigen/dense.h>
