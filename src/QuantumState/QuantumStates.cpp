@@ -358,9 +358,9 @@ double QuantumState::calculate_magic_mutual_information_from_chi_samples(const M
   for (size_t i = 0; i < num_samples; i++) {
     q += std::pow(tAB[i], 2.0);
   }
-  double M2 = -std::log(q/num_samples);
+  double M = -std::log(q / num_samples);
 
-  return I - W + M2;
+  return I - W + M;
 }
 
 

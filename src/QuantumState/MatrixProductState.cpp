@@ -2248,12 +2248,10 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
-  return QuantumState::pauli_expectation_left_sweep(P, q1, q2);
   return impl->pauli_expectation_left_sweep(P, q1, q2);
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
-  return QuantumState::pauli_expectation_right_sweep(P, q1, q2);
   return impl->pauli_expectation_right_sweep(P, q1, q2);
 }
 
