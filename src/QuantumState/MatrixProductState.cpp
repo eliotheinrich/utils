@@ -753,7 +753,7 @@ class MatrixProductStateImpl {
       contraction *= delta(right_index, right_index_);
       contraction *= delta(prime(right_index), prime(right_index_));
       contraction *= R;
-      return tensor_to_scalar(contraction);
+      return tensor_to_scalar(contraction).real();
     }
 
     double expectation(const PauliString& p) const {
@@ -2087,6 +2087,16 @@ class MatrixProductOperatorImpl {
 
       return samples;
     }
+
+    double purity() const {
+      ITensor L = left_block * prime(left_block, 2);
+      for (size_t i = 0; i < num_qubits; i++) {
+        ITensor A = apply_block_r(ops[i] * conj(prime(ops[i])), i);
+        L *= A * prime(conj(A), 2, "Internal");
+      }
+
+      return tensor_to_scalar(L).real();
+    }
     
   private:
     static std::string block_to_string(const MPOBlock& block) {
@@ -2191,25 +2201,20 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q, index);
 }
 
-// TODO revist; see if can sample MPS with PDF ~<P>^4 (default is <P>^2)
-double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
-  auto contiguous = [](const std::vector<uint32_t>& v) {
-    auto v_r = v;
-    std::sort(v_r.begin(), v_r.end());
+bool contiguous(const std::vector<uint32_t>& v) {
+  auto v_r = v;
+  std::sort(v_r.begin(), v_r.end());
 
-    for (size_t i = 0; i < v_r.size() - 1; i++) {
-      if (v_r[i+1] != v_r[i] + 1) {
-        return false;
-      }
+  for (size_t i = 0; i < v_r.size() - 1; i++) {
+    if (v_r[i+1] != v_r[i] + 1) {
+      return false;
     }
-
-    return true;
-  };
-
-  if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
-    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
   }
 
+  return true;
+}
+
+bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits) {
   std::vector<bool> mask(num_qubits, false);
   for (const uint32_t q : qubitsA) {
     mask[q] = true;
@@ -2221,30 +2226,41 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
 
   for (size_t i = 0; i < num_qubits; i++) {
     if (!mask[i]) {
-      throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} are not a bipartition of system with {} qubits. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB, num_qubits));
+      return false;
     }
   }
 
-  std::vector<uint32_t> qubitsB_ = qubitsB;
-  for (size_t i = 0; i < qubitsB_.size(); i++) {
-    qubitsB_[i] = num_qubits - qubitsB_[i] - 1;
+  return true;
+}
+
+// TODO revist; see if can sample MPS with PDF ~<P>^4 (default is <P>^2)
+double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+  if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
+    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
+  }
+  if (!is_bipartition(qubitsA, qubitsB, num_qubits)) {
+    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} are not a bipartition of system with {} qubits. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB, num_qubits));
   }
 
-  std::sort(qubitsB_.begin(), qubitsB_.end());
+  auto samples = sample_paulis(num_samples);
 
-  auto stateA = partial_trace_mpo(qubitsA);
-  auto stateB = partial_trace_mpo(qubitsB);
+  auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
+  auto stateA = partial_trace_mpo(_qubitsA);
+  auto stateB = partial_trace_mpo(_qubitsB);
 
-  auto samplesAB = sample_paulis(num_samples);
-  // Why does this work for MPO states? Should only work if left-bipartite?
-  auto samplesA = stateA.sample_paulis(num_samples);
-  auto samplesB = stateB.sample_paulis(num_samples);
+  std::vector<double> tA;
+  std::vector<double> tB;
+  std::vector<double> tAB;
+  for (const auto &[P, t] : samples) {
+    PauliString PA = P.substring(_qubitsA, true);
+    PauliString PB = P.substring(_qubitsB, true);
 
-  double MA = stateA.stabilizer_renyi_entropy(2, samplesA);
-  double MB = stateB.stabilizer_renyi_entropy(2, samplesB);
-  double MAB = stabilizer_renyi_entropy(2, samplesAB);
+    tA.push_back(std::abs(stateA.expectation(PA)));
+    tB.push_back(std::abs(stateB.expectation(PB)));
+    tAB.push_back(std::abs(t));
+  }
 
-  return MAB - MA - MB;
+  return calculate_magic_mutual_information_from_chi_samples({tA, tB, tAB});
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
@@ -2462,5 +2478,9 @@ std::shared_ptr<QuantumState> MatrixProductOperator::partial_trace(const std::ve
 
 MatrixProductOperator MatrixProductOperator::partial_trace_mpo(const std::vector<uint32_t>& qubits) const {
   return MatrixProductOperator(*this, qubits);
+}
+
+double MatrixProductOperator::purity() const {
+  return impl->purity();
 }
 

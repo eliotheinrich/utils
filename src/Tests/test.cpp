@@ -1057,6 +1057,32 @@ bool test_magic_mutual_information_mpo() {
   return true;
 }
 
+bool test_purity() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 6;
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(rng, mps);
+
+    uint32_t num_traced_qubits = rng() % nqb;
+    std::vector<uint32_t> traced_qubits(nqb);
+    std::iota(traced_qubits.begin(), traced_qubits.end(), 0);
+    std::shuffle(traced_qubits.begin(), traced_qubits.end(), rng);
+    traced_qubits = std::vector<uint32_t>(traced_qubits.begin(), traced_qubits.begin() + num_traced_qubits);
+
+    MatrixProductOperator mpo = mps.partial_trace_mpo({0, 1, 3, 5});
+    DensityMatrix dm(mpo);
+
+    double p1 = mpo.purity();
+    double p2 = dm.purity();
+
+    ASSERT(is_close(p1, p2), "Purity of DensityMatrix and MatrixProductOperator do not match.");
+  }
+
+  return true;
+}
+
 #ifdef BUILD_GLFW
 bool test_animator() {
   Animator a({0.0, 0.0, 0.0, 0.0});
@@ -1117,6 +1143,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli_expectation_sweep);
   ADD_TEST(test_animator);
   ADD_TEST(test_magic_mutual_information_mpo);
+  ADD_TEST(test_purity);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

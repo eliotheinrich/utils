@@ -63,8 +63,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       throw std::runtime_error("Attempted to call virtual sample_paulis on state which does not provide an implementation.");
     }
 
-    double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples);
-    double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples);
+    double stabilizer_renyi_entropy(size_t index, const std::vector<PauliAmplitude>& samples) const;
+    double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples) const;
 
     static double calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples);
     static double calculate_magic_mutual_information_from_chi_samples(const MonteCarloSamples& samples);
@@ -211,6 +211,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		}
 
 		virtual std::vector<double> probabilities() const=0;
+    virtual double purity() const=0;
 };
 
 class DensityMatrix;
@@ -272,6 +273,10 @@ class DensityMatrix : public QuantumState {
 		Eigen::VectorXd diagonal() const;
 
 		virtual std::vector<double> probabilities() const override;
+    virtual double purity() const override {
+      return (data*data).trace().real();
+
+    }
 		std::map<uint32_t, double> probabilities_map() const;
 };
 
@@ -336,16 +341,15 @@ class Statevector : public QuantumState {
     std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
 		double norm() const;
-
 		void normalize();
-
 		void fix_gauge();
 
 		double probabilities(uint32_t z, const std::vector<uint32_t>& qubits) const;
-
-		virtual std::vector<double> probabilities() const override;
-
 		std::map<uint32_t, double> probabilities_map() const;
+		virtual std::vector<double> probabilities() const override;
+    virtual double purity() const override { 
+      return 1.0; 
+    }
 
 		std::complex<double> inner(const Statevector& other) const;
 
@@ -412,6 +416,10 @@ class MatrixProductState : public QuantumState {
 			return statevector.probabilities();
 		}
 
+    virtual double purity() const override { 
+      return 1.0; 
+    }
+
 		virtual bool mzr(uint32_t q) override;
 
     bool measure(const PauliString& p, const std::vector<uint32_t>& qubits);
@@ -453,6 +461,8 @@ class MatrixProductOperator : public QuantumState {
       return DensityMatrix(coefficients()).probabilities();
     }
 
+    virtual double purity() const override;
+
     virtual std::string to_string() const override {
       return DensityMatrix(coefficients()).to_string();
     }
@@ -475,4 +485,8 @@ class MatrixProductOperator : public QuantumState {
 };
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
+
+std::tuple<std::vector<uint32_t>, std::vector<uint32_t>, std::vector<uint32_t>> get_traced_qubits(
+  const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits
+);
 

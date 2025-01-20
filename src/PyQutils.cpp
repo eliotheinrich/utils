@@ -1,5 +1,11 @@
 #include <PyQutils.hpp>
 
+
+using PyMutationFunc = std::function<PauliString(PauliString)>;
+inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
+  return [func](PauliString& p, std::minstd_rand&) { p = func(p); };
+}
+
 NB_MODULE(qutils_bindings, m) {
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
@@ -131,12 +137,16 @@ NB_MODULE(qutils_bindings, m) {
     .def("partial_trace", &QuantumState::partial_trace)
     .def("expectation", &QuantumState::expectation)
     .def("probabilities", &QuantumState::probabilities)
+    .def("purity", &QuantumState::purity)
     .def("mzr", &QuantumState::mzr)
     .def("entropy", &QuantumState::entropy, "qubits"_a, "index"_a)
     .def("sample_paulis", &QuantumState::sample_paulis)
     .def("sample_paulis_exact", &QuantumState::sample_paulis_exact)
     .def("sample_paulis_exhaustive", &QuantumState::sample_paulis_exhaustive)
-    .def("sample_paulis_montecarlo", &QuantumState::sample_paulis_montecarlo)
+    .def("sample_paulis_montecarlo", [](QuantumState& self, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PyMutationFunc py_mutation) {
+      auto mutation = convert_from_pyfunc(py_mutation);
+      return self.sample_paulis_montecarlo(num_samples, equilibration_timesteps, prob, mutation);
+    })
     .def("stabilizer_renyi_entropy", [](QuantumState& self, size_t index, const std::vector<PauliAmplitude>& samples) { return self.stabilizer_renyi_entropy(index, samples); })
     .def("stabilizer_renyi_entropy", [](QuantumState& self, size_t index, const std::vector<double>& samples) { return self.stabilizer_renyi_entropy(index, samples); })
     .def_static("calculate_magic_mutual_information_from_samples", &QuantumState::calculate_magic_mutual_information_from_samples)
@@ -178,7 +188,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("print_mps", &MatrixProductState::print_mps)
     .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
-    .def("expectation", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    //.def("expectation", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
@@ -220,6 +230,10 @@ NB_MODULE(qutils_bindings, m) {
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
       QuantumStateSampler sampler(params);
       return std::make_pair(sampler, params);
+    })
+    .def("set_sre_montecarlo_update", [](QuantumStateSampler& self, PyMutationFunc func) {
+      auto mutation = convert_from_pyfunc(func);
+      self.set_montecarlo_update(mutation);
     })
     .def("take_samples", [](QuantumStateSampler& sampler, const std::shared_ptr<QuantumState>& state) {
       dataframe::SampleMap samples;
