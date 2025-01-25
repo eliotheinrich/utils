@@ -341,7 +341,35 @@ bool test_statevector() {
   return true;
 }
 
-bool test_mps() {
+bool test_mps_vs_statevector() {
+  size_t num_qubits = 6;
+  size_t bond_dimension = 1u << num_qubits;
+
+  auto rng = seeded_rng();
+
+  Statevector s(num_qubits);
+  MatrixProductState mps(num_qubits, bond_dimension);
+
+  for (size_t i = 0; i < 100; i++) {
+    randomize_state_haar(rng, mps, s);
+    size_t q = rng() % (num_qubits - 2) + 1;
+    std::vector<uint32_t> qubits(q);
+    std::iota(qubits.begin(), qubits.end(), 0);
+
+    double s1 = s.entropy(qubits, 1);
+    double s2 = mps.entropy(qubits, 1);
+
+    Statevector s_(mps);
+    double inner = std::abs(s_.inner(s));
+
+    ASSERT(is_close(s1, s2), "Entanglement does not match!");
+    ASSERT(is_close(inner, 1.0), "States do not match!");
+  }
+
+  return true;
+}
+
+bool test_mps_expectation() {
   size_t num_qubits = 6;
   size_t bond_dimension = 1u << num_qubits;
 
@@ -350,6 +378,7 @@ bool test_mps() {
   Statevector s(num_qubits);
   MatrixProductState mps(num_qubits, bond_dimension);
   randomize_state_haar(rng, mps, s);
+  ASSERT(states_close(s, mps), "States are not close.");
 
   for (size_t i = 0; i < 100; i++) {
     size_t r = rng() % 2;
@@ -387,7 +416,9 @@ bool test_mps() {
     }
   }
 
-  return mps.debug_tests() && states_close(s, mps);
+  ASSERT(mps.debug_tests(), "MPS failed debug tests.");
+
+  return true;
 }
 
 bool test_clifford_states_unitary() {
@@ -1083,21 +1114,21 @@ bool test_purity() {
   return true;
 }
 
-#ifdef BUILD_GLFW
-bool test_animator() {
-  Animator a({0.0, 0.0, 0.0, 0.0});
-  Texture t(10, 10);
 
-  a.new_frame(t);
-  a.start(900, 900);
-
-  return true;
-}
-#else
-bool test_animator() {
-  return true;
-}
-#endif
+//bool test_mps_timing() {
+//  constexpr size_t nqb = 128;
+//  auto rng = seeded_rng();
+//
+//  MatrixProductState mps(nqb, 64);
+//
+//  for (size_t i = 0; i < 20*nqb; i++) {
+//    auto gate = haar_unitary(2);
+//    uint32_t q = rng() % (nqb - 1);
+//    mps.evolve(gate, {q, q+1});
+//  }
+//
+//  return true;
+//}
 
 #define ADD_TEST(x)                     \
 if (run_all) {                          \
@@ -1126,7 +1157,8 @@ int main(int argc, char *argv[]) {
   //assert(test_leaf_removal());
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_statevector);
-  ADD_TEST(test_mps);
+  ADD_TEST(test_mps_vs_statevector);
+  ADD_TEST(test_mps_expectation);
   ADD_TEST(test_partial_trace);
   ADD_TEST(test_clifford_states_unitary);
   ADD_TEST(test_pauli_reduce);
@@ -1141,9 +1173,9 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_pauli_expectation_sweep);
-  ADD_TEST(test_animator);
   ADD_TEST(test_magic_mutual_information_mpo);
   ADD_TEST(test_purity);
+  //ADD_TEST(test_mps_timing);
 
   for (const auto& [name, result] : tests) {
     std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");

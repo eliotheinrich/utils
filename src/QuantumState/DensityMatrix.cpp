@@ -98,7 +98,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 	// S_A = S_\bar{A} to compute entropy for the smaller of A and \bar{A}
 	if (qubits.size() > num_qubits/2) {
 		std::vector<uint32_t> qubits_complement;
-    std::vector<bool> mask(true, num_qubits);
+    std::vector<bool> mask(num_qubits, true);
     for (const auto q : qubits) {
       mask[q] = false;
     }
@@ -136,7 +136,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t inde
 		for (auto const &e : rho_a.data.eigenvalues()) {
 			double eigenvalue = std::abs(e);
 			if (eigenvalue > QS_ATOL) {
-				s -= std::abs(e)*std::log(std::abs(e));
+				s -= eigenvalue*std::log(eigenvalue);
 			}
 		}
 		return s;

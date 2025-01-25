@@ -453,7 +453,7 @@ class MatrixProductStateImpl {
       if (index == 1) {
         for (double v : sv) {
           if (v >= 1e-6) {
-            s -= v * std::log2(v);
+            s -= v * std::log(v);
           }
         }
       } else {
@@ -2178,29 +2178,6 @@ std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }
 
-double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
-	if (qubits.size() == 0) {
-		return 0.0;
-	}
-
-	std::vector<uint32_t> sorted_qubits(qubits);
-	std::sort(sorted_qubits.begin(), sorted_qubits.end());
-
-	if (sorted_qubits[0] != 0) {
-		throw std::invalid_argument("Invalid qubits passed to MatrixProductState.entropy; must be a continuous interval with left side qubit = 0.");
-	}
-
-	for (uint32_t i = 0; i < qubits.size() - 1; i++) {
-		if (std::abs(int(sorted_qubits[i]) - int(sorted_qubits[i+1])) > 1) {
-			throw std::invalid_argument("Invalid qubits passed to MatrixProductState.entropy; must be a continuous interval with left side qubit = 0.");
-		}
-	}
-
-	uint32_t q = sorted_qubits.back() + 1;
-
-	return impl->entropy(q, index);
-}
-
 bool contiguous(const std::vector<uint32_t>& v) {
   auto v_r = v;
   std::sort(v_r.begin(), v_r.end());
@@ -2231,6 +2208,28 @@ bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint
   }
 
   return true;
+}
+
+
+double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
+  if (index != 1) {
+    throw std::runtime_error("Cannot compute Renyi entanglement entropy with index other than 1 for MatrixProductState.");
+  }
+
+	if (qubits.size() == 0) {
+		return 0.0;
+	}
+
+	std::vector<uint32_t> sorted_qubits(qubits);
+	std::sort(sorted_qubits.begin(), sorted_qubits.end());
+
+	if ((sorted_qubits[0] != 0) || !contiguous(sorted_qubits)) {
+		throw std::runtime_error("Invalid qubits passed to MatrixProductState.entropy; must be a continuous interval with left side qubit = 0.");
+	}
+
+	uint32_t q = sorted_qubits.back() + 1;
+
+	return impl->entropy(q, index);
 }
 
 // TODO revist; see if can sample MPS with PDF ~<P>^4 (default is <P>^2)

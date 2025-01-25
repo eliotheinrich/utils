@@ -334,7 +334,7 @@ std::vector<double> QuantumState::bipartite_magic_mutual_information_exhaustive(
   return magic;
 }
 
-static double QuantumState::calculate_magic_mutual_information_from_chi_samples(const MonteCarloSamples& samples) {
+double QuantumState::calculate_magic_mutual_information_from_chi_samples(const MonteCarloSamples& samples) {
   const auto [tA, tB, tAB] = samples;
   if (tA.size() != tB.size() || tB.size() != tAB.size()) {
     throw std::invalid_argument(fmt::format("Invalid sample sizes passed to calculate_magic_from_chi_samples. tA.size() = {}, tB.size() = {}, tAB.size() = {}", tA.size(), tB.size(), tAB.size()));
@@ -364,7 +364,7 @@ static double QuantumState::calculate_magic_mutual_information_from_chi_samples(
 }
 
 
-static double QuantumState::calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples) {
+double QuantumState::calculate_magic_mutual_information_from_samples(const MMIMonteCarloSamples& samples) {
   const auto [t2, t4] = samples;
   const auto [tA2, tB2, tAB2] = t2;
   const auto [tA4, tB4, tAB4] = t4;
