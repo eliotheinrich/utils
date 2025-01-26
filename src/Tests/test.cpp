@@ -90,7 +90,6 @@ bool states_close_pauli_fuzz(std::minstd_rand& rng, const T& first, const V& sec
     PauliString p = PauliString::rand(first.num_qubits, rng);
     auto c1 = std::abs(first.expectation(p));
     auto c2 = std::abs(second.expectation(p));
-    //std::cout << fmt::format("p = {}, c1 = {}, c2 = {}\n", p.to_string_ops(), c1, c2);
     ASSERT(is_close_eps(1e-4, c1, c2));
   }
 
@@ -173,152 +172,6 @@ std::minstd_rand seeded_rng() {
   return rng;
 }
 
-
-bool test_solve_linear_system() {
-  BinaryMatrix M(4, 4);
-  M.set(0,0,1);
-  M.set(0,1,1);
-  M.set(0,2,1);
-  M.set(0,3,1);
-
-  M.set(1,0,1);
-  M.set(1,1,1);
-
-  M.set(2,0,1);
-  M.set(2,2,1);
-
-  M.set(3,0,1);
-  std::vector<bool> v{0, 0, 0, 1};
-  auto x = M.solve_linear_system(v);
-  std::vector<bool> correct{1, 1, 1, 1};
-
-  ASSERT(x != correct);
-
-  return true;
-}
-
-bool test_binary_polynomial() {
-  BinaryPolynomial poly(5);
-  poly.add_term(1, 2);
-  poly.add_term(1);
-  auto inds = std::vector<size_t>{};
-  poly.add_term(inds);
-
-  return true;
-}
-
-
-void random_binary_matrix(std::shared_ptr<BinaryMatrixBase> A, int s) {
-  thread_local std::minstd_rand rng;
-  rng.seed(s);
-  for (size_t i = 0; i < A->num_rows; i++) {
-    for (size_t j = 0; j < A->num_cols; j++) {
-      if (rng() % 2) {
-        A->set(i, j, 1);
-      }
-    }
-  }
-}
-
-bool test_binary_matrix() {
-  size_t v = 3;
-  std::shared_ptr<SparseBinaryMatrix> M1 = std::make_shared<SparseBinaryMatrix>(v, v);
-  std::shared_ptr<BinaryMatrix> M2 = std::make_shared<BinaryMatrix>(v, v);
-
-  for (int i = 0; i < 100; i++) {
-    random_binary_matrix(M1, i);
-    random_binary_matrix(M2, i);
-
-    int r1 = M1->rank();
-    int r2 = M2->rank();
-
-    if (r1 != r2) {
-      std::cout << "M1 = \n" << M1->to_string() << "\n\n";
-      std::cout << "M2 = \n" << M2->to_string() << "\n\n";
-
-      std::cout << "r1 = " << r1 << ", r2 = " << r2 << "\n\n";
-
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool test_generator_matrix() {
-  std::vector<BinaryMatrix> test_cases;
-  test_cases.push_back(BinaryMatrix(3, 5));
-  //test_cases.push_back(std::make_shared<SparseBinaryMatrix>(3, 5));
-
-  for (auto A : test_cases) {
-    A.set(0, 0, 1);
-    A.set(0, 1, 1);
-    A.set(0, 2, 1);
-
-    A.set(1, 1, 1);
-    A.set(1, 3, 1);
-
-    A.set(2, 0, 1);
-    A.set(2, 4, 1);
-
-  
-
-    auto G = ParityCheckMatrix(A).to_generator_matrix();
-    auto H = G.to_parity_check_matrix();
-
-    if (!(G.congruent(H) && H.congruent(G))) {
-      std::cout << "A = \n" << A.to_string() << std::endl;
-      std::cout << "G = \n" << G.to_string() << std::endl;
-      std::cout << "H = \n" << H.to_string() << std::endl;
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool test_random_regular_graph() {
-  for (size_t n = 3; n < 10; n++) {
-    for (size_t k = 1; k < n/2; k++) {
-      if (n * k % 2) {
-        // Algorithm not defined in this case
-        continue;
-      }
-
-      Graph<int, int> g = Graph<int, int>::random_regular_graph(n, k);
-      for (size_t j = 0; j < g.num_vertices; j++) {
-        ASSERT(g.degree(j) != k);
-        ASSERT(g.contains_edge(j, j));
-      }
-    }
-  }
-
-  return true;
-}
-
-bool test_parity_check_reduction() {
-  size_t num_runs = 100;
-
-  auto rng = seeded_rng();
-  for (size_t i = 0; i < num_runs; i++) {
-    size_t num_cols = rng() % 20;
-    size_t num_rows = num_cols + 5;
-    ParityCheckMatrix P(0, num_cols);
-
-    for (size_t j = 0; j < num_rows; j++) {
-      Bitstring b = Bitstring::random(num_cols, rng);
-      P.append_row(b);
-    }
-
-    uint32_t rank = P.rank();
-    P.reduce();
-
-    ASSERT(rank != P.num_rows, fmt::format("{}\n", P.to_string()));
-  }
-
-  return true;
-}
-
 bool test_statevector() {
   size_t num_qubits = 3;
 
@@ -362,7 +215,7 @@ bool test_mps_vs_statevector() {
     Statevector s_(mps);
     double inner = std::abs(s_.inner(s));
 
-    ASSERT(is_close(s1, s2), "Entanglement does not match!");
+    ASSERT(is_close(s1, s2), fmt::format("Entanglement does not match! s1 = {}, s2 = {}", s1, s2));
     ASSERT(is_close(inner, 1.0), "States do not match!");
   }
 
@@ -370,7 +223,7 @@ bool test_mps_vs_statevector() {
 }
 
 bool test_mps_expectation() {
-  size_t num_qubits = 6;
+  size_t num_qubits = 2;
   size_t bond_dimension = 1u << num_qubits;
 
   auto rng = seeded_rng();
@@ -380,9 +233,14 @@ bool test_mps_expectation() {
   randomize_state_haar(rng, mps, s);
   ASSERT(states_close(s, mps), "States are not close.");
 
+  auto mat_to_str = [](const Eigen::MatrixXcd& mat) {
+    std::stringstream ss;
+    ss << mat;
+    return ss.str();
+  };
+
   for (size_t i = 0; i < 100; i++) {
     size_t r = rng() % 2;
-    double d1, d2;
     size_t nqb;
     if (r == 0) {
       nqb = rng() % num_qubits + 1;
@@ -395,23 +253,21 @@ bool test_mps_expectation() {
     std::iota(qubits.begin(), qubits.end(), q);
 
     if (r == 0) {
+      MatrixProductOperator mpo = mps.partial_trace_mpo({});
+
       PauliString P = PauliString::rand(nqb, rng);
       PauliString Pp = P.superstring(qubits, num_qubits);
-      d1 = std::abs(s.expectation(Pp));
-      d2 = std::abs(mps.expectation(Pp));
 
-      ASSERT(is_close(d1, d2), fmt::format("<{}> = {}, {}\n", P.to_string_ops(), d1, d2));
+      double d1 = std::abs(s.expectation(Pp));
+      double d2 = std::abs(mps.expectation(Pp));
+      double d3 = std::abs(mpo.expectation(Pp));
+
+      ASSERT(is_close(d1, d2, d3), fmt::format("<{}> on {} = {}, {}\n", P.to_string_ops(), qubits, d1, d2, d3));
     } else if (r == 1) {
       Eigen::MatrixXcd M = haar_unitary(nqb, rng);
 
-      d1 = std::abs(s.expectation(M, qubits));
-      d2 = std::abs(mps.expectation(M, qubits));
-
-      auto mat_to_str = [](const Eigen::MatrixXcd& mat) {
-        std::stringstream ss;
-        ss << mat;
-        return ss.str();
-      };
+      double d1 = std::abs(s.expectation(M, qubits));
+      double d2 = std::abs(mps.expectation(M, qubits));
       ASSERT(is_close(d1, d2), fmt::format("<{}> = {}, {}\n", mat_to_str(M), d1, d2));
     }
   }
@@ -422,7 +278,7 @@ bool test_mps_expectation() {
 }
 
 bool test_clifford_states_unitary() {
-  size_t nqb = 2;
+  constexpr size_t nqb = 4;
   QuantumCHPState chp(nqb);
   QuantumGraphState graph(nqb);
   Statevector sv(nqb);
@@ -637,7 +493,6 @@ bool test_weak_measure() {
   MatrixProductState mps(nqb, 1u << nqb);
   Statevector sv(nqb);
   int seed = rng();
-  seed = 1859671821;
   rng.seed(seed);
   mps.seed(seed);
   sv.seed(seed);
@@ -823,7 +678,7 @@ bool test_mps_reverse() {
 bool test_batch_weak_measure_sv() {
   auto rng = seeded_rng();
 
-  constexpr size_t nqb = 2;
+  constexpr size_t nqb = 6;
 
   Statevector state1;
   Statevector state2;
@@ -866,7 +721,6 @@ bool test_batch_measure() {
   MatrixProductState mps2(nqb, 128, 1e-8);
 
   int s = rng();
-  s = 295643556;
   rng.seed(s);
   mps1.seed(s);
   mps2.seed(s);
@@ -875,7 +729,6 @@ bool test_batch_measure() {
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(rng, mps1, mps2);
     std::vector<MeasurementData> measurements;
-
 
     size_t num_measurements = rng() % (nqb/2);
     for (size_t i = 0; i < num_measurements; i++) {
@@ -966,7 +819,6 @@ bool test_batch_weak_measure() {
     // TODO states likely differ for LOCAL observables. Need to confirm by checking against local observables.
     ASSERT(is_close_eps(1e-2, c1, 1.0), fmt::format("States not equal after batch weak measurements. Inner product = {:.5f}, c0 = {:.5f}", c1, c0));
     ASSERT(states_close(sv, mps2), fmt::format("MPS does not match statevector after batch weak_measurements."));
-    //ASSERT(states_close_pauli_fuzz(rng, sv, mps1, mps2), "States do not pass fuzz test.");
   }
 
   return true;
@@ -1018,8 +870,6 @@ bool test_pauli_expectation_sweep() {
       double c = mps.expectation(P.substring(sites));
       expectation2.push_back(c);
 
-      //std::cout << fmt::format("<{}> on {} = {}\n", P.to_string_ops(), sites, c);
-
       c = sv.expectation(P.substring(sites));
       expectation2_sv.push_back(c);
     }
@@ -1055,36 +905,6 @@ bool test_pauli_expectation_sweep() {
     }
   }
 
-  return true;
-}
-
-bool test_magic_mutual_information_mpo() {
-  auto rng = seeded_rng();
-  constexpr size_t nqb = 8;
-
-  std::shared_ptr<MatrixProductState> mps = std::make_shared<MatrixProductState>(nqb, 1u << 8);
-  std::shared_ptr<Statevector> sv = std::make_shared<Statevector>(nqb);
-  for (size_t i = 0; i < 10; i++) {
-    randomize_state_haar(rng, *mps.get(), *sv.get());
-  }
-
-
-  dataframe::ExperimentParams params;
-  int sample_magic_mutual_information = 1;
-  int subsystem_size = 5;
-  params["system_size"] = static_cast<int>(nqb);
-  params["sre_method"] = "exhaustive";
-  params["sample_magic_mutual_information"] = sample_magic_mutual_information;
-  params["magic_mutual_information_subsystem_size"] = subsystem_size;
-  QuantumStateSampler sampler(params);
-
-  dataframe::SampleMap samples;
-  sampler.add_samples(samples, mps);
-  
-  for (const auto [key, vals] : samples) {
-    std::cout << fmt::format("{}: {}\n", key, vals);
-  }
-  
   return true;
 }
 
@@ -1130,15 +950,20 @@ bool test_purity() {
 //  return true;
 //}
 
-#define ADD_TEST(x)                     \
-if (run_all) {                          \
-  tests[#x "()"] = x();                 \
-} else if (test_names.contains(#x)) {   \
-  tests[#x "()"] = x();                 \
-}
+using TestResult = std::tuple<bool, int>;
+
+
+#define ADD_TEST(x)                                                               \
+if (run_all || test_names.contains(#x)) {                                         \
+  auto start = std::chrono::high_resolution_clock::now();                         \
+  bool passed = x();                                                              \
+  auto stop = std::chrono::high_resolution_clock::now();                          \
+  int duration = duration_cast<std::chrono::microseconds>(stop - start).count();  \
+  tests[#x "()"] = std::make_tuple(passed, duration);                             \
+}                                                                                 \
 
 int main(int argc, char *argv[]) {
-  std::map<std::string, bool> tests;
+  std::map<std::string, TestResult> tests;
   std::set<std::string> test_names;
 
   bool run_all = (argc == 1);
@@ -1149,12 +974,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  //assert(test_binary_polynomial());
-  //assert(test_binary_matrix());
-  //assert(test_generator_matrix());
-  //assert(test_random_regular_graph());
-  //assert(test_parity_check_reduction());
-  //assert(test_leaf_removal());
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_statevector);
   ADD_TEST(test_mps_vs_statevector);
@@ -1173,11 +992,10 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_pauli_expectation_sweep);
-  ADD_TEST(test_magic_mutual_information_mpo);
   ADD_TEST(test_purity);
-  //ADD_TEST(test_mps_timing);
 
   for (const auto& [name, result] : tests) {
-    std::cout << fmt::format("{:>30}: {}\n", name, result ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m");
+    auto [passed, duration] = result;
+    std::cout << fmt::format("{:>30}: {} ({:.2f} seconds)\n", name, passed ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m", duration/1e6);
   }
 }

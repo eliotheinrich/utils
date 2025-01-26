@@ -10,7 +10,7 @@
 
 using namespace itensor;
 
-static ITensor tensor_slice(const ITensor& tensor, const Index& index, int i) {
+ITensor tensor_slice(const ITensor& tensor, const Index& index, int i) {
 	if (!hasIndex(tensor, index)) {
 		throw std::invalid_argument("Provided tensor cannot be sliced by provided index.");
 	}
@@ -21,7 +21,7 @@ static ITensor tensor_slice(const ITensor& tensor, const Index& index, int i) {
 	return tensor*v;
 }
 
-static ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
+ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
   size_t num_qubits = idxs.size();
   if (num_qubits != std::log2(v.size())) {
     throw std::runtime_error(fmt::format("Mismatched number of qubits passed to vector_to_tensor. idxs.size() = {}, log2(v.size()) = {}\n", idxs.size(), std::log2(v.size())));
@@ -53,7 +53,7 @@ static ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Ind
   return C;
 }
 
-static ITensor matrix_to_tensor(
+ITensor matrix_to_tensor(
 		const Eigen::Matrix2cd& matrix, 
 		const Index i1, 
 		const Index i2
@@ -71,7 +71,7 @@ static ITensor matrix_to_tensor(
 	return tensor;
 }
 
-static ITensor matrix_to_tensor(
+ITensor matrix_to_tensor(
 		const Eigen::Matrix4cd& matrix, 
 		const Index i1, 
 		const Index i2,
@@ -95,7 +95,7 @@ static ITensor matrix_to_tensor(
 }
 
 // This function is quite gross; cleanup?
-static Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
+Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
 	if (!hasIndex(tensor, idx)) {
 		throw std::invalid_argument("Provided tensor does not have provided index.");
 	}
@@ -141,7 +141,7 @@ static Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
 	return new_idx;
 }
 
-static bool is_identity(const ITensor& I, double tol=1e-1) {
+bool is_identity(const ITensor& I, double tol=1e-1) {
   auto idxs = inds(I);
   if (idxs.size() != 2) {
     return false;
@@ -167,7 +167,7 @@ static bool is_identity(const ITensor& I, double tol=1e-1) {
   return true;
 }
 
-static Eigen::MatrixXcd tensor_to_matrix(const ITensor& A) {
+Eigen::MatrixXcd tensor_to_matrix(const ITensor& A) {
   auto idxs = inds(A);
   if (idxs.size() != 2) {
     throw std::runtime_error("Can only convert order = 2 tensor to matrix.");
@@ -188,12 +188,12 @@ static Eigen::MatrixXcd tensor_to_matrix(const ITensor& A) {
   return m;
 }
 
-static std::complex<double> tensor_to_scalar(const ITensor& A) {
+std::complex<double> tensor_to_scalar(const ITensor& A) {
   std::vector<uint32_t> assignments;
   return eltC(A, assignments);
 }
 
-static ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
+ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
     return matrix_to_tensor(quantumstate_utils::I::value, i1, i2);
   } else if (p == Pauli::X) {
@@ -208,7 +208,7 @@ static ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
 }
 
 
-static void swap_tags(Index& idx1, Index& idx2) {
+void swap_tags(Index& idx1, Index& idx2) {
   IndexSet idxs = {idx1, idx2};
   auto new_idxs = swapTags(idxs, idx1.tags(), idx2.tags());
   idx1 = new_idxs[0];
@@ -216,7 +216,7 @@ static void swap_tags(Index& idx1, Index& idx2) {
 }
 
 template <typename T1, typename T2, typename... Args>
-static void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
+void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
   auto tags1 = idx1.tags();
   auto tags2 = idx2.tags();
 
@@ -231,7 +231,7 @@ static void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... 
 }
 
 template <typename... Tensors>
-static void match_indices(const std::string& tags, ITensor& base, Tensors&... tensors) {
+void match_indices(const std::string& tags, ITensor& base, Tensors&... tensors) {
   Index idx = noPrime(findInds(base, tags)[0]);
   auto match = [&idx, &tags](ITensor& tensor) {
     Index idx_ = noPrime(findInds(tensor, tags)[0]);
@@ -241,9 +241,43 @@ static void match_indices(const std::string& tags, ITensor& base, Tensors&... te
   (match(tensors), ...);
 }
 
-static inline std::pair<uint32_t, uint32_t> get_qubit_range(const std::vector<uint32_t>& qubits) {
+inline std::pair<uint32_t, uint32_t> get_qubit_range(const std::vector<uint32_t>& qubits) {
   return std::make_pair(static_cast<int>(*std::ranges::min_element(qubits)), static_cast<int>(*std::ranges::max_element(qubits)));
 }
+
+bool contiguous(const std::vector<uint32_t>& v) {
+  auto v_r = v;
+  std::sort(v_r.begin(), v_r.end());
+
+  for (size_t i = 0; i < v_r.size() - 1; i++) {
+    if (v_r[i+1] != v_r[i] + 1) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits) {
+  std::vector<bool> mask(num_qubits, false);
+  for (const uint32_t q : qubitsA) {
+    mask[q] = true;
+  }
+
+  for (const uint32_t q : qubitsB) {
+    mask[q] = true;
+  }
+
+  for (size_t i = 0; i < num_qubits; i++) {
+    if (!mask[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+
 
 class MatrixProductStateImpl {
   friend class MatrixProductState;
@@ -649,17 +683,22 @@ class MatrixProductStateImpl {
     }
 
     ITensor right_boundary_tensor(size_t q) const {
+      Index right_idx;
       if (q == num_qubits - 1) {
-        Index right_idx = Index(1, fmt::format("m={},Internal", num_qubits));
+        right_idx = Index(1, fmt::format("m={},Internal", num_qubits));
         return delta(right_idx, prime(right_idx));
       } else {
+        right_idx = Index(dim(internal_idx(q, InternalDir::Right)), fmt::format("m={},Internal", q+1));
         // This is horrible and hacky but if singular_values is DiagReal, then ITensor throws an error contracting with itself
         // And if it is cast with toDense, it throws an error if it is already DenseReal.
+        ITensor tensor;
         try {
-          return singular_values[q] * conj(prime(singular_values[q], "Left"));
+          tensor = singular_values[q] * conj(prime(singular_values[q], "Left"));
         } catch (const std::exception& e) {
-          return toDense(singular_values[q]) * conj(prime(singular_values[q], "Left"));
+          tensor = toDense(singular_values[q]) * conj(prime(singular_values[q], "Left"));
         }
+        Index right_idx_ = noPrime(inds(tensor)[0]);
+        return replaceInds(tensor, {right_idx_, prime(right_idx_)}, {right_idx, prime(right_idx)});
       } 
     }
 
@@ -753,7 +792,7 @@ class MatrixProductStateImpl {
       contraction *= delta(right_index, right_index_);
       contraction *= delta(prime(right_index), prime(right_index_));
       contraction *= R;
-      return tensor_to_scalar(contraction).real();
+      return tensor_to_scalar(contraction);
     }
 
     double expectation(const PauliString& p) const {
@@ -790,16 +829,15 @@ class MatrixProductStateImpl {
       std::vector<uint32_t> sites_(sites.begin(), sites.end());
       std::sort(sites_.begin(), sites_.end());
 
-      for (size_t i = 1; i < n; i++) {
-        if (sites_[i] != sites_[i - 1] + 1) {
-          throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", sites_));
-        }
+      if (!contiguous(sites)) {
+        throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", sites_));
       }
 
       auto [q1, q2] = get_qubit_range(sites_);
       
       ITensor L = left_boundary_tensor(q1);
       ITensor R = right_boundary_tensor(q2);
+
       return partial_expectation(m, sites_, L, R);
     }
 
@@ -2071,7 +2109,7 @@ class MatrixProductOperatorImpl {
         L = apply_block_r(tensors[a], k);
       }
 
-      double t = std::sqrt(P*std::pow(2.0, num_qubits));
+      double t = std::sqrt(P * std::pow(2.0, num_qubits));
       return std::make_pair(PauliString(p), t);
     }
 
@@ -2177,39 +2215,6 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
 std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }
-
-bool contiguous(const std::vector<uint32_t>& v) {
-  auto v_r = v;
-  std::sort(v_r.begin(), v_r.end());
-
-  for (size_t i = 0; i < v_r.size() - 1; i++) {
-    if (v_r[i+1] != v_r[i] + 1) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits) {
-  std::vector<bool> mask(num_qubits, false);
-  for (const uint32_t q : qubitsA) {
-    mask[q] = true;
-  }
-
-  for (const uint32_t q : qubitsB) {
-    mask[q] = true;
-  }
-
-  for (size_t i = 0; i < num_qubits; i++) {
-    if (!mask[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 
 double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
   if (index != 1) {
