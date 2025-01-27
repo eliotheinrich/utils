@@ -223,7 +223,7 @@ bool test_mps_vs_statevector() {
 }
 
 bool test_mps_expectation() {
-  size_t num_qubits = 2;
+  size_t num_qubits = 6;
   size_t bond_dimension = 1u << num_qubits;
 
   auto rng = seeded_rng();
@@ -245,7 +245,7 @@ bool test_mps_expectation() {
     if (r == 0) {
       nqb = rng() % num_qubits + 1;
     } else if (r == 1) {
-      nqb = rng() % 2 + 1;
+      nqb = rng() % 4 + 1;
     }
 
     size_t q = rng() % (num_qubits - nqb + 1);
@@ -994,8 +994,13 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli_expectation_sweep);
   ADD_TEST(test_purity);
 
+
+  double total_duration = 0.0;
   for (const auto& [name, result] : tests) {
     auto [passed, duration] = result;
     std::cout << fmt::format("{:>30}: {} ({:.2f} seconds)\n", name, passed ? "\033[1;32m PASSED \033[0m" : "\033[1;31m FAILED\033[0m", duration/1e6);
+    total_duration += duration;
   }
+
+  std::cout << fmt::format("Total duration: {:.2f} seconds\n", total_duration/1e6);
 }

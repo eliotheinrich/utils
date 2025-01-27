@@ -53,45 +53,56 @@ ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& id
   return C;
 }
 
-ITensor matrix_to_tensor(
-		const Eigen::Matrix2cd& matrix, 
-		const Index i1, 
-		const Index i2
-	) {
+ITensor matrix_to_tensor(const Eigen::MatrixXcd& matrix, const std::vector<Index>& idxs1, const std::vector<Index>& idxs2) {
+  uint32_t num_idxs = idxs1.size() + idxs2.size();
+  uint32_t dim1 = 1u;
+  for (size_t i = 0; i < idxs1.size(); i++) {
+    dim1 *= dim(idxs1[i]);
+  }
 
-	ITensor tensor(i1, i2);
+  uint32_t dim2 = 1u;
+  for (size_t i = 0; i < idxs2.size(); i++) {
+    dim2 *= dim(idxs2[i]);
+  }
 
-	for (uint32_t i = 1; i <= 2; i++) {
-		for (uint32_t j = 1; j <= 2; j++) {
-			tensor.set(i1=i, i2=j, matrix(i-1,j-1));
-		}
-	}
+  if ((dim1 != matrix.rows()) || (dim2 != matrix.cols())) {
+    throw std::runtime_error("Dimension mismatch in matrix and provided indices!");
+  }
 
+  if (num_idxs > 31) {
+    throw std::runtime_error("Cannot calculate matrix_to_tensor for more than 31 indices.");
+  }
 
-	return tensor;
-}
+  std::vector<Index> idxs;
+  for (size_t i = 0; i < idxs1.size(); i++) {
+    idxs.push_back(idxs1[i]);
+  }
 
-ITensor matrix_to_tensor(
-		const Eigen::Matrix4cd& matrix, 
-		const Index i1, 
-		const Index i2,
-		const Index i3, 
-		const Index i4
-	) {
+  for (size_t i = 0; i < idxs2.size(); i++) {
+    idxs.push_back(idxs2[i]);
+  }
 
-	ITensor tensor(i1, i2, i3, i4);
+  ITensor tensor(idxs);
 
-	for (uint32_t i = 1; i <= 2; i++) {
-		for (uint32_t j = 1; j <= 2; j++) {
-			for (uint32_t k = 1; k <= 2; k++) {
-				for (uint32_t l = 1; l <= 2; l++) {
-					tensor.set(i1=i, i2=j, i3=k, i4=l, matrix(2*(j-1) + (i-1), 2*(l-1) + (k-1)));
-				}
-			}
-		}
-	}
+  uint32_t s1 = 1u << idxs1.size();
+  uint32_t s2 = 1u << idxs2.size();
 
-	return tensor;
+  for (uint32_t z1 = 0; z1 < s1; z1++) {
+    for (uint32_t z2 = 0; z2 < s2; z2++) {
+      std::vector<IndexVal> assignments(num_idxs);
+      for (uint32_t i = 0; i < idxs1.size(); i++) {
+        assignments[i] = (idxs1[i] = ((z1 >> i) & 1u) + 1u);
+      }
+
+      for (uint32_t i = 0; i < idxs2.size(); i++) {
+        assignments[i + idxs1.size()] = (idxs2[i] = ((z2 >> i) & 1u) + 1u);
+      }
+      
+      tensor.set(assignments, matrix(z1, z2));
+    }
+  }
+
+  return tensor;
 }
 
 // This function is quite gross; cleanup?
@@ -195,13 +206,13 @@ std::complex<double> tensor_to_scalar(const ITensor& A) {
 
 ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
-    return matrix_to_tensor(quantumstate_utils::I::value, i1, i2);
+    return matrix_to_tensor(quantumstate_utils::I::value, {i1}, {i2});
   } else if (p == Pauli::X) {
-    return matrix_to_tensor(quantumstate_utils::X::value, i1, i2);
+    return matrix_to_tensor(quantumstate_utils::X::value, {i1}, {i2});
   } else if (p == Pauli::Y) {
-    return matrix_to_tensor(quantumstate_utils::Y::value, i1, i2);
+    return matrix_to_tensor(quantumstate_utils::Y::value, {i1}, {i2});
   } else if (p == Pauli::Z) {
-    return matrix_to_tensor(quantumstate_utils::Z::value, i1, i2);
+    return matrix_to_tensor(quantumstate_utils::Z::value, {i1}, {i2});
   }
 
   throw std::runtime_error("Invalid Pauli index.");
@@ -231,18 +242,32 @@ void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
 }
 
 template <typename... Tensors>
-void match_indices(const std::string& tags, ITensor& base, Tensors&... tensors) {
-  Index idx = noPrime(findInds(base, tags)[0]);
+void match_indices(const std::string& tags, const ITensor& base, Tensors&... tensors) {
+  const auto idx = noPrime(findInds(base, tags)[0]);
   auto match = [&idx, &tags](ITensor& tensor) {
-    Index idx_ = noPrime(findInds(tensor, tags)[0]);
-    tensor.replaceInds({idx_}, {idx});
+    auto idx_ = findInds(tensor, tags);
+    for (const auto i : idx_) {
+      tensor.replaceInds({i}, {prime(idx, primeLevel(i))});
+    }
   };
 
-  (match(tensors), ...);
+  auto match_wrapper = [&match](ITensor& tensor) {
+    try {
+      match(tensor);
+    } catch (const ITError& error) {
+      tensor = toDense(tensor);
+      match(tensor);
+    }
+  };
+
+  (match_wrapper(tensors), ...);
 }
 
 inline std::pair<uint32_t, uint32_t> get_qubit_range(const std::vector<uint32_t>& qubits) {
-  return std::make_pair(static_cast<int>(*std::ranges::min_element(qubits)), static_cast<int>(*std::ranges::max_element(qubits)));
+  return std::make_pair(
+    static_cast<int>(*std::ranges::min_element(qubits)), 
+    static_cast<int>(*std::ranges::max_element(qubits))
+  );
 }
 
 bool contiguous(const std::vector<uint32_t>& v) {
@@ -694,7 +719,7 @@ class MatrixProductStateImpl {
         ITensor tensor;
         try {
           tensor = singular_values[q] * conj(prime(singular_values[q], "Left"));
-        } catch (const std::exception& e) {
+        } catch (const ITError& e) {
           tensor = toDense(singular_values[q]) * conj(prime(singular_values[q], "Left"));
         }
         Index right_idx_ = noPrime(inds(tensor)[0]);
@@ -754,43 +779,33 @@ class MatrixProductStateImpl {
       extend_right_environment_tensor(R, q1, q2, external_tensors);
     }
 
-    std::complex<double> partial_expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits, const ITensor& L, const ITensor& R) const {
+    std::complex<double> partial_expectation(const Eigen::MatrixXcd& m, uint32_t q1, uint32_t q2, const ITensor& L, const ITensor& R) const {
       ITensor contraction = L;
-      if (qubits.size() == 1) {
-        uint32_t q = qubits[0];
-        Index ext = external_idx(q);
-        auto A = A_l(q);
-        ITensor mtensor = matrix_to_tensor(m, prime(ext), ext);
 
-        match_indices(fmt::format("m={}", q), contraction, A);
-        contraction *= A;
-        contraction *= mtensor;
-        contraction *= prime(conj(A));
-      } else if (qubits.size() == 2) {
-        auto [q1, q2] = get_qubit_range(qubits);
-        Index ext1 = external_idx(q1);
-        Index ext2 = external_idx(q2);
-        ITensor mtensor = matrix_to_tensor(m, prime(ext1), prime(ext2), ext1, ext2);
+      std::vector<Index> idxs;
+      std::vector<Index> idxs_;
 
-        auto A1 = A_l(q1);
-        auto A2 = A_l(q2);
-
-        match_indices(fmt::format("m={}", q1), contraction, A1);
-        match_indices(fmt::format("m={}", q2), A2, A1);
-
-        contraction *= A1;
-        contraction *= A2;
-        contraction *= mtensor;
-        contraction *= prime(conj(A1));
-        contraction *= prime(conj(A2));
-      } else {
-        throw std::runtime_error(fmt::format("Provided qubits {} to partial_expectation, but {} qubit operations are not supported.", qubits, qubits.size()));
+      for (size_t i = q1; i <= q2; i++) {
+        Index idx = external_idx(i);
+        idxs.push_back(idx);
+        idxs_.push_back(prime(idx));
       }
 
-      Index right_index = noPrime(inds(contraction)[0]);
-      Index right_index_ = noPrime(inds(R)[0]);
-      contraction *= delta(right_index, right_index_);
-      contraction *= delta(prime(right_index), prime(right_index_));
+      ITensor mtensor = matrix_to_tensor(m, idxs_, idxs);
+
+      bool first = true;
+      for (size_t i = q1; i <= q2; i++) {
+        ITensor A = A_l(i);
+        match_indices(fmt::format("m={}", i), A, contraction);
+        contraction *= A;
+        if (first) {
+          contraction *= mtensor;
+          first = false;
+        }
+        contraction *= prime(conj(A));
+      }
+
+      match_indices(fmt::format("m={}", q2+1), R, contraction);
       contraction *= R;
       return tensor_to_scalar(contraction);
     }
@@ -800,19 +815,61 @@ class MatrixProductStateImpl {
         throw std::runtime_error(fmt::format("Provided PauliString has {} qubits but MatrixProductState has {} qubits.", p.num_qubits, num_qubits));
       }
 
-      std::vector<ITensor> paulis(num_qubits);
+      bool found_nontrivial_pauli = false;
+
+      uint32_t q1;
       for (size_t i = 0; i < num_qubits; i++) {
-        Index idx = external_indices[i];
-        paulis[i] = pauli_matrix(p.to_pauli(i), idx, prime(idx));
+        if (p.to_pauli(i) != Pauli::I) {
+          q1 = i;
+          found_nontrivial_pauli = true;
+          break;
+        }
       }
 
-      ITensor C = tensors[0];
-      ITensor contraction = C*paulis[0]*prime(conj(C));
-
-      for (size_t i = 1; i < num_qubits; i++) {
-        C = tensors[i]*singular_values[i-1];
-        contraction *= C*paulis[i]*prime(conj(C));
+      uint32_t q2;
+      for (size_t i = 0; i < num_qubits; i++) {
+        size_t j = num_qubits - i - 1;
+        if (p.to_pauli(j) != Pauli::I) {
+          q2 = j;
+          found_nontrivial_pauli = true;
+          break;
+        }
       }
+
+      if (!found_nontrivial_pauli) {
+        return 1.0;
+      }
+
+
+      ITensor contraction = left_boundary_tensor(q1);
+
+      for (size_t i = q1; i <= q2; i++) {
+        ITensor A = A_l(i);
+        Index idx = external_idx(i);
+        ITensor pauli = pauli_matrix(p.to_pauli(i), idx, prime(idx));
+        match_indices(fmt::format("m={}", i), contraction, A);
+        contraction *= A;
+        contraction *= pauli;
+        contraction *= prime(conj(A));
+      }
+
+      ITensor R = right_boundary_tensor(q2);
+      match_indices(fmt::format("m={}", q2+1), R, contraction);
+      contraction *= R;
+
+      //std::vector<ITensor> paulis(num_qubits);
+      //for (size_t i = 0; i < num_qubits; i++) {
+      //  Index idx = external_indices[i];
+      //  paulis[i] = pauli_matrix(p.to_pauli(i), idx, prime(idx));
+      //}
+
+      //ITensor C = tensors[0];
+      //ITensor contraction = C*paulis[0]*prime(conj(C));
+
+      //for (size_t i = 1; i < num_qubits; i++) {
+      //  C = tensors[i]*singular_values[i-1];
+      //  contraction *= C*paulis[i]*prime(conj(C));
+      //}
 
       double sign = p.get_r() ? -1.0 : 1.0;
       return sign*tensor_to_scalar(contraction).real();
@@ -838,7 +895,7 @@ class MatrixProductStateImpl {
       ITensor L = left_boundary_tensor(q1);
       ITensor R = right_boundary_tensor(q2);
 
-      return partial_expectation(m, sites_, L, R);
+      return partial_expectation(m, q1, q2, L, R);
     }
 
     std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
@@ -1056,7 +1113,7 @@ class MatrixProductStateImpl {
     void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
       auto i = external_indices[qubit];
       auto ip = prime(i);
-      ITensor tensor = matrix_to_tensor(gate, ip, i);
+      ITensor tensor = matrix_to_tensor(gate, {ip}, {i});
       tensors[qubit] = noPrime(tensors[qubit]*tensor);
     }
 
@@ -1101,8 +1158,8 @@ class MatrixProductStateImpl {
       auto i1 = external_indices[qubits[0]];
       auto i2 = external_indices[qubits[1]];
       ITensor gate_tensor = matrix_to_tensor(gate, 
-        prime(i1), prime(i2), 
-        i1, i2
+        {prime(i1), prime(i2)}, 
+        {i1, i2}
       );
 
       ITensor theta = tensors[q1];
@@ -1286,7 +1343,9 @@ class MatrixProductStateImpl {
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
       Eigen::MatrixXcd proj1 = (id - pm)/2.0;
 
-      double prob_zero = std::abs(partial_expectation(proj0, qubits, L, R));
+      auto [q1, q2] = get_qubit_range(qubits);
+
+      double prob_zero = std::abs(partial_expectation(proj0, q1, q2, L, R));
 
       bool outcome = r > prob_zero;
 
@@ -1432,7 +1491,9 @@ class MatrixProductStateImpl {
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      double prob_zero = std::abs(partial_expectation(proj0, qubits, L, R));
+      auto [q1, q2] = get_qubit_range(qubits);
+
+      double prob_zero = std::abs(partial_expectation(proj0, q1, q2, L, R));
 
       bool outcome = r >= prob_zero;
 
@@ -1444,7 +1505,7 @@ class MatrixProductStateImpl {
       Eigen::MatrixXcd proj = (beta*t).exp();
 
       Eigen::MatrixXcd P = proj.pow(2);
-      double norm = std::sqrt(std::abs(partial_expectation(P, qubits, L, R)));
+      double norm = std::sqrt(std::abs(partial_expectation(P, q1, q2, L, R)));
 
       proj = proj / norm;
 
