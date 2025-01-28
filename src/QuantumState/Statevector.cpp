@@ -86,7 +86,7 @@ double Statevector::expectation(const PauliString& p) const {
     }
   }
 
-  return inner(s).real();
+  return p.sign() * inner(s).real();
 }
 
 std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {

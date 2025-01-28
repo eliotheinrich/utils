@@ -5,6 +5,7 @@
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <ranges>
 
 #include "QuantumCircuit.h"
 
@@ -87,7 +88,7 @@ class PauliString {
       }
     }
 
-    PauliString(const std::vector<Pauli>& paulis) : PauliString(paulis.size()) { 
+    PauliString(const std::vector<Pauli>& paulis, bool phase=false) : PauliString(paulis.size()) { 
       for (size_t i = 0; i < paulis.size(); i++) {
         if (paulis[i] == Pauli::I) {
           set_x(i, false);
@@ -103,6 +104,8 @@ class PauliString {
           set_z(i, true);
         }
       }
+
+      set_r(phase);
     }
 
     static PauliString rand(uint32_t num_qubits, std::minstd_rand& rng) {
@@ -113,6 +116,10 @@ class PauliString {
       }
 
       p.set_r(rng() % 2);
+
+      if (num_qubits == 0) {
+        return p;
+      }
 
       // Need to check that at least one bit is nonzero so that p is not the identity
       for (uint32_t j = 0; j < num_qubits; j++) {
@@ -184,7 +191,7 @@ class PauliString {
         paulis[q] = to_pauli(i);
       }
 
-      return PauliString(paulis);
+      return PauliString(paulis, get_r());
     }
 
     static int g(uint8_t xz1, uint8_t xz2) {
@@ -363,6 +370,26 @@ class PauliString {
         return Pauli::X;
       } else {
         return Pauli::I;
+      }
+    }
+
+    std::vector<Pauli> to_pauli() const {
+      std::vector<Pauli> paulis(num_qubits);
+      std::generate(paulis.begin(), paulis.end(), [n = 0, this]() mutable { return to_pauli(n++); });
+      return paulis;
+    }
+
+    std::optional<std::pair<uint32_t, uint32_t>> get_qubit_support_range() const {
+      std::vector<Pauli> paulis = to_pauli();
+      auto first = std::ranges::find_if(paulis, [&](Pauli pi) { return pi != Pauli::I; });
+      auto last = std::ranges::find_if(paulis | std::views::reverse, [&](Pauli pi) { return pi != Pauli::I; });
+
+      if (first == paulis.end() && last == paulis.rend()) {
+        return std::nullopt;
+      } else {
+        uint32_t q1 = std::distance(paulis.begin(), first);
+        uint32_t q2 = num_qubits - 1 - std::distance(paulis.rbegin(), last);
+        return std::make_pair(q1, q2);
       }
     }
 
@@ -723,6 +750,10 @@ class PauliString {
 
     inline bool get_r() const { 
       return phase; 
+    }
+
+    inline double sign() const {
+      return phase ? -1.0 : 1.0;
     }
 
     inline void set(size_t i, bool v) {

@@ -258,17 +258,18 @@ bool test_mps_expectation() {
       PauliString P = PauliString::rand(nqb, rng);
       PauliString Pp = P.superstring(qubits, num_qubits);
 
-      double d1 = std::abs(s.expectation(Pp));
-      double d2 = std::abs(mps.expectation(Pp));
-      double d3 = std::abs(mpo.expectation(Pp));
+      double d1 = s.expectation(Pp);
+      double d2 = mps.expectation(Pp);
+      double d3 = mpo.expectation(Pp);
 
-      ASSERT(is_close(d1, d2, d3), fmt::format("<{}> on {} = {}, {}\n", P.to_string_ops(), qubits, d1, d2, d3));
+      ASSERT(is_close(d1, d2, d3), fmt::format("<{}> on {} = {}, {}, {}\n", P.to_string_ops(), qubits, d1, d2, d3));
     } else if (r == 1) {
       Eigen::MatrixXcd M = haar_unitary(nqb, rng);
 
-      double d1 = std::abs(s.expectation(M, qubits));
-      double d2 = std::abs(mps.expectation(M, qubits));
-      ASSERT(is_close(d1, d2), fmt::format("<{}> = {}, {}\n", mat_to_str(M), d1, d2));
+      std::complex<double> d1 = s.expectation(M, qubits);
+      std::complex<double> d2 = mps.expectation(M, qubits);
+      //std::cout << fmt::format("{:.3f} + {:.3f}i, {:.3f} + {:.3f}i\n", d1.real(), d1.imag(), d2.real(), d2.imag());
+      ASSERT(is_close(d1, d2), fmt::format("<{}> = {:.3f} + {:.3f}i, {:.3f} + {:.3f}i\n", mat_to_str(M), d1.real(), d1.imag(), d2.real(), d2.imag()));
     }
   }
 
@@ -443,7 +444,7 @@ bool test_partial_trace() {
 }
 
 bool test_mps_measure() {
-  size_t nqb = 6;
+  constexpr size_t nqb = 6;
 
   auto rng = seeded_rng();
 
@@ -459,19 +460,11 @@ bool test_mps_measure() {
     ASSERT(states_close(sv, mps), fmt::format("States do not agree before measurement.\n"));
 
     for (size_t j = 0; j < 5; j++) {
-      PauliString P;
-      std::vector<uint32_t> qubits;
-
-      int r = rng() % 2;
-      if (r == 0) {
-        P = PauliString::rand(2, rng);
-        uint32_t q = rng() % (nqb - 1);
-        qubits = {q, q + 1};
-      } else {
-        P = PauliString::rand(1, rng);
-        uint32_t q = rng() % nqb;
-        qubits = {q};
-      }
+      uint32_t r = rng() % 2 + 1;
+      PauliString P = PauliString::rand(r, rng);
+      uint32_t q = rng() % (nqb + 1 - r);
+      std::vector<uint32_t> qubits(r);
+      std::iota(qubits.begin(), qubits.end(), q);
 
       bool b1 = mps.measure(P, qubits);
       bool b2 = sv.measure(P, qubits);
@@ -486,7 +479,7 @@ bool test_mps_measure() {
 }
 
 bool test_weak_measure() {
-  constexpr size_t nqb = 8;
+  constexpr size_t nqb = 6;
 
   auto rng = seeded_rng();
 
@@ -935,6 +928,33 @@ bool test_purity() {
 }
 
 
+bool test_projector() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 6;
+
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  for (size_t i = 0; i < 100; i++) {
+    randomize_state_haar(rng, mps);
+    size_t n = rng() % 3 + 1;
+    PauliString P = PauliString::rand(n, rng);
+    uint32_t q = rng() % (nqb - n + 1);
+    std::vector<uint32_t> qubits(n);
+    std::iota(qubits.begin(), qubits.end(), q);
+    Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(1u << n, 1u << n);
+    Eigen::MatrixXcd proj = (id + P.to_matrix())/2.0;
+
+    PauliString Pp = P.superstring(qubits, nqb);
+    double d1 = std::abs(mps.expectation(proj, qubits));
+    double d2 = (1.0 + mps.expectation(Pp))/2.0;
+
+    ASSERT(is_close(d1, d2));
+  }
+
+  return true;
+}
+
+
 //bool test_mps_timing() {
 //  constexpr size_t nqb = 128;
 //  auto rng = seeded_rng();
@@ -993,6 +1013,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_pauli_expectation_sweep);
   ADD_TEST(test_purity);
+  ADD_TEST(test_projector);
 
 
   double total_duration = 0.0;
