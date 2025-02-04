@@ -136,7 +136,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("cz", &QuantumState::cz)
     .def("swap", &QuantumState::swap)
     .def("random_clifford", &QuantumState::random_clifford)
-    .def("partial_trace", &QuantumState::partial_trace)
+    .def("partial_trace", [](QuantumState& self, const Qubits& qubits) { return self.partial_trace(qubits); })
     .def("expectation", &QuantumState::expectation)
     .def("probabilities", &QuantumState::probabilities)
     .def("purity", &QuantumState::purity)
@@ -147,12 +147,13 @@ NB_MODULE(qutils_bindings, m) {
     .def("sample_paulis_exhaustive", &QuantumState::sample_paulis_exhaustive)
     .def("sample_paulis_montecarlo", [](QuantumState& self, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PyMutationFunc py_mutation) {
       auto mutation = convert_from_pyfunc(py_mutation);
-      return self.sample_paulis_montecarlo(num_samples, equilibration_timesteps, prob, mutation);
+      return self.sample_paulis_montecarlo({}, num_samples, equilibration_timesteps, prob, mutation);
     })
-    .def("stabilizer_renyi_entropy", [](QuantumState& self, size_t index, const std::vector<PauliAmplitude>& samples) { return self.stabilizer_renyi_entropy(index, samples); })
-    .def("stabilizer_renyi_entropy", [](QuantumState& self, size_t index, const std::vector<double>& samples) { return self.stabilizer_renyi_entropy(index, samples); })
-    .def_static("calculate_magic_mutual_information_from_samples", &QuantumState::calculate_magic_mutual_information_from_samples)
-    .def_static("calculate_magic_mutual_information_from_chi_samples", &QuantumState::calculate_magic_mutual_information_from_chi_samples)
+    .def("stabilizer_renyi_entropy", &QuantumState::stabilizer_renyi_entropy)
+    .def_static("calculate_magic_mutual_information_from_samples", [](QuantumState& self, const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
+      return self.calculate_magic_mutual_information_from_samples(samples2, samples4);
+    })
+    .def_static("calculate_magic_mutual_information_from_samples2", &QuantumState::calculate_magic_mutual_information_from_samples2)
     .def("magic_mutual_information_samples_exact", &QuantumState::magic_mutual_information_samples_exact)
     .def("magic_mutual_information_samples", &QuantumState::magic_mutual_information_samples_montecarlo)
     .def("magic_mutual_information_exhaustive", &QuantumState::magic_mutual_information_exhaustive)

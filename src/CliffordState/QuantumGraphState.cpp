@@ -91,14 +91,14 @@ const uint32_t QuantumGraphState::CZ_LOOKUP[24][24][2][3] =
 
 
 #include <iostream>
-QuantumGraphState::QuantumGraphState(uint32_t num_qubits, int seed) : CliffordState(num_qubits, seed), num_qubits(num_qubits) {
+QuantumGraphState::QuantumGraphState(uint32_t num_qubits) : CliffordState(num_qubits), num_qubits(num_qubits) {
   graph = Graph<>();
   for (uint32_t i = 0; i < num_qubits; i++) {
     graph.add_vertex(HGATE);
   }
 }
 
-QuantumGraphState::QuantumGraphState(Graph<> &graph, int seed) : CliffordState(graph.num_vertices, seed) {
+QuantumGraphState::QuantumGraphState(Graph<> &graph) : CliffordState(graph.num_vertices) {
   this->graph = Graph<>(graph);
 }
 

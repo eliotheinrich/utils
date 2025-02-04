@@ -19,8 +19,8 @@ class QuantumCHPState : public CliffordState {
 
     QuantumCHPState()=default;
 
-    QuantumCHPState(uint32_t num_qubits, int seed=-1)
-      : CliffordState(num_qubits, seed), tableau(Tableau(num_qubits)) {
+    QuantumCHPState(uint32_t num_qubits)
+      : CliffordState(num_qubits), tableau(Tableau(num_qubits)) {
     }
 
     QuantumCHPState(const std::string &s) : CliffordState(get_num_qubits(s)) {

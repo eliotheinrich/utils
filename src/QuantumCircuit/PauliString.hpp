@@ -21,8 +21,71 @@ static void remove_even_indices(std::vector<T> &v) {
 }
 
 enum Pauli {
-  I, X, Y, Z
+  I, X, Z, Y
 };
+
+constexpr static Pauli operator*(Pauli p1, Pauli p2) {
+  return static_cast<Pauli>(static_cast<int>(p1) ^ static_cast<int>(p2));
+}
+
+constexpr static void operator*=(Pauli& p1, Pauli& p2) {
+  p1 = p1 * p2;
+}
+
+static char pauli_to_char(Pauli p) {
+  if (p == Pauli::I) {
+    return 'I';
+  } else if (p == Pauli::X) {
+    return 'X';
+  } else if (p == Pauli::Y) {
+    return 'Y';
+  } else if (p == Pauli::Z) {
+    return 'Z';
+  }
+
+  throw std::runtime_error("Unreachable.");
+}
+
+using QubitInterval = std::optional<std::pair<uint32_t, uint32_t>>;
+using Qubits = std::vector<uint32_t>;
+using QubitSupport = std::variant<Qubits, QubitInterval>;
+
+static QubitInterval to_interval(const QubitSupport& support) {
+  return std::visit(quantumcircuit_utils::overloaded {
+    [](const QubitInterval& interval) -> QubitInterval {
+      return interval;
+    },
+    [](const Qubits& qubits) -> QubitInterval {
+      if (qubits.size() == 0) {
+        return std::nullopt;
+      }
+      auto [min_it, max_it] = std::minmax_element(qubits.begin(), qubits.end());
+      return std::make_pair(*min_it, *max_it);
+    }
+  }, support);
+}
+
+static Qubits to_qubits(const QubitSupport& support) {
+  return std::visit(quantumcircuit_utils::overloaded {
+    [](const QubitInterval& interval) -> Qubits {
+      if (interval) {
+        auto interval_ = interval.value();
+        uint32_t q1 = std::min(interval_.first, interval_.second);
+        uint32_t q2 = std::max(interval_.first, interval_.second);
+        size_t num_qubits = q2 - q1;
+        std::vector<uint32_t> qubits(num_qubits);
+        std::iota(qubits.begin(), qubits.end(), q1);
+        return qubits;
+      } else {
+        return {};
+      }
+    },
+    [](const Qubits& qubits) -> Qubits {
+      return qubits;
+    }
+  }, support);
+}
+
 
 class PauliString {
   public:
@@ -90,19 +153,7 @@ class PauliString {
 
     PauliString(const std::vector<Pauli>& paulis, bool phase=false) : PauliString(paulis.size()) { 
       for (size_t i = 0; i < paulis.size(); i++) {
-        if (paulis[i] == Pauli::I) {
-          set_x(i, false);
-          set_z(i, false);
-        } else if (paulis[i] == Pauli::X) {
-          set_x(i, true);
-          set_z(i, false);
-        } else if (paulis[i] == Pauli::Y) {
-          set_x(i, true);
-          set_z(i, true);
-        } else if (paulis[i] == Pauli::Z) {
-          set_x(i, false);
-          set_z(i, true);
-        }
+        set_op(i, paulis[i]);
       }
 
       set_r(phase);
@@ -178,6 +229,10 @@ class PauliString {
 
       p.set_r(get_r());
       return p;
+    }
+
+    PauliString substring(const QubitSupport& support, bool remove_qubits=false) const {
+      return substring(to_qubits(support), remove_qubits);
     }
 
     PauliString superstring(const std::vector<uint32_t>& sites, size_t new_num_qubits) const {
@@ -388,9 +443,20 @@ class PauliString {
         return std::nullopt;
       } else {
         uint32_t q1 = std::distance(paulis.begin(), first);
-        uint32_t q2 = num_qubits - 1 - std::distance(paulis.rbegin(), last);
+        uint32_t q2 = num_qubits - std::distance(paulis.rbegin(), last);
         return std::make_pair(q1, q2);
       }
+    }
+
+    std::vector<uint32_t> get_support() const {
+      std::vector<uint32_t> support;
+      for (size_t i = 0; i < num_qubits; i++) {
+        if (to_pauli(i) != Pauli::I) {
+          support.push_back(i);
+        }
+      }
+
+      return support;
     }
 
     std::string to_op(uint32_t i) const {
@@ -768,6 +834,22 @@ class PauliString {
       return (bit_string[word_ind] >> bit_ind) & 1u;
     }
 
+    inline void set_op(size_t i, Pauli p) {
+      if (p == Pauli::I) {
+        set_x(i, false);
+        set_z(i, false);
+      } else if (p == Pauli::X) {
+        set_x(i, true);
+        set_z(i, false);
+      } else if (p == Pauli::Y) {
+        set_x(i, true);
+        set_z(i, true);
+      } else if (p == Pauli::Z) {
+        set_x(i, false);
+        set_z(i, true);
+      }
+    }
+
     inline void set_x(uint32_t i, bool v) { 
       uint32_t word_ind = i / 16u;
       uint32_t bit_ind = 2u*(i % 16u);
@@ -784,6 +866,21 @@ class PauliString {
       phase = v; 
     }
 };
+
+namespace fmt {
+  template <>
+  struct formatter<PauliString> {
+    constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+      return ctx.begin();
+    }
+
+    // Format function
+    template <typename FormatContext>
+      auto format(const PauliString& ps, FormatContext& ctx) -> decltype(ctx.out()) {
+        return fmt::format_to(ctx.out(), "{}", ps.to_string_ops());
+      }
+  };
+}
 
 
 template <class T>
@@ -891,7 +988,7 @@ template<typename... Args>
 void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
   size_t num_qubits = p1.num_qubits;
   if (p2.num_qubits != num_qubits) {
-    throw std::runtime_error(fmt::format("Cannot reduce tableau for provided PauliStrings {} and {}; mismatched number of qubits.", p1.to_string_ops(), p2.to_string_ops()));
+    throw std::runtime_error(fmt::format("Cannot reduce tableau for provided PauliStrings {} and {}; mismatched number of qubits.", p1, p2));
   }
 
   std::vector<uint32_t> qubits_(num_qubits);

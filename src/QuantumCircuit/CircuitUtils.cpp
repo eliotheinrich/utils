@@ -3,7 +3,8 @@
 #include <iostream>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unordered_set>
-#include <assert.h>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 
 bool qargs_unique(const std::vector<uint32_t>& qargs) {
@@ -23,7 +24,9 @@ std::vector<uint32_t> parse_qargs_opt(const std::optional<std::vector<uint32_t>>
   if (qargs_opt.has_value()) {
     qargs = qargs_opt.value();
     for (uint32_t i = 0; i < qargs.size(); i++) {
-      assert(qargs[i] >= 0 && qargs[i] < num_qubits);
+      if (!(qargs[i] >= 0 && qargs[i] < num_qubits)) {
+        throw std::runtime_error(fmt::format("Provided qargs outside of acceptable range: {}", qargs));
+      }
     }
   } else {
     qargs = std::vector<uint32_t>(num_qubits);

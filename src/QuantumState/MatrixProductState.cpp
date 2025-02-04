@@ -1,5 +1,6 @@
 #include "QuantumStates.h"
 
+#include <memory>
 #include <sstream>
 #include <random>
 
@@ -204,7 +205,7 @@ std::complex<double> tensor_to_scalar(const ITensor& A) {
   return eltC(A, assignments);
 }
 
-ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
+ITensor pauli_tensor(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
     return matrix_to_tensor(quantumstate_utils::I::value, {i1}, {i2});
   } else if (p == Pauli::X) {
@@ -217,7 +218,6 @@ ITensor pauli_matrix(Pauli p, Index i1, Index i2) {
 
   throw std::runtime_error("Invalid Pauli index.");
 }
-
 
 void swap_tags(Index& idx1, Index& idx2) {
   IndexSet idxs = {idx1, idx2};
@@ -261,11 +261,6 @@ void match_indices(const std::string& tags, const ITensor& base, Tensors&... ten
   };
 
   (do_match_wrapper(tensors), ...);
-}
-
-inline std::pair<uint32_t, uint32_t> get_qubit_range(const std::vector<uint32_t>& qubits) {
-  auto [min_it, max_it] = std::minmax_element(qubits.begin(), qubits.end());
-  return {*min_it, *max_it};
 }
 
 bool contiguous(const std::vector<uint32_t>& v) {
@@ -804,23 +799,23 @@ class MatrixProductStateImpl {
     }
 
     double partial_expectation(const PauliString& p, uint32_t q1, uint32_t q2, const ITensor& L, const ITensor& R) const {
-      uint32_t nqb = q2 - q1 + 1;
+      uint32_t nqb = q2 - q1;
       if (nqb != p.num_qubits) {
-        throw std::runtime_error(fmt::format("partial_expectation called for PauliString {} with {} qubits called on range [{}, {}]. Invalid number of qubits.", p.to_string_ops(), p.num_qubits, q1, q2));
+        throw std::runtime_error(fmt::format("partial_expectation called for PauliString {} with {} qubits called on range [{}, {}]. Invalid number of qubits.", p, p.num_qubits, q1, q2));
       }
 
       ITensor contraction = L;
 
-      auto A = A_l(q1, q2 + 1);
+      auto A = A_l(q1, q2);
 
       // Align indices
       match_indices(fmt::format("m={}", q1), contraction, A[0]);
-      match_indices(fmt::format("m={}", q2+1), R, A[A.size()-1]);
+      match_indices(fmt::format("m={}", q2), R, A[A.size()-1]);
 
       for (size_t i = 0; i < nqb; i++) {
         const auto Ai = A[i];
         Index idx = external_idx(i + q1);
-        ITensor pauli = pauli_matrix(p.to_pauli(i), prime(idx), idx);
+        ITensor pauli = pauli_tensor(p.to_pauli(i), prime(idx), idx);
         contraction *= Ai;
         contraction *= pauli;
         contraction *= prime(conj(Ai));
@@ -843,11 +838,11 @@ class MatrixProductStateImpl {
       }
 
       auto [q1, q2] = qubit_range.value();
-      std::vector<uint32_t> qubits(q2 - q1 + 1);
+      std::vector<uint32_t> qubits(q2 - q1);
       std::iota(qubits.begin(), qubits.end(), q1);
 
       ITensor L = left_boundary_tensor(q1);
-      ITensor R = right_boundary_tensor(q2);
+      ITensor R = right_boundary_tensor(q2 - 1);
       return partial_expectation(p.substring(qubits, true), q1, q2, L, R);
     }
 
@@ -897,7 +892,7 @@ class MatrixProductStateImpl {
       auto add_paulis = [this, &P, &paulis](uint32_t i, uint32_t j) {
         for (size_t k = i; k < j; k++) {
           Index idx = external_idx(k);
-          paulis.push_back(pauli_matrix(P.to_pauli(k), idx, prime(idx)));
+          paulis.push_back(pauli_tensor(P.to_pauli(k), idx, prime(idx)));
         }
       };
 
@@ -948,7 +943,7 @@ class MatrixProductStateImpl {
       auto add_paulis = [this, &P, &paulis](uint32_t i, uint32_t j) {
         for (size_t k = i; k > j; k--) {
           Index idx = external_idx(k);
-          paulis.push_back(pauli_matrix(P.to_pauli(k), idx, prime(idx)));
+          paulis.push_back(pauli_tensor(P.to_pauli(k), idx, prime(idx)));
         }
       };
 
@@ -979,8 +974,7 @@ class MatrixProductStateImpl {
       return expectations;
     }
 
-
-    std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
+    PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& qubits, std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
@@ -1003,11 +997,11 @@ class MatrixProductStateImpl {
         Index s = external_indices[k];
 
         for (size_t p = 0; p < 4; p++) {
-          auto sigma = pauli_matrix(static_cast<Pauli>(p), s, prime(s));
+          auto sigma = pauli_tensor(static_cast<Pauli>(p), s, prime(s));
 
           auto C = prime(Ak)*conj(Ak)*sigma*L;
           auto contraction = conj(C)*C / 2.0;
-          
+
           std::vector<size_t> inds;
           double prob = std::abs(eltC(contraction, inds));
           probs[p] = prob;
@@ -1022,20 +1016,28 @@ class MatrixProductStateImpl {
         L = tensors[a];
       }
 
+      PauliString pauli(p);
+
       double t = std::sqrt(P*std::pow(2.0, num_qubits));
-      return std::make_pair(PauliString(p), t);
+      std::vector<double> amplitudes{t};
+      // TODO make this more efficient
+      for (const auto& support : qubits) {
+        PauliString ps = pauli.substring(support, false);
+        amplitudes.push_back(std::abs(expectation(ps)));
+      }
+
+      return {pauli, amplitudes};
     }
 
-    std::vector<PauliAmplitude> sample_paulis(size_t num_samples, std::minstd_rand& rng) const {
-      std::vector<PauliAmplitude> samples(num_samples);
+    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples, std::minstd_rand& rng) const {
+      std::vector<PauliAmplitudes> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
-        samples[k] = sample_pauli(rng);
+        samples[k] = sample_pauli(qubits, rng);
       } 
 
       return samples;
     }
-
 
     ITensor coefficient_tensor() const {
       ITensor C = tensors[0];
@@ -1314,15 +1316,12 @@ class MatrixProductStateImpl {
     }
 
     MeasurementOutcome measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double r, const ITensor& L, const ITensor& R) const {
-      if (p.num_qubits != qubits.size()) {
-        throw std::runtime_error(fmt::format("Provided PauliString has {} qubits, but tried to perform measurement on {}.", p.num_qubits, qubits));
-      }
       auto pm = p.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
       Eigen::MatrixXcd proj1 = (id - pm)/2.0;
 
-      auto [q1, q2] = get_qubit_range(qubits);
+      auto [q1, q2] = to_interval(qubits).value();
 
       double prob_zero = (1.0 + partial_expectation(p, q1, q2, L, R))/2.0;
 
@@ -1334,10 +1333,17 @@ class MatrixProductStateImpl {
     }
 
     MeasurementOutcome measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double r) const {
-      auto [q1, q2] = get_qubit_range(qubits);
+      if (qubits.size() == 0) {
+        throw std::runtime_error("Must perform measurement on nonzero qubits.");
+      }
+
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+      }
+
+      auto [q1, q2] = to_interval(qubits).value();
       ITensor L = left_boundary_tensor(q1);
       ITensor R = right_boundary_tensor(q2);
-
       return measurement_outcome(p, qubits, r, L, R);
     }
 
@@ -1345,8 +1351,7 @@ class MatrixProductStateImpl {
       auto proj = std::get<0>(outcome);
       evolve(proj, qubits);
       if (renormalize) {
-        uint32_t q1 = *std::ranges::min_element(qubits);
-        uint32_t q2 = *std::ranges::max_element(qubits);
+        auto [q1, q2] = to_interval(qubits).value();
         normalize(q1, q2, 0, num_qubits - 1);
       }
     }
@@ -1354,7 +1359,7 @@ class MatrixProductStateImpl {
     template <typename T>
     std::vector<T> sort_measurements(const std::vector<T>& measurements) {
       for (const auto& m : measurements) {
-        auto [q1, q2] = get_qubit_range(std::get<1>(m));
+        auto [q1, q2] = to_interval(std::get<1>(m)).value();
         if (std::abs(static_cast<int>(q1) - static_cast<int>(q2)) > 1) {
           throw std::runtime_error(fmt::format("Qubits = {} are not adjacent and thus cannot be measured on MPS.", std::get<1>(m)));
         }
@@ -1363,8 +1368,8 @@ class MatrixProductStateImpl {
       std::vector<T> sorted_measurements = measurements;
 
       std::sort(sorted_measurements.begin(), sorted_measurements.end(), [](const T& m1, const T& m2) {
-        auto [a1, a2] = get_qubit_range(std::get<1>(m1));
-        auto [b1, b2] = get_qubit_range(std::get<1>(m2));
+        auto [a1, a2] = to_interval(std::get<1>(m1)).value();
+        auto [b1, b2] = to_interval(std::get<1>(m2)).value();
         return a1 < b1;
       });
 
@@ -1389,7 +1394,7 @@ class MatrixProductStateImpl {
       std::vector<uint32_t> next_qubit;
       for (size_t i = 0; i < num_measurements - 1; i++) {
         auto qubits = std::get<1>(measurements[i]);
-        auto [q1, q2] = get_qubit_range(qubits);
+        auto [q1, q2] = to_interval(qubits).value();
         size_t n = q2 + 1;
         while (n < num_qubits) {
           if (mask[n]) {
@@ -1410,14 +1415,14 @@ class MatrixProductStateImpl {
         return {};
       };
 
-      size_t left_qubit = get_qubit_range(std::get<1>(sorted_measurements[0])).first;
+      size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
       Index left_index = findIndex(A_l(left_qubit), fmt::format("m={}", left_qubit));
       ITensor L = left_boundary_tensor(left_qubit);
 
       std::vector<bool> results;
       for (size_t i = 0; i < num_measurements; i++) {
         const auto& [p, qubits] = sorted_measurements[i];
-        auto [q1, q2] = get_qubit_range(qubits);
+        auto [q1, q2] = to_interval(qubits).value();
         std::vector<ITensor> A = A_l(left_qubit, q1+1);
         for (size_t j = left_qubit; j < q1; j++) {
           ITensor Aj = A[j - left_qubit];
@@ -1465,7 +1470,7 @@ class MatrixProductStateImpl {
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      auto [q1, q2] = get_qubit_range(qubits);
+      auto [q1, q2] = to_interval(qubits).value();
 
       double prob_zero = (1.0 + partial_expectation(p, q1, q2, L, R))/2.0;
 
@@ -1487,18 +1492,21 @@ class MatrixProductStateImpl {
     }
 
     MeasurementOutcome weak_measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) const {
-      auto [q1, q2] = get_qubit_range(qubits);
+      if (qubits.size() == 0) {
+        throw std::runtime_error("Must perform measurement on nonzero qubits.");
+      }
+
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+      }
+
+      auto [q1, q2] = to_interval(qubits).value();
       ITensor L = left_boundary_tensor(q1);
       ITensor R = right_boundary_tensor(q2);
-
       return weak_measurement_outcome(p, qubits, beta, r, L, R);
     }
 
     bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-      }
-
       auto outcome = weak_measurement_outcome(p, qubits, beta, r);
       apply_measure(outcome, qubits, true);
       
@@ -1512,14 +1520,14 @@ class MatrixProductStateImpl {
         return {};
       };
 
-      size_t left_qubit = get_qubit_range(std::get<1>(sorted_measurements[0])).first;
+      size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
       Index left_index = findIndex(A_r(left_qubit), fmt::format("m={}", left_qubit));
       ITensor L = left_boundary_tensor(left_qubit);
 
       std::vector<bool> results;
       for (size_t i = 0; i < num_measurements; i++) {
         const auto& [p, qubits, beta] = sorted_measurements[i];
-        auto [q1, q2] = get_qubit_range(qubits);
+        auto [q1, q2] = to_interval(qubits).value();
         extend_left_environment_tensor(L, left_qubit, q1);
         left_qubit = q1;
 
@@ -1704,12 +1712,12 @@ class MatrixProductStateImpl {
     // ======================================= DEBUG FUNCTIONS ======================================= //
 };
 
-class MatrixProductOperatorImpl {
-  friend class MatrixProductOperator;
+using MPOBlock = std::optional<ITensor>;
+
+class MatrixProductMixedStateImpl {
+  friend class MatrixProductMixedState;
 
   public:
-    using MPOBlock = std::optional<ITensor>;
-
     size_t num_qubits;
     uint32_t bond_dimension;
     double sv_threshold;
@@ -1719,6 +1727,24 @@ class MatrixProductOperatorImpl {
     std::vector<MPOBlock> blocks;
     std::vector<Index> internal_indices;
     std::vector<Index> external_indices;
+
+    static ITensor close_boundaries(const ITensor& tensor) {
+      auto tensor_ = tensor;
+
+      auto left_idxs = findInds(tensor, "Left");
+      if (left_idxs.size() > 0) {
+        auto left = noPrime(left_idxs[0]);
+        tensor_ *= delta(left, prime(left));
+      }
+
+      auto right_idxs = findInds(tensor, "Right");
+      if (right_idxs.size() > 0) {
+        auto right = noPrime(right_idxs[0]);
+        tensor_ *= delta(right, prime(right));
+      }
+
+      return tensor_;
+    }
 
     static ITensor get_block_left(const std::vector<ITensor>& A, size_t q, const Index& i_r) {
       if (q == 0) {
@@ -1793,9 +1819,9 @@ class MatrixProductOperatorImpl {
       } 
     }
 
-    MatrixProductOperatorImpl()=default;
+    MatrixProductMixedStateImpl()=default;
 
-    MatrixProductOperatorImpl(const MatrixProductOperatorImpl& other) {
+    MatrixProductMixedStateImpl(const MatrixProductMixedStateImpl& other) {
       num_qubits = other.num_qubits;
       bond_dimension = other.bond_dimension;
       sv_threshold = other.sv_threshold;
@@ -1808,7 +1834,7 @@ class MatrixProductOperatorImpl {
       external_indices = other.external_indices;
     }
 
-    MatrixProductOperatorImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
+    MatrixProductMixedStateImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
       : num_qubits(mps.num_qubits - traced_qubits.size()), bond_dimension(mps.bond_dimension), sv_threshold(mps.sv_threshold) {
       if (traced_qubits.size() >= mps.num_qubits) {
         throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductState with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mps.num_qubits));
@@ -1858,10 +1884,10 @@ class MatrixProductOperatorImpl {
       blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits - 1, InternalDir::Right)));
     }
 
-    MatrixProductOperatorImpl(const MatrixProductOperatorImpl& mpo, const std::vector<uint32_t>& traced_qubits)
+    MatrixProductMixedStateImpl(const MatrixProductMixedStateImpl& mpo, const std::vector<uint32_t>& traced_qubits)
       : num_qubits(mpo.num_qubits - traced_qubits.size()), bond_dimension(mpo.bond_dimension), sv_threshold(mpo.sv_threshold) {
       if (traced_qubits.size() >= mpo.num_qubits) {
-        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductOperator with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mpo.num_qubits));
+        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductMixedState with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mpo.num_qubits));
       }
 
       std::vector<uint32_t> sorted_qubits(traced_qubits.begin(), traced_qubits.end());
@@ -1969,7 +1995,7 @@ class MatrixProductOperatorImpl {
     }
 
     ITensor apply_block_r(const ITensor& tensor, size_t i) const {
-      if (blocks[i].has_value()) {
+      if (blocks[i]) {
         return tensor*blocks[i].value();
       } else {
         Index i1 = internal_idx(i, InternalDir::Right);
@@ -2077,17 +2103,52 @@ class MatrixProductOperatorImpl {
     }
 
     double expectation(const PauliString& p) const {
+      print_mps();
       if (p.num_qubits != num_qubits) {
-        throw std::runtime_error(fmt::format("Provided PauliString has {} qubits but MatrixProductOperator has {} external qubits.", p.num_qubits, num_qubits));
+        throw std::runtime_error(fmt::format("Provided PauliString has {} qubits but MatrixProductMixedState has {} external qubits.", p.num_qubits, num_qubits));
       }
 
-      std::vector<ITensor> paulis(num_qubits);
-      for (size_t i = 0; i < num_qubits; i++) {
+      auto qubit_range = p.get_qubit_support_range();
+
+      // Pauli is proportional to I; return sign.
+      if (qubit_range == std::nullopt) {
+        return p.sign();
+      }
+
+      auto [q1, q2] = qubit_range.value();
+
+      std::cout << fmt::format("P = {}, q1 = {}, q2 = {}\n", p, q1, q2);
+
+
+      size_t width = q2 - q1;
+      std::vector<ITensor> ops;
+      for (size_t i = 0; i < q1; i++) {
         Index idx = external_idx(i);
-        paulis[i] = pauli_matrix(p.to_pauli(i), prime(idx), idx);
+        ops.push_back(delta(idx, prime(idx)));
       }
 
-      auto contraction = partial_contraction(0, num_qubits, paulis);
+      for (size_t i = q1; i < q2; i++) {
+        Index idx = external_idx(i);
+        ops.push_back(pauli_tensor(p.to_pauli(i), prime(idx), idx));
+      }
+
+      auto contraction = partial_contraction(0, q2, ops);
+      std::cout << fmt::format("partial_contraction(0, {}) = \n", q2);
+      print(contraction);
+
+      std::vector<ITensor> deltas;
+      for (size_t i = q2 - 1; i < num_qubits; i++) {
+        auto idx = Index(external_idx(i));
+        deltas.push_back(delta(idx, prime(idx)));
+      }
+      auto contraction2 = partial_contraction(q2 - 1, num_qubits, deltas);
+      std::cout << fmt::format("partial_contraction({}, {}) = \n", q2 - 1, num_qubits);
+      print(contraction2);
+      PrintData(contraction2);
+      contraction = close_boundaries(contraction);
+      //std::cout << "Contraction = \n";
+      //contraction *= contraction2;
+      print(contraction);
 
       std::vector<int> _inds;
       double sign = p.get_r() ? -1.0 : 1.0;
@@ -2105,7 +2166,7 @@ class MatrixProductOperatorImpl {
     }
 
 
-    std::pair<PauliString, double> sample_pauli(std::minstd_rand& rng) const {
+    PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& qubits, std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
@@ -2124,11 +2185,11 @@ class MatrixProductOperatorImpl {
         Index s = external_indices[k];
 
         for (size_t p = 0; p < 4; p++) {
-          auto sigma = pauli_matrix(static_cast<Pauli>(p), s, prime(s));
+          auto sigma = pauli_tensor(static_cast<Pauli>(p), s, prime(s));
 
           auto C = prime(Ak)*conj(Ak)*sigma*L;
           auto contraction = conj(C)*C / 2.0;
-          
+
           std::vector<size_t> inds;
           double prob = std::abs(eltC(contraction, inds));
           probs[p] = prob;
@@ -2143,18 +2204,26 @@ class MatrixProductOperatorImpl {
         L = apply_block_r(tensors[a], k);
       }
 
-      double t = std::sqrt(P * std::pow(2.0, num_qubits));
-      return std::make_pair(PauliString(p), t);
+      PauliString pauli(p);
+
+      double t = std::sqrt(P*std::pow(2.0, num_qubits));
+      std::vector<double> amplitudes{t};
+      for (const auto& support : qubits) {
+        PauliString ps = pauli.substring(support, false);
+        amplitudes.push_back(std::abs(expectation(ps)));
+      }
+
+      return {pauli, amplitudes};
     }
 
-    std::vector<PauliAmplitude> sample_paulis(size_t num_samples, std::minstd_rand& rng) const {
+    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples, std::minstd_rand& rng) const {
       if (!left_bipartite()) {
         throw std::runtime_error("Cannot sample_paulis for a non-left-bipartite MPO.");
       }
-      std::vector<PauliAmplitude> samples(num_samples);
+      std::vector<PauliAmplitudes> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
-        samples[k] = sample_pauli(rng);
+        samples[k] = sample_pauli(qubits, rng);
       } 
 
       return samples;
@@ -2179,6 +2248,243 @@ class MatrixProductOperatorImpl {
       } else {
         return "None\n";
       }
+    }
+};
+
+class PauliExpectationTreeImpl {
+  public:
+    static ITensor multiply_leftright(const ITensor& left, const ITensor& right) {
+      Index internal_idx_left = noPrime(findInds(left, "Right")[0]);
+      Index internal_idx_right = noPrime(findInds(right, "Left")[0]);
+      return left * replaceInds(right, {internal_idx_right, prime(internal_idx_right)},
+                                       {internal_idx_left, prime(internal_idx_left)});
+    }
+
+    static ITensor close_boundaries(const ITensor& tensor) {
+      std::cout << "Before close_boundaries, tensor = \n";
+      print(tensor);
+      auto tensor_ = tensor;
+
+      auto left_idxs = findInds(tensor, "Left");
+      if (left_idxs.size() > 0) {
+        Index idx = noPrime(left_idxs[0]);
+        tensor_ *= delta(idx, prime(idx));
+      }
+
+      auto right_idxs = findInds(tensor, "Right");
+      if (right_idxs.size() > 0) {
+        Index idx = noPrime(right_idxs[0]);
+        tensor_ *= delta(idx, prime(idx));
+      }
+      std::cout << "After close_boundaries, tensor = \n";
+      print(tensor_);
+      std::cout << "\n";
+
+      return tensor_;
+    }
+
+    //ITensor apply_block_r(const ITensor& tensor, const MPOBlock& block) const {
+    //  if (block) {
+    //    return tensor * block.value();
+    //  } else {
+    //    Index i1 = noPrime(findInds(tensor, "Right,Internal")[0]);
+    //    Index i2 = Index("Left,Internal", dim(i1));
+
+    //    return replaceInds(tensor, {i1, prime(i1)}, {i2, prime(i2)});
+    //  }
+    //}
+
+    const MatrixProductMixedStateImpl& state;
+
+    Pauli pauli;
+
+    size_t depth;
+    size_t min;
+    size_t max;
+
+    bool active;
+
+    // Environment tensors
+    ITensor tensor;
+
+    // Pointers for tree traversal
+    std::shared_ptr<PauliExpectationTreeImpl> left;
+    std::shared_ptr<PauliExpectationTreeImpl> right;
+
+    PauliExpectationTreeImpl(const MatrixProductMixedStateImpl& state, const PauliString& p, size_t min, size_t max) : state(state), min(min), max(max) {
+      size_t num_qubits = state.num_qubits;
+
+      if (num_qubits != p.num_qubits) {
+        throw std::runtime_error(fmt::format("Can't create PauliExpectationTreeImpl; number of qubits does not match: {} and {}.", state.num_qubits, p.num_qubits));
+      }
+
+      size_t width = max - min;
+
+      depth = std::ceil(std::log2(width));
+      if (is_leaf()) { // depth == 0
+        size_t q = min;
+        pauli = p.to_pauli(q);
+      } else {
+        size_t q = width/2;
+        left = std::make_shared<PauliExpectationTreeImpl>(state, p, min, min + q);
+        right = std::make_shared<PauliExpectationTreeImpl>(state, p, min + q, max);
+
+        //size_t n1 = num_qubits/2;
+        //std::vector<uint32_t> qubitsA(n1);
+        //std::iota(qubitsA.begin(), qubitsA.end(), 0);
+
+        //size_t n2 = num_qubits - num_qubits/2;
+        //std::vector<uint32_t> qubitsB(n2);
+        //std::iota(qubitsB.begin(), qubitsB.end(), n1);
+
+        //MatrixProductMixedStateImpl stateA(state, qubitsB);
+        //PauliString pA = p.substring(qubitsA, true);
+        //left = std::make_shared<PauliExpectationTreeImpl>(stateA, pA, min, min + n1);
+
+        //MatrixProductMixedStateImpl stateB(state, qubitsA);
+        //PauliString pB = p.substring(qubitsB, true);
+        //right = std::make_shared<PauliExpectationTreeImpl>(stateB, pB, min + n1, max);
+      }
+
+      update_node();
+
+      if (is_leaf()) {
+        std::cout << fmt::format("leaf. expectation = {}\n", tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real());
+      }
+    }
+
+    bool is_leaf() const {
+      return depth == 0;
+    }
+
+    double expectation() const {
+      return tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real();
+    }
+
+    ITensor get_partial_contraction(uint32_t q1, uint32_t q2) const {
+      std::cout << fmt::format("q1 = {}, q2 = {}\n", q1, q2);
+      std::cout << fmt::format("left: {}, {}\n", left->min, left->max);
+      std::cout << fmt::format("right: {}, {}\n", right->min, right->max);
+      if (q1 == min && q2 == max) {
+        std::cout << "Returning\n";
+        return tensor;
+      }
+
+      if (q2 <= right->min) {
+        std::cout << "Going left\n";
+        return left->get_partial_contraction(q1, q2);
+      } else if (q1 >= right->min) {
+        std::cout << "Going right\n";
+        return right->get_partial_contraction(q1, q2);
+      } else {
+        std::cout << fmt::format("Multiplying left({}, {}) and right({}, {})\n", q1, left->max, right->min, q2);
+        return PauliExpectationTreeImpl::multiply_leftright(left->get_partial_contraction(q1, left->max), 
+                                                           right->get_partial_contraction(right->min, q2));
+      }
+    }
+
+    void display_norm() const {
+      std::cout << fmt::format("q1 = {}, q2 = {}, partial_expectation = {}\n", min, max, tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real());
+      if (!is_leaf()) {
+        left->display_norm();
+        right->display_norm();
+      }
+
+    }
+
+    double partial_expectation(uint32_t q1_, uint32_t q2_) const {
+      size_t q1 = std::min(q1_, q2_);
+      size_t q2 = std::max(q1_, q2_);
+      ITensor contraction = get_partial_contraction(q1, q2);
+      return tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(contraction)).real();
+    }
+
+    void update_node() {
+      if (is_leaf()) {
+        Index idx = state.external_idx(min);
+        ITensor p = pauli_tensor(pauli, prime(idx), idx);
+        std::vector<ITensor> p_ = {p};
+        tensor = state.partial_contraction(min, max, p_);
+        //size_t q = min;
+        //const ITensor& op = state.ops[q];
+        //tensor = op * p * prime(conj(op));
+        //
+        //tensor = state.apply_block_r(tensor, q);
+        //if (q == 0) {
+        //  tensor = state.apply_block_l(tensor, q);
+        //}
+
+        auto left_indices = findInds(tensor, fmt::format("Internal,n={}", min));
+        if (left_indices.size() > 0) {
+          auto left = noPrime(left_indices[0]);
+          auto left_ = Index(dim(left), "Left");
+          tensor.replaceInds({left, prime(left)}, {left_, prime(left_)});
+        }
+
+        auto right_indices = findInds(tensor, fmt::format("Internal,n={}", max));
+        if (right_indices.size() > 0) {
+          auto right = noPrime(right_indices[0]);
+          auto right_ = Index(dim(right), "Right");
+          tensor.replaceInds({right, prime(right)}, {right_, prime(right_)});
+        }
+
+        std::cout << "After update_node, tensor = \n";
+        print(tensor);
+        std::cout << "\n";
+      } else {
+        tensor = multiply_leftright(left->tensor, right->tensor);
+      }
+
+      active = false;
+    }
+
+
+    void update_tree() {
+      if (active) {
+        if (!is_leaf()) {
+          left->update_tree();
+          right->update_tree();
+        }
+
+        update_node();
+      }
+    }
+
+    void propogate_pauli(Pauli p, uint32_t q) {
+      if (is_leaf()) {
+        pauli *= p;
+      } else {
+        if (q < right->min) {
+          left->propogate_pauli(p, q);
+        } else {
+          right->propogate_pauli(p, q);
+        }
+      }
+
+      active = true;
+    }
+
+    void modify(const PauliString& P) {
+      auto support = P.get_support();
+
+      for (const auto q : support) {
+        Pauli p = P.to_pauli(q);
+        propogate_pauli(p, q);
+      }
+
+      update_tree();
+    }
+
+    std::string to_string() const {
+      if (depth == 0) {
+        return std::string(1, pauli_to_char(pauli));
+      } else {
+        return left->to_string() + right->to_string();
+      }
+    }
+
+    PauliString to_pauli_string() const {
+      return PauliString(to_string());
     }
 };
 
@@ -2280,25 +2586,71 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
     throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} are not a bipartition of system with {} qubits. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB, num_qubits));
   }
 
-  auto samples = sample_paulis(num_samples);
+  auto pauli_samples = sample_paulis({qubitsA, qubitsB}, num_samples);
+  auto data = extract_amplitudes(pauli_samples);
+  return QuantumState::calculate_magic_mutual_information_from_samples2(data);
+}
+
+double MatrixProductState::magic_mutual_information_montecarlo(
+  const std::vector<uint32_t>& qubitsA, 
+  const std::vector<uint32_t>& qubitsB, 
+  size_t num_samples, size_t equilibration_timesteps, 
+  std::optional<PauliMutationFunc> mutation_opt
+) {
+  auto prob = [](double t) -> double { return t*t; };
 
   auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
-  auto stateA = partial_trace_mpo(_qubitsA);
-  auto stateB = partial_trace_mpo(_qubitsB);
+  std::vector<QubitSupport> supports = {_qubitsA, _qubitsB};
+  auto mpo = partial_trace_mpo(_qubits);
 
-  std::vector<double> tA;
-  std::vector<double> tB;
-  std::vector<double> tAB;
-  for (const auto &[P, t] : samples) {
-    PauliString PA = P.substring(_qubitsA, true);
-    PauliString PB = P.substring(_qubitsB, true);
+  auto pauli_samples2 = mpo.sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
+  return QuantumState::calculate_magic_mutual_information_from_samples2(extract_amplitudes(pauli_samples2));
+}
 
-    tA.push_back(std::abs(stateA.expectation(PA)));
-    tB.push_back(std::abs(stateB.expectation(PB)));
-    tAB.push_back(std::abs(t));
+std::vector<double> process_bipartite_pauli_samples(MatrixProductState& state, const std::vector<PauliAmplitudes>& pauli_samples) {
+  size_t N = state.num_qubits/2 - 1;
+  std::vector<std::vector<double>> samplesA(N);
+  std::vector<std::vector<double>> samplesB(N);
+  std::vector<std::vector<double>> samplesAB(N);
+
+  // TODO CHECK ON THIS
+  for (size_t j = 0; j < pauli_samples.size(); j++) {
+    auto const [P, t] = pauli_samples[j];
+    for (size_t i = 1; i <= N; i++) {
+      samplesAB[j].push_back(t[0]);
+      samplesA[j].push_back(t[i - 1]);
+      samplesB[j].push_back(t[i - 1 + N]);
+    }
   }
 
-  return calculate_magic_mutual_information_from_chi_samples({tA, tB, tAB});
+  std::vector<double> magic(N);
+  for (size_t j = 0; j < N; j++) {
+    magic[j] = QuantumState::calculate_magic_mutual_information_from_samples2({samplesA[j], samplesB[j], samplesAB[j]});
+  }
+
+  return magic;
+}
+
+std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_t num_samples) { 
+  std::vector<QubitSupport> supports = get_bipartite_supports(num_qubits);
+
+  auto pauli_samples = sample_paulis(supports, num_samples);
+
+  return process_bipartite_pauli_samples(*this, pauli_samples);
+}
+
+std::vector<double> MatrixProductState::bipartite_magic_mutual_information_montecarlo(
+  size_t num_samples, size_t equilibration_timesteps, 
+  std::optional<PauliMutationFunc> mutation_opt
+) {
+  return QuantumState::bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps, mutation_opt);
+  auto prob = [](double t) -> double { return t*t; };
+
+  std::vector<QubitSupport> qubits = get_bipartite_supports(num_qubits);
+
+  auto pauli_samples = sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
+
+  return process_bipartite_pauli_samples(*this, pauli_samples);
 }
 
 std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
@@ -2309,8 +2661,13 @@ std::vector<double> MatrixProductState::pauli_expectation_right_sweep(const Paul
   return impl->pauli_expectation_right_sweep(P, q1, q2);
 }
 
-std::vector<PauliAmplitude> MatrixProductState::sample_paulis(size_t num_samples) {
-  return impl->sample_paulis(num_samples, rng);
+std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) {
+  return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+}
+
+std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
+  MatrixProductMixedState mpo(*this, {});
+  return mpo.sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
 }
 
 double MatrixProductState::expectation(const PauliString& p) const {
@@ -2321,16 +2678,26 @@ std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, 
   return impl->expectation(m, sites);
 }
 
-void MatrixProductState::print_mps(bool print_data=false) const {
-  impl->print_mps(print_data);
+std::shared_ptr<QuantumState> MatrixProductState::partial_trace(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 > num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductState.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
+  return std::make_shared<MatrixProductMixedState>(*this, qubits);
 }
 
-std::shared_ptr<QuantumState> MatrixProductState::partial_trace(const std::vector<uint32_t>& qubits) const {
-  return std::make_shared<MatrixProductOperator>(*this, qubits);
-}
-
-MatrixProductOperator MatrixProductState::partial_trace_mpo(const std::vector<uint32_t>& qubits) const {
-  return MatrixProductOperator(*this, qubits);
+MatrixProductMixedState MatrixProductState::partial_trace_mpo(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 > num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductState.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
+  return MatrixProductMixedState(*this, qubits);
 }
 
 std::complex<double> MatrixProductState::coefficients(uint32_t z) const {
@@ -2346,6 +2713,7 @@ Eigen::VectorXcd MatrixProductState::coefficients() const {
 }
 
 double MatrixProductState::trace() const {
+  // Do not assume normalization
   return impl->trace();
 }
 
@@ -2374,33 +2742,38 @@ void MatrixProductState::id(uint32_t q1, uint32_t q2) {
 }
 
 bool MatrixProductState::mzr(uint32_t q) {
-  return impl->measure(q, randf());
+  return impl->measure(q, QuantumState::randf());
 }
 
 std::vector<bool> MatrixProductState::measure(const std::vector<MeasurementData>& measurements) {
   std::vector<double> random_vals(measurements.size());
   for (size_t i = 0; i < measurements.size(); i++) {
-    random_vals[i] = randf();
+    random_vals[i] = QuantumState::randf();
   }
 
   return impl->measure(measurements, random_vals);
 }
 
 bool MatrixProductState::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
-  return impl->measure(p, qubits, randf());
+  return impl->measure(p, qubits, QuantumState::randf());
 }
 
 std::vector<bool> MatrixProductState::weak_measure(const std::vector<WeakMeasurementData>& measurements) {
   std::vector<double> random_vals(measurements.size());
   for (size_t i = 0; i < measurements.size(); i++) {
-    random_vals[i] = randf();
+    random_vals[i] = QuantumState::randf();
   }
 
   return impl->weak_measure(measurements, random_vals);
 }
 
 bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
-  return impl->weak_measure(p, qubits, beta, randf());
+  return impl->weak_measure(p, qubits, beta, QuantumState::randf());
+}
+
+// --- DEBUG FUNCTIONS
+void MatrixProductState::print_mps(bool print_data=false) const {
+  impl->print_mps(print_data);
 }
 
 void MatrixProductState::show_problem_sites() const {
@@ -2435,90 +2808,177 @@ bool MatrixProductState::debug_tests() {
   return b;
 }
 
-std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_t num_samples) { 
-  auto pauli_samples = sample_paulis(num_samples);
-
-  size_t N = num_qubits/2 - 1;
-  std::vector<std::vector<double>> samplesA(N);
-  std::vector<std::vector<double>> samplesB(N);
-  std::vector<std::vector<double>> samplesAB(N);
-
-  for (size_t i = 0; i < num_samples; i++) {
-    auto const [P, t] = pauli_samples[i];
-
-    std::vector<double> tA = pauli_expectation_left_sweep(P, 0, num_qubits/2);
-    std::vector<double> tB = pauli_expectation_right_sweep(P, num_qubits/2, 0);
-    std::reverse(tB.begin(), tB.end());
-
-    for (size_t j = 0; j < N; j++) {
-      samplesA[j].push_back(tA[j]);
-      samplesB[j].push_back(tB[j]);
-      samplesAB[j].push_back(t);
-    }
-  }
-
-  std::vector<double> magic(N);
-  for (size_t j = 0; j < N; j++) {
-    magic[j] = QuantumState::calculate_magic_mutual_information_from_chi_samples({samplesA[j], samplesB[j], samplesAB[j]});
-  }
-
-  return magic;
-}
-
 // ----------------------------------------------------------------------- //
-// ------------ MatrixProductOperator implementation --------------------- //
+// ------------ MatrixProductMixedState implementation --------------------- //
 // ----------------------------------------------------------------------- //
 
-MatrixProductOperator::MatrixProductOperator(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : QuantumState(mps.num_qubits - traced_qubits.size()) {
-  impl = std::make_unique<MatrixProductOperatorImpl>(*mps.impl.get(), traced_qubits);
+MatrixProductMixedState::MatrixProductMixedState(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : QuantumState(mps.num_qubits - traced_qubits.size()) {
+  impl = std::make_unique<MatrixProductMixedStateImpl>(*mps.impl.get(), traced_qubits);
 }
 
-MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& mpo, const std::vector<uint32_t>& traced_qubits) : QuantumState(mpo.num_qubits - traced_qubits.size()) {
-  impl = std::make_unique<MatrixProductOperatorImpl>(*mpo.impl.get(), traced_qubits);
+MatrixProductMixedState::MatrixProductMixedState(const MatrixProductMixedState& mpo, const std::vector<uint32_t>& traced_qubits) : QuantumState(mpo.num_qubits - traced_qubits.size()) {
+  impl = std::make_unique<MatrixProductMixedStateImpl>(*mpo.impl.get(), traced_qubits);
 }
 
-MatrixProductOperator::MatrixProductOperator(const MatrixProductOperator& other) : QuantumState(other.num_qubits) {
-  impl = std::make_unique<MatrixProductOperatorImpl>(*other.impl.get());
+MatrixProductMixedState::MatrixProductMixedState(const MatrixProductMixedState& other) : QuantumState(other.num_qubits) {
+  impl = std::make_unique<MatrixProductMixedStateImpl>(*other.impl.get());
 }
 
-MatrixProductOperator::~MatrixProductOperator()=default;
+MatrixProductMixedState::~MatrixProductMixedState()=default;
 
-MatrixProductOperator& MatrixProductOperator::operator=(const MatrixProductOperator& other) {
+MatrixProductMixedState& MatrixProductMixedState::operator=(const MatrixProductMixedState& other) {
   if (this != &other) {
-    impl = std::make_unique<MatrixProductOperatorImpl>(*other.impl);
+    impl = std::make_unique<MatrixProductMixedStateImpl>(*other.impl);
   }
   return *this;
 }
 
-void MatrixProductOperator::print_mps() const {
+void MatrixProductMixedState::print_mps() const {
   impl->print_mps();
 }
 
-Eigen::MatrixXcd MatrixProductOperator::coefficients() const {
+Eigen::MatrixXcd MatrixProductMixedState::coefficients() const {
   return impl->coefficients();
 }
 
-double MatrixProductOperator::trace() const {
+double MatrixProductMixedState::trace() const {
   return impl->trace();
 }
 
-std::vector<PauliAmplitude> MatrixProductOperator::sample_paulis(size_t num_samples) {
-  return impl->sample_paulis(num_samples, rng);
+std::vector<PauliAmplitudes> MatrixProductMixedState::sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) {
+  return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
 }
 
-double MatrixProductOperator::expectation(const PauliString& p) const {
+std::vector<PauliAmplitudes> MatrixProductMixedState::sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
+  //return QuantumState::sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
+  PauliMutationFunc mutation = single_qubit_random_mutation;
+  if (mutation_opt) {
+    mutation = mutation_opt.value();
+  }
+
+  PauliString p(num_qubits);
+  PauliExpectationTree environment(*this, p);
+
+  environment.display_norm();
+  throw std::runtime_error("");
+  auto perform_mutation = [&](PauliString& p) -> double {
+    double t1 = std::abs(environment.expectation());
+    double p1 = prob(t1);
+
+    PauliString q(p);
+    mutation(q, rng);
+
+    PauliString product = q*p;
+
+    environment.modify(product);
+
+    double t2 = std::abs(environment.expectation());
+    double p2 = prob(t2);
+
+    double r = static_cast<double>(rng())/static_cast<double>(RAND_MAX); 
+    if (r < p2 / p1) {
+      p = PauliString(q);
+      return t2;
+    } else {
+      // Put state back
+      environment.modify(product);
+      return t1;
+    }
+  };
+
+  for (size_t i = 0; i < equilibration_timesteps; i++) {
+    double t = perform_mutation(p);
+  }
+
+  std::vector<PauliAmplitudes> samples(num_samples);
+  for (size_t i = 0; i < num_samples; i++) {
+    double t = perform_mutation(p);
+    std::vector<double> amplitudes{t};
+    //std::cout << fmt::format("P = {}, t = {:.3f}\n", p, t);
+    for (const auto& support : qubits) {
+      PauliString ps = p.substring(support, false);
+      double ts = std::abs(expectation(ps));
+      auto [q1, q2] = to_interval(support).value();
+      double ts_ = std::abs(environment.partial_expectation(q1, q2));
+      std::cout << fmt::format("q1 = {}, q2 = {}\n", q1, q2);
+      std::cout << fmt::format("p = {}, ps = {}\n", p, ps);
+      std::cout << fmt::format("{:.3f} vs {:.3f}\n", ts, ts_);
+
+      if (std::abs(ts - ts_) > 1e-4) {
+        throw std::runtime_error("FAILED\n");
+      }
+      //std::cout << fmt::format("{}, {} -> {:.3f}\n", to_qubits(support), ps, ts);
+      amplitudes.push_back(ts);
+    }
+    samples[i] = {p, amplitudes};
+  }
+
+  return samples;
+}
+
+double MatrixProductMixedState::expectation(const PauliString& p) const {
   return impl->expectation(p);
 }
 
-std::shared_ptr<QuantumState> MatrixProductOperator::partial_trace(const std::vector<uint32_t>& qubits) const {
-  return std::make_shared<MatrixProductOperator>(*this, qubits);
+std::shared_ptr<QuantumState> MatrixProductMixedState::partial_trace(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 >= num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductMixedState.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
+  return std::make_shared<MatrixProductMixedState>(*this, qubits);
 }
 
-MatrixProductOperator MatrixProductOperator::partial_trace_mpo(const std::vector<uint32_t>& qubits) const {
-  return MatrixProductOperator(*this, qubits);
+MatrixProductMixedState MatrixProductMixedState::partial_trace_mpo(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 >= num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductMixedState.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
+  return MatrixProductMixedState(*this, qubits);
 }
 
-double MatrixProductOperator::purity() const {
+double MatrixProductMixedState::purity() const {
   return impl->purity();
+}
+
+// ----------------------------------------------------------------------- //
+// --------------- PauliExpectationTree implementation ------------------- //
+// ----------------------------------------------------------------------- //
+
+PauliExpectationTree::PauliExpectationTree(const MatrixProductMixedState& state, const PauliString& p) : num_qubits(state.num_qubits) {
+  impl = std::make_unique<PauliExpectationTreeImpl>(*state.impl, p, 0, num_qubits);
+}
+
+void PauliExpectationTree::display_norm() const {
+  impl->display_norm();
+}
+
+double PauliExpectationTree::expectation() const {
+  return impl->expectation();
+}
+
+double PauliExpectationTree::partial_expectation(uint32_t q1, uint32_t q2) const {
+  return impl->partial_expectation(0, num_qubits);
+}
+
+void PauliExpectationTree::propogate_pauli(Pauli p, uint32_t q) {
+  impl->propogate_pauli(p, q);
+}
+
+void PauliExpectationTree::modify(const PauliString& p) {
+  impl->modify(p);
+}
+
+std::string PauliExpectationTree::to_string() const {
+  return impl->to_string();
+}
+
+PauliString PauliExpectationTree::to_pauli_string() const {
+  return impl->to_pauli_string();
 }
 

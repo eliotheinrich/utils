@@ -55,6 +55,9 @@ class QuantumStateSampler {
       if (sample_magic_mutual_information) {
         save_mmi_samples = dataframe::utils::get<int>(params, "save_mmi_samples", false);
         magic_mutual_information_subsystem_size = dataframe::utils::get<int>(params, "magic_mutual_information_subsystem_size", system_size/4);
+        if (magic_mutual_information_subsystem_size > system_size/2) {
+          throw std::runtime_error(fmt::format("magic_mutual_information_subsystem_size = {}, but system_size = {}", magic_mutual_information_subsystem_size, system_size));
+        }
         subsystem_offset_A = dataframe::utils::get<int>(params, "subsystem_offset_A", 0);
         subsystem_offset_B = dataframe::utils::get<int>(params, "subsystem_offset_B", system_size - magic_mutual_information_subsystem_size);
       }
@@ -108,7 +111,7 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "bitstring_distribution", probabilities);
     }
 
-    void add_mmi_samples(dataframe::SampleMap &samples, const std::vector<MMIMonteCarloSamples>& data) const {
+    void add_mmi_samples(dataframe::SampleMap &samples, const std::vector<MutualMagicData>& data) const {
       std::vector<std::vector<double>> tA2;
       std::vector<std::vector<double>> tB2;
       std::vector<std::vector<double>> tAB2;
@@ -118,8 +121,8 @@ class QuantumStateSampler {
       std::vector<std::vector<double>> tAB4;
 
       for (auto const [t2, t4] : data) {
-        auto [tA2_, tB2_, tAB2_] = t2;
-        auto [tA4_, tB4_, tAB4_] = t4;
+        auto [tA2_, tB2_, tAB2_] = unfold_mutual_magic_amplitudes(t2);
+        auto [tA4_, tB4_, tAB4_] = unfold_mutual_magic_amplitudes(t4);
 
         tA2.push_back(tA2_);
         tB2.push_back(tB2_);
@@ -147,15 +150,15 @@ class QuantumStateSampler {
       }
 
       // Helper lambdas for SRE sampling
-      auto extract_amplitudes = [](const std::vector<PauliAmplitude>& samples) {
+      auto extract_amplitudes = [](const std::vector<PauliAmplitudes>& samples) {
         std::vector<double> amplitudes;
         for (const auto [_, p] : samples) {
-          amplitudes.push_back(p);
+          amplitudes.push_back(p[0]);
         }
         return amplitudes;
       };
 
-      auto compute_sre_montecarlo = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples) {
+      auto compute_sre_montecarlo = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
@@ -165,7 +168,7 @@ class QuantumStateSampler {
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
 
-      auto compute_sre_exhaustive = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitude>& pauli_samples) {
+      auto compute_sre_exhaustive = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
         std::vector<double> stabilizer_renyi_entropy;
         double purity = std::pow(2.0, state->num_qubits) * state->purity();
@@ -197,16 +200,16 @@ class QuantumStateSampler {
         std::vector<double> stabilizer_renyi_entropy;
         std::vector<double> amplitudes;
         if (sre_method == sre_method_t::Exhaustive) {
-          auto pauli_samples = state->sample_paulis_exhaustive();
+          auto pauli_samples = state->sample_paulis_exhaustive({});
           std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_exhaustive(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::MonteCarlo) {
-          auto pauli_samples = state->sample_paulis_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
+          auto pauli_samples = state->sample_paulis_montecarlo({}, sre_num_samples, sre_mc_equilibration_timesteps, prob, mutation);
           std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::Exact) {
-          auto pauli_samples = state->sample_paulis_exact(sre_num_samples, prob);
+          auto pauli_samples = state->sample_paulis_exact({}, sre_num_samples, prob);
           std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         } else if (sre_method == sre_method_t::Virtual) {
-          auto pauli_samples = state->sample_paulis(sre_num_samples);
+          auto pauli_samples = state->sample_paulis({}, sre_num_samples);
           std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
         }
 
@@ -231,17 +234,21 @@ class QuantumStateSampler {
         if (sre_method == sre_method_t::Exhaustive) {
           mmi_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
         } else if (sre_method == sre_method_t::MonteCarlo) {
-          auto mmi_data = state->magic_mutual_information_samples_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           if (save_mmi_samples) {
+            auto mmi_data = state->magic_mutual_information_samples_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
             add_mmi_samples(samples, {mmi_data});
+            mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
+          } else {
+            mmi_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           }
-          mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
         } else if (sre_method == sre_method_t::Exact) {
-          auto mmi_data = state->magic_mutual_information_samples_exact(qubitsA, qubitsB, sre_num_samples);
           if (save_mmi_samples) {
+            auto mmi_data = state->magic_mutual_information_samples_exact(qubitsA, qubitsB, sre_num_samples);
             add_mmi_samples(samples, {mmi_data});
+            mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
+          } else {
+            mmi_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
           }
-          mmi_sample = QuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
         } else if (sre_method == sre_method_t::Virtual) {
           mmi_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
         }
@@ -255,19 +262,23 @@ class QuantumStateSampler {
         if (sre_method == sre_method_t::Exhaustive) {
           mmi_samples = state->bipartite_magic_mutual_information_exhaustive();
         } else if (sre_method == sre_method_t::MonteCarlo) {
-          auto mmi_data = state->bipartite_magic_mutual_information_samples_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           if (save_mmi_samples) {
+            auto mmi_data = state->bipartite_magic_mutual_information_samples_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
             add_mmi_samples(samples, mmi_data);
+            mmi_samples.resize(mmi_data.size());
+            std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MutualMagicData& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
+          } else {
+            mmi_samples = state->bipartite_magic_mutual_information_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           }
-          mmi_samples.resize(mmi_data.size());
-          std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MMIMonteCarloSamples& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
         } else if (sre_method == sre_method_t::Exact) {
-          auto mmi_data = state->bipartite_magic_mutual_information_samples_exact(sre_num_samples);
           if (save_mmi_samples) {
+            auto mmi_data = state->bipartite_magic_mutual_information_samples_exact(sre_num_samples);
             add_mmi_samples(samples, mmi_data);
+            mmi_samples.resize(mmi_data.size());
+            std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MutualMagicData& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
+          } else {
+            mmi_samples = state->bipartite_magic_mutual_information_exact(sre_num_samples);
           }
-          mmi_samples.resize(mmi_data.size());
-          std::transform(mmi_data.begin(), mmi_data.end(), mmi_samples.begin(), [](const MMIMonteCarloSamples& s) { return QuantumState::calculate_magic_mutual_information_from_samples(s); });
         } else if (sre_method == sre_method_t::Virtual) {
           mmi_samples = state->bipartite_magic_mutual_information(sre_num_samples);
         }

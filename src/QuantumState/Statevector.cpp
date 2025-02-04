@@ -62,7 +62,14 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
   return rho.entropy(qubits, index);
 }
 
-std::shared_ptr<QuantumState> Statevector::partial_trace(const std::vector<uint32_t>& qubits) const {
+std::shared_ptr<QuantumState> Statevector::partial_trace(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 >= num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to Statevector.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
   DensityMatrix rho(*this);
   return rho.partial_trace(qubits);
 }
@@ -134,7 +141,7 @@ bool Statevector::mzr(uint32_t q) {
   uint32_t s = 1u << num_qubits;
 
   double prob_zero = mzr_prob(q, 0);
-  uint32_t outcome = !(randf() < prob_zero);
+  uint32_t outcome = !(QuantumState::randf() < prob_zero);
 
   for (uint32_t i = 0; i < s; i++) {
     if (((i >> q) & 1u) != outcome) {
@@ -156,7 +163,7 @@ MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const 
 
   double prob_zero = std::abs(expectation(proj0, qubits));
 
-  double r = randf();
+  double r = QuantumState::randf();
   bool outcome = r >= prob_zero;
 
   proj0 = proj0/std::sqrt(prob_zero);
@@ -206,7 +213,7 @@ MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, c
 
   double prob_zero = std::abs(expectation(proj0, qubits));
 
-  double r = randf();
+  double r = QuantumState::randf();
   bool outcome = r >= prob_zero;
 
   Eigen::MatrixXcd t = pm;

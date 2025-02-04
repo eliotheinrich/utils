@@ -20,24 +20,30 @@ static inline CliffordType parse_clifford_type(std::string s) {
 }
 
 class CliffordState : public EntropyState {
+  protected:
+    static thread_local std::minstd_rand rng;
+
   public:
     size_t num_qubits;
     CliffordState()=default;
 
-    CliffordState(uint32_t num_qubits, int seed=-1) : EntropyState(num_qubits), num_qubits(num_qubits) {
-      if (seed == -1) {
-        thread_local std::random_device rd;
-        rng = std::minstd_rand(rd());
-      }
-      else rng = std::minstd_rand(seed);
+    CliffordState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits) {}
+
+    static void seed(int s) {
+      CliffordState::rng.seed(s);
     }
 
-    uint32_t rand() {
-      return this->rng();
+    static unsigned int random_seed() {
+      thread_local std::random_device gen;
+      return gen();
     }
 
-    double randf() {
-      return static_cast<double>(rand())/static_cast<double>(RAND_MAX);
+    static uint32_t rand() {
+      return CliffordState::rng();
+    }
+
+    static double randf() {
+      return static_cast<double>(CliffordState::rand())/static_cast<double>(RAND_MAX);
     }
 
     virtual ~CliffordState() {}
@@ -252,6 +258,7 @@ class CliffordState : public EntropyState {
       h(a);
       return outcome;
     }
+
     virtual bool myr(uint32_t a) {
       s(a);
       h(a);
@@ -266,7 +273,4 @@ class CliffordState : public EntropyState {
     virtual std::string to_string() const=0;
 
     virtual double sparsity() const=0;
-
-  protected:
-    std::minstd_rand rng; 
 };

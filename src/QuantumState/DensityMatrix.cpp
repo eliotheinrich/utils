@@ -20,7 +20,7 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 
 DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {}
 
-DensityMatrix::DensityMatrix(const MatrixProductOperator& mpo) : DensityMatrix(mpo.coefficients()) {}
+DensityMatrix::DensityMatrix(const MatrixProductMixedState& mpo) : DensityMatrix(mpo.coefficients()) {}
 
 DensityMatrix::DensityMatrix(const Eigen::MatrixXcd& data) : data(data) {
   size_t nrows = data.rows();
@@ -43,15 +43,23 @@ std::string DensityMatrix::to_string() const {
 	return fmt::format("DensityMatrix({}):\n{}\n", num_qubits, ss.str());
 }
 
-DensityMatrix DensityMatrix::partial_trace_density_matrix(const std::vector<uint32_t>& traced_qubits) const {
+DensityMatrix DensityMatrix::partial_trace_density_matrix(const Qubits& qubits) const {
+  auto interval = to_interval(qubits);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 >= num_qubits) {
+      throw std::runtime_error(fmt::format("qubits = {} passed to DensityMatrix.partial_trace with {} qubits", qubits, num_qubits));
+    }
+  }
+  
 	std::vector<uint32_t> remaining_qubits;
 	for (uint32_t q = 0; q < num_qubits; q++) {
-		if (!std::count(traced_qubits.begin(), traced_qubits.end(), q)) {
+		if (!std::count(qubits.begin(), qubits.end(), q)) {
 			remaining_qubits.push_back(q);
 		}
 	}
 
-	uint32_t num_traced_qubits = traced_qubits.size();
+	uint32_t num_traced_qubits = qubits.size();
 	uint32_t num_remaining_qubits = remaining_qubits.size();
 
 	DensityMatrix reduced_rho(num_remaining_qubits);
@@ -75,7 +83,7 @@ DensityMatrix DensityMatrix::partial_trace_density_matrix(const std::vector<uint
 			for (uint32_t n = 0; n < s; n++) {
 				for (uint32_t k = 0; k < num_traced_qubits; k++) {
 					// Set bits in (i,j) corresponding to traced qubits
-					uint32_t q = traced_qubits[k];
+					uint32_t q = qubits[k];
 					i = quantumstate_utils::set_bit(i, q, n, k);
 					j = quantumstate_utils::set_bit(j, q, n, k);
 				}
@@ -89,11 +97,11 @@ DensityMatrix DensityMatrix::partial_trace_density_matrix(const std::vector<uint
 }
 
 // TODO make sure that this is a move
-std::shared_ptr<QuantumState> DensityMatrix::partial_trace(const std::vector<uint32_t>& qubits) const {
+std::shared_ptr<QuantumState> DensityMatrix::partial_trace(const Qubits& qubits) const {
   return std::make_shared<DensityMatrix>(std::move(partial_trace_density_matrix(qubits)));
 }
 
-double DensityMatrix::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
+double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
 	// If number of qubits is larger than half the system, take advantage of the fact that 
 	// S_A = S_\bar{A} to compute entropy for the smaller of A and \bar{A}
 	if (qubits.size() > num_qubits/2) {
@@ -160,7 +168,7 @@ std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m) const
   size_t c = m.cols();
 
   if ((r != c) || (1u << num_qubits != r)) {
-    throw std::runtime_error(fmt::format("Provided {}x{} cannot be multiplied by DensityMatrix of {} qubits.", r, c, num_qubits));
+    throw std::runtime_error(fmt::format("Expectation of provided {}x{} matrix cannot be calculated for DensityMatrix of {} qubits.", r, c, num_qubits));
   }
 
   return (data * m).trace();

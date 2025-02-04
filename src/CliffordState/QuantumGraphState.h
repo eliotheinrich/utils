@@ -48,8 +48,8 @@ class QuantumGraphState : public CliffordState {
     Graph<> graph;
 
     QuantumGraphState()=default;
-    QuantumGraphState(uint32_t num_qubits, int seed=-1);
-    QuantumGraphState(Graph<> &graph, int seed=-1);
+    QuantumGraphState(uint32_t num_qubits);
+    QuantumGraphState(Graph<> &graph);
 
     QuantumCHPState to_chp() const;
     Statevector to_statevector() const;
