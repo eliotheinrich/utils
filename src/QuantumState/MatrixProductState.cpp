@@ -1,6 +1,5 @@
 #include "QuantumStates.h"
 
-#include <MacTypes.h>
 #include <memory>
 #include <sstream>
 #include <random>
@@ -422,7 +421,6 @@ class MatrixProductStateImpl {
       external_indices = other.external_indices;
     }
 
-    // TODO fix
     static MatrixProductStateImpl from_mps(const MPS& mps_, size_t bond_dimension, double sv_threshold) {
       size_t num_qubits = mps_.length();
       MatrixProductStateImpl vidal_mps(num_qubits, bond_dimension, sv_threshold);
