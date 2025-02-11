@@ -216,10 +216,7 @@ class PauliString {
 
     static PauliString randh(uint32_t num_qubits, std::minstd_rand& rng) {
       PauliString p = PauliString::rand(num_qubits, rng);
-
-      if (!p.hermitian()) {
-        p.set_r(p.get_r() + 1);
-      }
+      p.set_r(p.get_r() + p.get_r() & 0b1);
 
       return p;
     }

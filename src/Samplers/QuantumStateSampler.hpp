@@ -53,7 +53,6 @@ class QuantumStateSampler {
 
       sample_magic_mutual_information = dataframe::utils::get<int>(params, "sample_magic_mutual_information", false);
       if (sample_magic_mutual_information) {
-        save_mmi_samples = dataframe::utils::get<int>(params, "save_mmi_samples", false);
         magic_mutual_information_subsystem_size = dataframe::utils::get<int>(params, "magic_mutual_information_subsystem_size", system_size/4);
         if (magic_mutual_information_subsystem_size > system_size/2) {
           throw std::runtime_error(fmt::format("magic_mutual_information_subsystem_size = {}, but system_size = {}", magic_mutual_information_subsystem_size, system_size));
@@ -63,6 +62,9 @@ class QuantumStateSampler {
       }
 
       sample_bipartite_magic_mutual_information = dataframe::utils::get<int>(params, "sample_bipartite_magic_mutual_information", false);
+      if (sample_magic_mutual_information || sample_bipartite_magic_mutual_information) {
+        save_mmi_samples = dataframe::utils::get<int>(params, "save_mmi_samples", false);
+      }
     }
 
     ~QuantumStateSampler()=default;
