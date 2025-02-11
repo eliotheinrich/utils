@@ -7,9 +7,9 @@
 #include <fmt/ranges.h>
 
 
-bool qargs_unique(const std::vector<uint32_t>& qargs) {
+bool qargs_unique(const Qubits& qubits) {
   std::unordered_set<uint32_t> unique;
-  for (auto const &q : qargs) {
+  for (auto const &q : qubits) {
     if (unique.count(q) > 0) {
       return false;
     }
@@ -19,30 +19,30 @@ bool qargs_unique(const std::vector<uint32_t>& qargs) {
   return true;
 }
 
-std::vector<uint32_t> parse_qargs_opt(const std::optional<std::vector<uint32_t>>& qargs_opt, uint32_t num_qubits) {
-  std::vector<uint32_t> qargs;
-  if (qargs_opt.has_value()) {
-    qargs = qargs_opt.value();
-    for (uint32_t i = 0; i < qargs.size(); i++) {
-      if (!(qargs[i] >= 0 && qargs[i] < num_qubits)) {
-        throw std::runtime_error(fmt::format("Provided qargs outside of acceptable range: {}", qargs));
+Qubits parse_qargs_opt(const std::optional<Qubits>& qubits_opt, uint32_t num_qubits) {
+  Qubits qubits;
+  if (qubits_opt.has_value()) {
+    qubits = qubits_opt.value();
+    for (uint32_t i = 0; i < qubits.size(); i++) {
+      if (!(qubits[i] >= 0 && qubits[i] < num_qubits)) {
+        throw std::runtime_error(fmt::format("Provided qubits outside of acceptable range: {}", qubits));
       }
     }
   } else {
-    qargs = std::vector<uint32_t>(num_qubits);
-    std::iota(qargs.begin(), qargs.end(), 0);
+    qubits = Qubits(num_qubits);
+    std::iota(qubits.begin(), qubits.end(), 0);
   }
 
-  return qargs;
+  return qubits;
 }
 
-std::vector<uint32_t> complement(const std::vector<uint32_t>& sites, size_t num_qubits) {
-  std::vector<uint32_t> sites_(sites.size());
-  for (size_t i = 0; i < sites.size(); i++) {
-    sites_[i] = num_qubits - sites[i] - 1;
+Qubits complement(const Qubits& qubits, size_t num_qubits) {
+  Qubits qubits_(qubits.size());
+  for (size_t i = 0; i < qubits.size(); i++) {
+    qubits_[i] = num_qubits - qubits[i] - 1;
   }
 
-  return sites_;
+  return qubits_;
 }
 
 std::pair<uint32_t, uint32_t> get_targets(uint32_t d, uint32_t q, uint32_t num_qubits) {
@@ -110,7 +110,7 @@ Eigen::MatrixXcd random_real_unitary() {
   return random_real_unitary(gen);
 }
 
-Eigen::MatrixXcd full_circuit_unitary(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits, uint32_t total_qubits) {
+Eigen::MatrixXcd full_circuit_unitary(const Eigen::MatrixXcd &gate, const Qubits &qubits, uint32_t total_qubits) {
   if (total_qubits < qubits.size()) {
     throw std::invalid_argument("Too many qubits provided for gate.");
   }

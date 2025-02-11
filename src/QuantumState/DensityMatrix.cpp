@@ -18,9 +18,14 @@ DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qu
 	data = rho.data;
 }
 
-DensityMatrix::DensityMatrix(const MatrixProductState& mps) : DensityMatrix(Statevector(mps)) {}
-
-DensityMatrix::DensityMatrix(const MatrixProductMixedState& mpo) : DensityMatrix(mpo.coefficients()) {}
+DensityMatrix::DensityMatrix(const MatrixProductState& mps) : QuantumState(mps.num_qubits) {
+  if (mps.is_pure_state()) {
+    Statevector state(mps.coefficients_pure());
+	  data = Eigen::kroneckerProduct(state.data.adjoint(), state.data);
+  } else {
+    data = mps.coefficients_mixed();
+  }
+}
 
 DensityMatrix::DensityMatrix(const Eigen::MatrixXcd& data) : data(data) {
   size_t nrows = data.rows();
@@ -44,15 +49,15 @@ std::string DensityMatrix::to_string() const {
 }
 
 DensityMatrix DensityMatrix::partial_trace_density_matrix(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
+  auto interval = support_range(qubits);
   if (interval) {
     auto [q1, q2] = interval.value();
-    if (q1 < 0 || q2 >= num_qubits) {
+    if (q1 < 0 || q2 > num_qubits) {
       throw std::runtime_error(fmt::format("qubits = {} passed to DensityMatrix.partial_trace with {} qubits", qubits, num_qubits));
     }
   }
   
-	std::vector<uint32_t> remaining_qubits;
+	Qubits remaining_qubits;
 	for (uint32_t q = 0; q < num_qubits; q++) {
 		if (!std::count(qubits.begin(), qubits.end(), q)) {
 			remaining_qubits.push_back(q);
@@ -105,7 +110,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t inde
 	// If number of qubits is larger than half the system, take advantage of the fact that 
 	// S_A = S_\bar{A} to compute entropy for the smaller of A and \bar{A}
 	if (qubits.size() > num_qubits/2) {
-		std::vector<uint32_t> qubits_complement;
+		Qubits qubits_complement;
     std::vector<bool> mask(num_qubits, true);
     for (const auto q : qubits) {
       mask[q] = false;
@@ -120,7 +125,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t inde
 		return entropy(qubits_complement, index);
 	}
 
-	std::vector<uint32_t> traced_qubits;
+	Qubits traced_qubits;
 	for (uint32_t q = 0; q < num_qubits; q++) {
 		if (!std::count(qubits.begin(), qubits.end(), q)) {
 			traced_qubits.push_back(q);
@@ -153,12 +158,16 @@ double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t inde
 	}
 }
 
-double DensityMatrix::expectation(const PauliString &p) const {
+std::complex<double> DensityMatrix::expectation(const PauliString &p) const {
+  if (p.num_qubits == 0) {
+    return 1.0;
+  }
+
   Eigen::MatrixXcd P = p.to_matrix();
-  return expectation(P).real();
+  return expectation(P);
 }
 
-std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) const {
+std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const {
   Eigen::MatrixXcd M = full_circuit_unitary(m, qubits, num_qubits);
   return expectation(M);
 }
@@ -178,17 +187,17 @@ void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {
 	data = gate * data * gate.adjoint();
 }
 
-void DensityMatrix::evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) {
-	evolve(full_circuit_unitary(gate, qbits, num_qubits));
+void DensityMatrix::evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+	evolve(full_circuit_unitary(gate, qubits, num_qubits));
 }
 
 void DensityMatrix::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
 	QuantumState::evolve(gate, qubit);
 }
 
-void DensityMatrix::evolve_diagonal(const Eigen::VectorXcd& gate, const std::vector<uint32_t>& qbits) {
+void DensityMatrix::evolve_diagonal(const Eigen::VectorXcd& gate, const Qubits& qubits) {
 	uint32_t s = 1u << num_qubits;
-	uint32_t h = 1u << qbits.size();
+	uint32_t h = 1u << qubits.size();
 
 	if (gate.size() != h) {
 		throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
@@ -196,8 +205,8 @@ void DensityMatrix::evolve_diagonal(const Eigen::VectorXcd& gate, const std::vec
 
 	for (uint32_t a1 = 0; a1 < s; a1++) {
 		for (uint32_t a2 = 0; a2 < s; a2++) {
-			uint32_t b1 = quantumstate_utils::reduce_bits(a1, qbits);
-			uint32_t b2 = quantumstate_utils::reduce_bits(a2, qbits);
+			uint32_t b1 = quantumstate_utils::reduce_bits(a1, qubits);
+			uint32_t b2 = quantumstate_utils::reduce_bits(a2, qubits);
 
 			data(a1, a2) *= gate(b1)*std::conj(gate(b2));
 		}
@@ -245,7 +254,7 @@ std::vector<bool> DensityMatrix::mzr_all() {
 	return std::vector<bool>(num_qubits, 0);
 }
 
-bool DensityMatrix::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+bool DensityMatrix::measure(const PauliString& p, const Qubits& qubits) {
   PauliString p_ = p.superstring(qubits, num_qubits);
   Eigen::MatrixXcd matrix = p_.to_matrix();
   Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);

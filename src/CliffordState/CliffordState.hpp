@@ -48,7 +48,7 @@ class CliffordState : public EntropyState {
 
     virtual ~CliffordState() {}
 
-    void evolve(const QuantumCircuit& qc, const std::vector<uint32_t>& qubits) {
+    void evolve(const QuantumCircuit& qc, const Qubits& qubits) {
       if (qubits.size() != qc.num_qubits) {
         throw std::runtime_error("Provided qubits do not match size of circuit.");
       }
@@ -76,31 +76,31 @@ class CliffordState : public EntropyState {
           std::string name = gate->label();
 
           if (name == "H") {
-            h(gate->qbits[0]);
+            h(gate->qubits[0]);
           } else if (name == "S") {
-            s(gate->qbits[0]);
+            s(gate->qubits[0]);
           } else if (name == "Sd") {
-            sd(gate->qbits[0]);
+            sd(gate->qubits[0]);
           } else if (name == "CX") {
-            cx(gate->qbits[0], gate->qbits[1]);
+            cx(gate->qubits[0], gate->qubits[1]);
           } else if (name == "X") {
-            x(gate->qbits[0]);
+            x(gate->qubits[0]);
           } else if (name == "Y") {
-            y(gate->qbits[0]);
+            y(gate->qubits[0]);
           } else if (name == "Z") {
-            z(gate->qbits[0]);
+            z(gate->qubits[0]);
           } else if (name == "CY") {
-            cy(gate->qbits[0], gate->qbits[1]);
+            cy(gate->qubits[0], gate->qubits[1]);
           } else if (name == "CZ") {
-            cz(gate->qbits[0], gate->qbits[1]);
+            cz(gate->qubits[0], gate->qubits[1]);
           } else if (name == "SWAP") {
-            swap(gate->qbits[0], gate->qbits[1]);
+            swap(gate->qubits[0], gate->qubits[1]);
           } else {
             throw std::runtime_error(std::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
           }
 				},
 				[this](Measurement m) { 
-					for (auto const &q : m.qbits) {
+					for (auto const &q : m.qubits) {
 						mzr(q);
 					}
 				},
@@ -268,7 +268,7 @@ class CliffordState : public EntropyState {
       return outcome;
     }
 
-    virtual void random_clifford(std::vector<uint32_t> &qubits)=0;
+    virtual void random_clifford(const Qubits& qubits)=0;
 
     virtual std::string to_string() const=0;
 

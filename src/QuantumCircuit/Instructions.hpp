@@ -11,22 +11,24 @@
 #include <memory>
 #include <assert.h>
 
-#include "CircuitUtils.h"
-
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
+#include "CircuitUtils.h"
 #include "QuantumState/utils.hpp"
 
 // --- Definitions for gates/measurements --- //
 
 class Gate {
   public:
-    std::vector<uint32_t> qbits;
+    Qubits qubits;
     uint32_t num_qubits;
 
-    Gate(const std::vector<uint32_t>& qbits)
-      : qbits(qbits), num_qubits(qbits.size()) {
-        //assert(qargs_unique(qbits));
+    Gate(const Qubits& qubits)
+      : qubits(qubits), num_qubits(qubits.size()) {
+        if (!qargs_unique(qubits)) {
+          throw std::runtime_error(fmt::format("Qubits {} provided to gate not unique.", qubits));
+        }
       }
 
     virtual uint32_t num_params() const=0;
@@ -262,14 +264,14 @@ class SymbolicGate : public Gate {
   public:
     SymbolicGate::GateLabel type;
 
-    SymbolicGate(SymbolicGate::GateLabel type, const std::vector<uint32_t>& qbits) : Gate(qbits), type(type) {
-      if (num_qubits_for_gate(type) != qbits.size()) {
+    SymbolicGate(SymbolicGate::GateLabel type, const Qubits& qubits) : Gate(qubits), type(type) {
+      if (num_qubits_for_gate(type) != qubits.size()) {
         throw std::runtime_error("Invalid qubits provided to SymbolicGate.");
       }
     }
 
-    SymbolicGate(const char* name, const std::vector<uint32_t>& qbits) : SymbolicGate(parse_gate(name), qbits) { }
-    SymbolicGate(const std::string& name, const std::vector<uint32_t>& qbits) : SymbolicGate(name.c_str(), qbits) { }
+    SymbolicGate(const char* name, const Qubits& qubits) : SymbolicGate(parse_gate(name), qubits) { }
+    SymbolicGate(const std::string& name, const Qubits& qubits) : SymbolicGate(name.c_str(), qubits) { }
 
     virtual bool is_clifford() const override {
       return SymbolicGate::clifford_gates.contains(type);
@@ -299,11 +301,11 @@ class SymbolicGate : public Gate {
         new_type = type;
       }
       
-      return std::shared_ptr<Gate>(new SymbolicGate(new_type, qbits));
+      return std::shared_ptr<Gate>(new SymbolicGate(new_type, qubits));
     }
 
     virtual std::shared_ptr<Gate> clone() override {
-      return std::shared_ptr<Gate>(new SymbolicGate(type, qbits)); 
+      return std::shared_ptr<Gate>(new SymbolicGate(type, qubits)); 
     }
 };
 
@@ -312,11 +314,11 @@ class MatrixGate : public Gate {
     Eigen::MatrixXcd data;
     std::string label_str;
 
-    MatrixGate(const Eigen::MatrixXcd& data, const std::vector<uint32_t>& qbits, const std::string& label_str)
-      : Gate(qbits), data(data), label_str(label_str) {}
+    MatrixGate(const Eigen::MatrixXcd& data, const Qubits& qubits, const std::string& label_str)
+      : Gate(qubits), data(data), label_str(label_str) {}
 
-    MatrixGate(const Eigen::MatrixXcd& data, const std::vector<uint32_t>& qbits)
-      : MatrixGate(data, qbits, "U") {}
+    MatrixGate(const Eigen::MatrixXcd& data, const Qubits& qubits)
+      : MatrixGate(data, qubits, "U") {}
 
 
     virtual uint32_t num_params() const override {
@@ -336,7 +338,7 @@ class MatrixGate : public Gate {
     }
 
     virtual std::shared_ptr<Gate> adjoint() const override {
-      return std::shared_ptr<Gate>(new MatrixGate(data.adjoint(), qbits));
+      return std::shared_ptr<Gate>(new MatrixGate(data.adjoint(), qubits));
     }
 
     virtual bool is_clifford() const override {
@@ -345,13 +347,13 @@ class MatrixGate : public Gate {
     }
 
     virtual std::shared_ptr<Gate> clone() override { 
-      return std::shared_ptr<Gate>(new MatrixGate(data, qbits)); 
+      return std::shared_ptr<Gate>(new MatrixGate(data, qubits)); 
     }
 };
 
 struct Measurement {
-  std::vector<uint32_t> qbits;
-  Measurement(const std::vector<uint32_t>& qbits) : qbits(qbits) {}
+  Qubits qubits;
+  Measurement(const Qubits& qubits) : qubits(qubits) {}
 };
 
 typedef std::variant<std::shared_ptr<Gate>, Measurement> Instruction;
@@ -362,7 +364,7 @@ static Instruction copy_instruction(const Instruction& inst) {
       return Instruction(gate->clone());
     },
     [](Measurement m) {
-      return Instruction(Measurement(m.qbits));
+      return Instruction(Measurement(m.qubits));
     }
   }, inst);
 }

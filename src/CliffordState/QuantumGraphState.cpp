@@ -154,8 +154,8 @@ Statevector QuantumGraphState::to_statevector() const {
   for (uint32_t i = 0; i < num_qubits; i++) {
     for (auto j : graph.neighbors(i)) {
       if (j < i) {
-        std::vector<uint32_t> qbits{i,j};
-        state.evolve(static_cast<Eigen::MatrixXcd>(CZ), qbits);
+        Qubits qubits{i,j};
+        state.evolve(static_cast<Eigen::MatrixXcd>(CZ), qubits);
       }
     }
   }
@@ -369,7 +369,7 @@ void QuantumGraphState::cz(uint32_t a, uint32_t b) {
   }
 }
 
-void QuantumGraphState::random_clifford(std::vector<uint32_t> &qubits) {
+void QuantumGraphState::random_clifford(const Qubits& qubits) {
   random_clifford_impl(qubits, rng, *this);
 }
 
@@ -438,7 +438,7 @@ uint32_t QuantumGraphState::distance(const QuantumGraphState& other) const {
   return s;
 }
 
-double QuantumGraphState::graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph) {
+double QuantumGraphState::graph_state_entropy(const Qubits& qubits, Graph<>& graph) {
   Graph<int, bool> bipartite_graph = graph.partition(qubits);
   int s = 2*bipartite_graph.num_vertices;
   for (uint32_t i = 0; i < bipartite_graph.num_vertices; i++) {

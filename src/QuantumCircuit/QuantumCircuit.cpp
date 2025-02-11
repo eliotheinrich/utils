@@ -10,7 +10,7 @@ std::string QuantumCircuit::to_string() const {
 		s += std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> std::string {
 				std::string gate_str = gate->label() + " ";
-				for (auto const &q : gate->qbits) {
+				for (auto const &q : gate->qubits) {
 					gate_str += fmt::format("{} ", q);
 				}
 
@@ -18,7 +18,7 @@ std::string QuantumCircuit::to_string() const {
 			},
 			[](Measurement m) -> std::string {
 				std::string meas_str = "mzr ";
-				for (auto const &q : m.qbits) {
+				for (auto const &q : m.qubits) {
 					meas_str += fmt::format("{} ", q);
 				}
 
@@ -71,24 +71,24 @@ bool QuantumCircuit::contains_measurement() const {
   return false;
 }
 
-void QuantumCircuit::apply_qubit_map(const std::vector<uint32_t>& qubits) {
+void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
   for (auto inst : instructions) {
 		std::visit(quantumcircuit_utils::overloaded {
 			[&qubits](std::shared_ptr<Gate> gate) {
-        std::vector<uint32_t> _qbits(gate->num_qubits);
+        Qubits _qubits(gate->num_qubits);
         for (size_t q = 0; q < gate->num_qubits; q++) {
-          _qbits[q] = qubits[gate->qbits[q]];
+          _qubits[q] = qubits[gate->qubits[q]];
         }
 
-        gate->qbits = _qbits;
+        gate->qubits = _qubits;
 			},
 			[&qubits](Measurement m) { 
-        std::vector<uint32_t> _qbits(m.qbits.size());
-        for (size_t q = 0; q < m.qbits.size(); q++) {
-          _qbits[q] = qubits[m.qbits[q]];
+        Qubits _qubits(m.qubits.size());
+        for (size_t q = 0; q < m.qubits.size(); q++) {
+          _qubits[q] = qubits[m.qubits[q]];
         }
 
-        m.qbits = _qbits;
+        m.qubits = _qubits;
       }
 		}, inst);
   }
@@ -100,12 +100,12 @@ void QuantumCircuit::add_instruction(const Instruction& inst) {
 }
 
 void QuantumCircuit::add_measurement(uint32_t qubit) {
-	std::vector<uint32_t> qargs{qubit};
-	add_measurement(qargs);
+	Qubits qubits{qubit};
+	add_measurement(qubits);
 }
 
-void QuantumCircuit::add_measurement(const std::vector<uint32_t>& qargs) {
-	add_measurement(Measurement(qargs));
+void QuantumCircuit::add_measurement(const Qubits& qubits) {
+	add_measurement(Measurement(qubits));
 }
 
 void QuantumCircuit::add_measurement(const Measurement& m) {
@@ -116,21 +116,21 @@ void QuantumCircuit::add_gate(const std::shared_ptr<Gate> &gate) {
 	add_instruction(gate);
 }
 
-void QuantumCircuit::add_gate(const std::string& name, const std::vector<uint32_t>& qbits) {
-  add_gate(std::shared_ptr<Gate>(new SymbolicGate(name, qbits)));
+void QuantumCircuit::add_gate(const std::string& name, const Qubits& qubits) {
+  add_gate(std::shared_ptr<Gate>(new SymbolicGate(name, qubits)));
 }
 
-void QuantumCircuit::add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits) {
-	if (!(gate.rows() == (1u << qbits.size()) && gate.cols() == (1u << qbits.size()))) {
+void QuantumCircuit::add_gate(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+	if (!(gate.rows() == (1u << qubits.size()) && gate.cols() == (1u << qubits.size()))) {
 		throw std::invalid_argument("Provided matrix does not have proper dimensions for number of qubits in circuit.");
 	}
 
-	add_gate(std::make_shared<MatrixGate>(gate, qbits));
+	add_gate(std::make_shared<MatrixGate>(gate, qubits));
 }
 
 void QuantumCircuit::add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit) {
-	std::vector<uint32_t> qbits{qubit};
-	add_gate(gate, qbits);
+	Qubits qubits{qubit};
+	add_gate(gate, qubits);
 }
 
 void QuantumCircuit::append(const QuantumCircuit& other) {
@@ -142,14 +142,14 @@ void QuantumCircuit::append(const QuantumCircuit& other) {
 	}
 }
 
-void QuantumCircuit::append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits) {
-  if (qbits.size() != other.num_qubits) {
+void QuantumCircuit::append(const QuantumCircuit& other, const Qubits& qubits) {
+  if (qubits.size() != other.num_qubits) {
     throw std::invalid_argument("Cannot append QuantumCircuits; numbers of qubits do not match.");
   }
 
   QuantumCircuit qc_extended(other);
   qc_extended.resize(num_qubits);
-  qc_extended.apply_qubit_map(qbits);
+  qc_extended.apply_qubit_map(qubits);
 
   append(qc_extended);
 }
@@ -176,7 +176,7 @@ QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) co
 				}
 			
 				n += gate->num_params();
-				qc.add_gate(gate->define(gate_params), gate->qbits);
+				qc.add_gate(gate->define(gate_params), gate->qubits);
 			},
 			[&qc](Measurement m) { qc.add_measurement(m); }
 		}, inst);
@@ -185,7 +185,7 @@ QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) co
 	return qc;
 }
 
-void QuantumCircuit::random_clifford(const std::vector<uint32_t>& qubits, std::minstd_rand& rng) {
+void QuantumCircuit::random_clifford(const Qubits& qubits, std::minstd_rand& rng) {
   random_clifford_impl(qubits, rng, *this);
 }
 
@@ -271,7 +271,7 @@ Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<doubl
 
 		for (uint32_t i = 0; i < instructions.size(); i++) {
 			std::visit(quantumcircuit_utils::overloaded {
-				[&Q, p](std::shared_ptr<Gate> gate) { Q = full_circuit_unitary(gate->define(), gate->qbits, p) * Q; },
+				[&Q, p](std::shared_ptr<Gate> gate) { Q = full_circuit_unitary(gate->define(), gate->qubits, p) * Q; },
 				[](Measurement m) { throw std::invalid_argument("Cannot convert measurement to matrix."); }
 			}, instructions[i]);
 		}
@@ -323,14 +323,14 @@ QuantumCircuit hardware_efficient_ansatz(
 			auto [q1, q2] = get_targets(i, q, num_qubits);
 
 			for (auto const &s : rotation_gates) {
-				auto gate = parse_gate(s, std::vector<uint32_t>{q1});
+				auto gate = parse_gate(s, Qubits{q1});
 				assert(gate->num_qubits == 1);
 				circuit.add_gate(gate);
-				gate = parse_gate(s, std::vector<uint32_t>{q2});
+				gate = parse_gate(s, Qubits{q2});
 				circuit.add_gate(gate);
 			}
 
-			auto entangler = parse_gate(entangling_gate, std::vector<uint32_t>{q1, q2});
+			auto entangler = parse_gate(entangling_gate, Qubits{q1, q2});
 			assert(entangler->num_qubits == 2);
 			circuit.add_gate(entangler);
 		}
@@ -339,7 +339,7 @@ QuantumCircuit hardware_efficient_ansatz(
 	if (final_layer) {
 		for (uint32_t q = 0; q < num_qubits; q++) {
 			for (auto const &s : rotation_gates) {
-				auto gate = parse_gate(s, std::vector<uint32_t>{q});
+				auto gate = parse_gate(s, Qubits{q});
 				assert(gate->num_qubits == 1);
 				circuit.add_gate(gate);
 			}
@@ -349,13 +349,13 @@ QuantumCircuit hardware_efficient_ansatz(
 	return circuit;
 }
 
-QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<std::vector<uint32_t>>& qargs_opt) {
-	auto qargs = parse_qargs_opt(qargs_opt, num_qubits);
+QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<Qubits>& qubits_opt) {
+	auto qubits = parse_qargs_opt(qubits_opt, num_qubits);
 
 	QuantumCircuit circuit(num_qubits);
 	
-	for (auto const& q : qargs) {
-		circuit.add_gate(std::make_shared<RxRotationGate>(std::vector<uint32_t>{q}));
+	for (auto const& q : qubits) {
+		circuit.add_gate(std::make_shared<RxRotationGate>(Qubits{q}));
 	}
 	
 	return circuit;
@@ -364,7 +364,7 @@ QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<std::vect
 QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng) {
   QuantumCircuit qc(num_qubits);
 
-  std::vector<uint32_t> qubits(num_qubits);
+  Qubits qubits(num_qubits);
   std::iota(qubits.begin(), qubits.end(), 0);
   random_clifford_impl(qubits, rng, qc);
 

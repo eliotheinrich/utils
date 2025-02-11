@@ -198,9 +198,6 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<MatrixProductOperator, QuantumState>(m, "MatrixProductOperator")
-    .def(nanobind::init<const MatrixProductState&, const std::vector<uint32_t>&>());
-
   m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
 
   nanobind::class_<EntropyState>(m, "EntropyState");

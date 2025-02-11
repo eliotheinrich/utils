@@ -24,12 +24,49 @@ enum Pauli {
   I, X, Z, Y
 };
 
-constexpr static Pauli operator*(Pauli p1, Pauli p2) {
-  return static_cast<Pauli>(static_cast<int>(p1) ^ static_cast<int>(p2));
+static int multiplication_phase(uint8_t xz1, uint8_t xz2) {
+  bool x1 = (xz1 >> 0u) & 1u;
+  bool z1 = (xz1 >> 1u) & 1u;
+  bool x2 = (xz2 >> 0u) & 1u;
+  bool z2 = (xz2 >> 1u) & 1u;
+  if (!x1 && !z1) { 
+    return 0; 
+  } else if (x1 && z1) {
+    if (z2) { 
+      return x2 ? 0 : 1;
+    } else { 
+      return x2 ? -1 : 0;
+    }
+  } else if (x1 && !z1) {
+    if (z2) { 
+      return x2 ? 1 : -1;
+    } else { 
+      return 0; 
+    }
+  } else {
+    if (x2) {
+      return z2 ? -1 : 1;
+    } else { 
+      return 0; 
+    }
+  }
 }
 
-constexpr static void operator*=(Pauli& p1, Pauli& p2) {
-  p1 = p1 * p2;
+constexpr static std::pair<Pauli, uint8_t> multiply_pauli(Pauli p1, Pauli p2) {
+  uint8_t p1_bits = static_cast<uint8_t>(p1);
+  uint8_t p2_bits = static_cast<uint8_t>(p2);
+
+  int phase = multiplication_phase(p1_bits, p2_bits);
+  uint8_t phase_bits = 0b10; // 2 -> -1 (should never happen in this context)
+  if (phase == 0) {
+    phase_bits = 0b00; // 0 -> 1
+  } else if (phase == -1) {
+    phase_bits = 0b11; // 3 -> -i
+  } else if (phase == 1) {
+    phase_bits = 0b01; // 1 -> i
+  }
+
+  return {static_cast<Pauli>(p1_bits ^ p2_bits), phase_bits};
 }
 
 static char pauli_to_char(Pauli p) {
@@ -46,51 +83,24 @@ static char pauli_to_char(Pauli p) {
   throw std::runtime_error("Unreachable.");
 }
 
-using QubitInterval = std::optional<std::pair<uint32_t, uint32_t>>;
-using Qubits = std::vector<uint32_t>;
-using QubitSupport = std::variant<Qubits, QubitInterval>;
-
-static QubitInterval to_interval(const QubitSupport& support) {
-  return std::visit(quantumcircuit_utils::overloaded {
-    [](const QubitInterval& interval) -> QubitInterval {
-      return interval;
-    },
-    [](const Qubits& qubits) -> QubitInterval {
-      if (qubits.size() == 0) {
-        return std::nullopt;
-      }
-      auto [min_it, max_it] = std::minmax_element(qubits.begin(), qubits.end());
-      return std::make_pair(*min_it, *max_it);
-    }
-  }, support);
+constexpr static std::complex<double> sign_from_bits(uint8_t phase) {
+  constexpr std::complex<double> i(0.0, 1.0);
+  if (phase == 0) {
+    return 1.0;
+  } else if (phase == 1) {
+    return i;
+  } else if (phase == 2) {
+    return -1.0;
+  } else {
+    return -i;
+  }
 }
 
-static Qubits to_qubits(const QubitSupport& support) {
-  return std::visit(quantumcircuit_utils::overloaded {
-    [](const QubitInterval& interval) -> Qubits {
-      if (interval) {
-        auto interval_ = interval.value();
-        uint32_t q1 = std::min(interval_.first, interval_.second);
-        uint32_t q2 = std::max(interval_.first, interval_.second);
-        size_t num_qubits = q2 - q1;
-        std::vector<uint32_t> qubits(num_qubits);
-        std::iota(qubits.begin(), qubits.end(), q1);
-        return qubits;
-      } else {
-        return {};
-      }
-    },
-    [](const Qubits& qubits) -> Qubits {
-      return qubits;
-    }
-  }, support);
-}
-
-
+// TODO fix segfault when gate is applied to 0-qubit PauliString
 class PauliString {
   public:
     uint32_t num_qubits;
-    bool phase;
+    uint8_t phase;
 
     // Store bitstring as an array of 32-bit words
     // The bits are formatted as:
@@ -103,7 +113,7 @@ class PauliString {
     uint32_t width;
 
     PauliString()=default;
-    PauliString(uint32_t num_qubits) : num_qubits(num_qubits), phase(false) {
+    PauliString(uint32_t num_qubits) : num_qubits(num_qubits), phase(0) {
       width = (2u*num_qubits) / 32 + static_cast<bool>((2u*num_qubits) % 32);
       bit_string = std::vector<uint32_t>(width, 0);
     }
@@ -119,39 +129,61 @@ class PauliString {
       uint32_t num_qubits = paulis.size();
       if (paulis[0] == '+' || paulis[0] == '-') {
         num_qubits--;
+
+        if (paulis[1] == 'i') {
+          num_qubits--;
+        }
       }
       return num_qubits;
     }
 
-    PauliString(const std::string& paulis) : PauliString(process_pauli_string(paulis)) {
-      std::string s = paulis;
-      if (s[0] == '-') {
-        phase = true;
-        s = s.substr(1);
-      } else if (s[0] == '+') {
-        s = s.substr(1);
+    static inline uint8_t parse_phase(std::string& s) {
+      if (s.rfind("+", 0) == 0) {
+        if (s.rfind("+i", 0) == 0) {
+          s = s.substr(2);
+          return 1;
+        } else {
+          s = s.substr(1);
+          return 0;
+        }
+      } else if (s.rfind("-", 0) == 0) {
+        if (s.rfind("-i", 0) == 0) {
+          s = s.substr(2);
+          return 3;
+        } else {
+          s = s.substr(1);
+          return 2;
+        }
       }
 
+      return 0;
+    }
+
+    PauliString(const std::string& paulis) : PauliString(process_pauli_string(paulis)) {
+      std::string s = paulis;
+      phase = parse_phase(s);
+
       for (size_t i = 0; i < num_qubits; i++) {
-        if (std::toupper(s[i]) == 'I') {
+        if (s[i] == 'I') {
           set_x(i, false);
           set_z(i, false);
-        } else if (std::toupper(s[i]) == 'X') {
+        } else if (s[i] == 'X') {
           set_x(i, true);
           set_z(i, false);
-        } else if (std::toupper(s[i]) == 'Y') {
+        } else if (s[i] == 'Y') {
           set_x(i, true);
           set_z(i, true);
-        } else if (std::toupper(s[i]) == 'Z') {
+        } else if (s[i] == 'Z') {
           set_x(i, false);
           set_z(i, true);
         } else {
+          std::cout << fmt::format("character {} not recognized\n", s[i]);
           throw std::runtime_error(fmt::format("Invalid string {} used to create PauliString.", paulis));
         }
       }
     }
 
-    PauliString(const std::vector<Pauli>& paulis, bool phase=false) : PauliString(paulis.size()) { 
+    PauliString(const std::vector<Pauli>& paulis, uint8_t phase=0) : PauliString(paulis.size()) { 
       for (size_t i = 0; i < paulis.size(); i++) {
         set_op(i, paulis[i]);
       }
@@ -166,7 +198,7 @@ class PauliString {
         p.bit_string[j] = rng();
       }
 
-      p.set_r(rng() % 2);
+      p.set_r(rng() % 4);
 
       if (num_qubits == 0) {
         return p;
@@ -182,7 +214,17 @@ class PauliString {
       return PauliString::rand(num_qubits, rng);
     }
 
-    static PauliString basis(uint32_t num_qubits, const std::string& P, uint32_t q, bool r) {
+    static PauliString randh(uint32_t num_qubits, std::minstd_rand& rng) {
+      PauliString p = PauliString::rand(num_qubits, rng);
+
+      if (!p.hermitian()) {
+        p.set_r(p.get_r() + 1);
+      }
+
+      return p;
+    }
+
+    static PauliString basis(uint32_t num_qubits, const std::string& P, uint32_t q, uint8_t r) {
       PauliString p(num_qubits);
       if (P == "X") {
         p.set_x(q, true);
@@ -211,17 +253,17 @@ class PauliString {
       return PauliString::basis(num_qubits, P, q, false);
     }
 
-    PauliString substring(const std::vector<uint32_t>& sites, bool remove_qubits=false) const {
-      size_t n = remove_qubits ? sites.size() : num_qubits;
+    PauliString substring(const Qubits& qubits, bool remove_qubits=false) const {
+      size_t n = remove_qubits ? qubits.size() : num_qubits;
       PauliString p(n);
 
       if (remove_qubits) {
-        for (size_t i = 0; i < sites.size(); i++) {
-          p.set_x(i, get_x(sites[i]));
-          p.set_z(i, get_z(sites[i]));
+        for (size_t i = 0; i < qubits.size(); i++) {
+          p.set_x(i, get_x(qubits[i]));
+          p.set_z(i, get_z(qubits[i]));
         }
       } else {
-        for (const auto q : sites) {
+        for (const auto q : qubits) {
           p.set_x(q, get_x(q));
           p.set_z(q, get_z(q));
         }
@@ -235,13 +277,13 @@ class PauliString {
       return substring(to_qubits(support), remove_qubits);
     }
 
-    PauliString superstring(const std::vector<uint32_t>& sites, size_t new_num_qubits) const {
-      if (sites.size() != num_qubits) {
-        throw std::runtime_error(fmt::format("When constructing a superstring Pauli, provided sites must have same size as num_qubits. P = {}, sites = {}.", to_string_ops(), sites));
+    PauliString superstring(const Qubits& qubits, size_t new_num_qubits) const {
+      if (qubits.size() != num_qubits) {
+        throw std::runtime_error(fmt::format("When constructing a superstring Pauli, provided sites must have same size as num_qubits. P = {}, qubits = {}.", to_string_ops(), qubits));
       }
       std::vector<Pauli> paulis(new_num_qubits, Pauli::I);
       for (size_t i = 0; i < num_qubits; i++) {
-        uint32_t q = sites[i];
+        uint32_t q = qubits[i];
 
         paulis[q] = to_pauli(i);
       }
@@ -249,50 +291,18 @@ class PauliString {
       return PauliString(paulis, get_r());
     }
 
-    static int g(uint8_t xz1, uint8_t xz2) {
-      bool x1 = (xz1 >> 0u) & 1u;
-      bool z1 = (xz1 >> 1u) & 1u;
-      bool x2 = (xz2 >> 0u) & 1u;
-      bool z2 = (xz2 >> 1u) & 1u;
-      if (!x1 && !z1) { 
-        return 0; 
-      } else if (x1 && z1) {
-        if (z2) { 
-          return x2 ? 0 : 1;
-        } else { 
-          return x2 ? -1 : 0;
-        }
-      } else if (x1 && !z1) {
-        if (z2) { 
-          return x2 ? 1 : -1;
-        } else { 
-          return 0; 
-        }
-      } else {
-        if (x2) {
-          return z2 ? -1 : 1;
-        } else { 
-          return 0; 
-        }
-      }
-    }
-
-    static int get_multiplication_phase(const PauliString& p1, const PauliString& p2) {
-      int s = 0;
-
-      if (p1.get_r()) { 
-        s += 2; 
-      }
-
-      if (p2.get_r()) { 
-        s += 2; 
-      }
+    static uint8_t get_multiplication_phase(const PauliString& p1, const PauliString& p2) {
+      uint8_t s = p1.get_r() + p2.get_r();
 
       for (uint32_t j = 0; j < p1.num_qubits; j++) {
-        s += PauliString::g(p1.get_xz(j), p2.get_xz(j));
+        s += multiplication_phase(p1.get_xz(j), p2.get_xz(j));
       }
 
       return s;
+    }
+
+    bool hermitian() const {
+      return !(phase & 0b1); // mod 2
     }
 
     PauliString operator*(const PauliString& other) const {
@@ -300,13 +310,9 @@ class PauliString {
         throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
       }
 
-      int s = PauliString::get_multiplication_phase(*this, other);
       PauliString p(num_qubits);
-      if (s % 4 == 0) {
-        p.set_r(false);
-      } else if (std::abs(s % 4) == 2) {
-        p.set_r(true);
-      }
+
+      p.set_r(PauliString::get_multiplication_phase(*this, other));
 
       uint32_t width = other.width;
       for (uint32_t j = 0; j < width; j++) {
@@ -316,28 +322,23 @@ class PauliString {
       return p;
     }
 
-    PauliString& operator*=(const PauliString& other) {
-      if (num_qubits != other.num_qubits) {
-        throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
-      }
+    //PauliString& operator*=(const PauliString& other) {
+    //  if (num_qubits != other.num_qubits) {
+    //    throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
+    //  }
 
-      int s = PauliString::get_multiplication_phase(*this, other);
-      if (s % 4 == 0) {
-        set_r(false);
-      } else if (std::abs(s % 4) == 2) {
-        set_r(true);
-      }
+    //  set_r(PauliString::get_multiplication_phase(*this, other));
 
-      uint32_t width = other.width;
-      for (uint32_t j = 0; j < width; j++) {
-        bit_string[j] ^= other.bit_string[j];
-      }
+    //  uint32_t width = other.width;
+    //  for (uint32_t j = 0; j < width; j++) {
+    //    bit_string[j] ^= other.bit_string[j];
+    //  }
 
-      return *this;
-    }
+    //  return *this;
+    //}
 
     PauliString operator-() { 
-      set_r(!get_r());
+      set_r(get_r() + 2);
       return *this;
     }
 
@@ -406,8 +407,14 @@ class PauliString {
         g = Eigen::kroneckerProduct(gi, g0);
       }
 
-      if (phase) {
+      constexpr std::complex<double> i(0.0, 1.0);
+
+      if (phase == 1) {
+        g = i*g;
+      } else if (phase == 2) {
         g = -g;
+      } else if (phase == 3) {
+        g = -i*g;
       }
 
       return g;
@@ -434,7 +441,7 @@ class PauliString {
       return paulis;
     }
 
-    std::optional<std::pair<uint32_t, uint32_t>> get_qubit_support_range() const {
+    QubitInterval support_range() const {
       std::vector<Pauli> paulis = to_pauli();
       auto first = std::ranges::find_if(paulis, [&](Pauli pi) { return pi != Pauli::I; });
       auto last = std::ranges::find_if(paulis | std::views::reverse, [&](Pauli pi) { return pi != Pauli::I; });
@@ -448,8 +455,8 @@ class PauliString {
       }
     }
 
-    std::vector<uint32_t> get_support() const {
-      std::vector<uint32_t> support;
+    Qubits get_support() const {
+      Qubits support;
       for (size_t i = 0; i < num_qubits; i++) {
         if (to_pauli(i) != Pauli::I) {
           support.push_back(i);
@@ -474,6 +481,20 @@ class PauliString {
       }
     }
 
+    inline static std::string phase_to_string(uint8_t phase) {
+      if (phase == 0) {
+        return "+";
+      } else if (phase == 1) {
+        return "+i";
+      } else if (phase == 2) {
+        return "-";
+      } else if (phase == 3) {
+        return "-i";
+      }
+
+      throw std::runtime_error("Invalid phase bits passed to phase_to_string.");
+    }
+
     std::string to_string() const {
       std::string s = "[ ";
       for (uint32_t i = 0; i < num_qubits; i++) {
@@ -485,14 +506,14 @@ class PauliString {
       }
 
       s += " | ";
-
-      s += phase ? "1 ]" : "0 ]";
+      s += phase_to_string(phase);
+      s += " ]";
 
       return s;
     }
 
     std::string to_string_ops() const {
-      std::string s = phase ? "-" : "+";
+      std::string s = phase_to_string(phase);
 
       for (uint32_t i = 0; i < num_qubits; i++) {
         s += to_op(i);
@@ -521,37 +542,37 @@ class PauliString {
           std::string name = gate->label();
 
           if (name == "H") {
-            h(gate->qbits[0]);
+            h(gate->qubits[0]);
           } else if (name == "S") {
-            s(gate->qbits[0]);
+            s(gate->qubits[0]);
           } else if (name == "Sd") {
-            sd(gate->qbits[0]);
+            sd(gate->qubits[0]);
           } else if (name == "X") {
-            x(gate->qbits[0]);
+            x(gate->qubits[0]);
           } else if (name == "Y") {
-            y(gate->qbits[0]);
+            y(gate->qubits[0]);
           } else if (name == "Z") {
-            z(gate->qbits[0]);
+            z(gate->qubits[0]);
           } else if (name == "sqrtX") {
-            sqrtX(gate->qbits[0]);
+            sqrtX(gate->qubits[0]);
           } else if (name == "sqrtY") {
-            sqrtY(gate->qbits[0]);
+            sqrtY(gate->qubits[0]);
           } else if (name == "sqrtZ") {
-            sqrtZ(gate->qbits[0]);
+            sqrtZ(gate->qubits[0]);
           } else if (name == "sqrtXd") {
-            sqrtXd(gate->qbits[0]);
+            sqrtXd(gate->qubits[0]);
           } else if (name == "sqrtYd") {
-            sqrtYd(gate->qbits[0]);
+            sqrtYd(gate->qubits[0]);
           } else if (name == "sqrtZd") {
-            sqrtZd(gate->qbits[0]);
+            sqrtZd(gate->qubits[0]);
           } else if (name == "CX") {
-            cx(gate->qbits[0], gate->qbits[1]);
+            cx(gate->qubits[0], gate->qubits[1]);
           } else if (name == "CY") {
-            cy(gate->qbits[0], gate->qbits[1]);
+            cy(gate->qubits[0], gate->qubits[1]);
           } else if (name == "CZ") {
-            cz(gate->qbits[0], gate->qbits[1]);
+            cz(gate->qubits[0], gate->qubits[1]);
           } else if (name == "SWAP") {
-            swap(gate->qbits[0], gate->qbits[1]);
+            swap(gate->qubits[0], gate->qubits[1]);
           } else {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to PauliString.evolve.", name));
           }
@@ -567,9 +588,10 @@ class PauliString {
       bool xa = (xza >> 0u) & 1u;
       bool za = (xza >> 1u) & 1u;
 
-      bool r = phase;
+      uint8_t r = phase;
 
-      set_r(r != (xa && za));
+      constexpr uint8_t s_phase_lookup[] = {0, 0, 0, 2};
+      set_r(r + s_phase_lookup[xza]);
       set_z(a, xa != za);
     }
 
@@ -584,9 +606,10 @@ class PauliString {
       bool xa = (xza >> 0u) & 1u;
       bool za = (xza >> 1u) & 1u;
 
-      bool r = phase;
-
-      set_r(r != (xa && za));
+      uint8_t r = phase;
+      
+      constexpr uint8_t h_phase_lookup[] = {0, 0, 0, 2};
+      set_r(r + h_phase_lookup[xza]);
       set_x(a, za);
       set_z(a, xa);
     }
@@ -651,9 +674,12 @@ class PauliString {
       bool xb = (xzb >> 0u) & 1u;
       bool zb = (xzb >> 1u) & 1u;
 
-      bool r = phase;
+      uint8_t bitcode = xzb + (xza << 2);
 
-      set_r(r != ((xa && zb) && ((xb != za) != true)));
+      uint8_t r = phase;
+
+      constexpr uint8_t cx_phase_lookup[] = {0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2};
+      set_r(r + cx_phase_lookup[bitcode]);
       set_x(b, xa != xb);
       set_z(a, za != zb);
     }
@@ -680,7 +706,7 @@ class PauliString {
       cx(a, b);
     }
 
-    bool commutes_at(PauliString &p, uint32_t i) const {
+    bool commutes_at(const PauliString& p, uint32_t i) const {
       if ((get_x(i) == p.get_x(i)) && (get_z(i) == p.get_z(i))) { // operators are identical
         return true;
       } else if (!get_x(i) && !get_z(i)) { // this is identity
@@ -692,7 +718,7 @@ class PauliString {
       }
     }
 
-    bool commutes(PauliString &p) const {
+    bool commutes(const PauliString& p) const {
       if (num_qubits != p.num_qubits) {
         throw std::invalid_argument(fmt::format("p = {} has {} qubits and q = {} has {} qubits; cannot check commutation.", p.to_string_ops(), p.num_qubits, to_string_ops(), num_qubits));
       }
@@ -779,7 +805,7 @@ class PauliString {
 
     // Returns the circuit which maps this PauliString onto p
     QuantumCircuit transform(PauliString const &p) const {
-      std::vector<uint32_t> qubits(p.num_qubits);
+      Qubits qubits(p.num_qubits);
       std::iota(qubits.begin(), qubits.end(), 0);
 
       QuantumCircuit qc1(p.num_qubits);
@@ -814,12 +840,12 @@ class PauliString {
       return (word >> bit_ind) & 1u; 
     }
 
-    inline bool get_r() const { 
+    inline uint8_t get_r() const { 
       return phase; 
     }
 
-    inline double sign() const {
-      return phase ? -1.0 : 1.0;
+    inline std::complex<double> sign() const {
+      return sign_from_bits(phase);
     }
 
     inline void set(size_t i, bool v) {
@@ -862,8 +888,8 @@ class PauliString {
       bit_string[word_ind] = (bit_string[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
     }
 
-    inline void set_r(bool v) { 
-      phase = v; 
+    inline void set_r(uint8_t v) { 
+      phase = v & 0b11; 
     }
 };
 
@@ -977,7 +1003,7 @@ void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {
 
 
 template<typename... Args>
-void reduce_paulis(const PauliString& p1, const PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+void reduce_paulis(const PauliString& p1, const PauliString& p2, const Qubits& qubits, Args&... args) {
   PauliString p1_ = p1;
   PauliString p2_ = p2;
 
@@ -985,29 +1011,39 @@ void reduce_paulis(const PauliString& p1, const PauliString& p2, const std::vect
 }
 
 template<typename... Args>
-void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const std::vector<uint32_t>& qubits, Args&... args) {
+void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const Qubits& qubits, Args&... args) {
   size_t num_qubits = p1.num_qubits;
   if (p2.num_qubits != num_qubits) {
     throw std::runtime_error(fmt::format("Cannot reduce tableau for provided PauliStrings {} and {}; mismatched number of qubits.", p1, p2));
   }
 
-  std::vector<uint32_t> qubits_(num_qubits);
+  Qubits qubits_(num_qubits);
   std::iota(qubits_.begin(), qubits_.end(), 0);
 
   p1.reduce_inplace(false, std::make_pair(&args, qubits)..., std::make_pair(&p2, qubits_));
 
-  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, false);
-  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, true);
+  PauliString z1p = PauliString::basis(num_qubits, "Z", 0, 0);
+  PauliString z1m = PauliString::basis(num_qubits, "Z", 0, 2);
 
   if (p2 != z1p && p2 != z1m) {
     p2.reduce_inplace(true, std::make_pair(&args, qubits)..., std::make_pair(&p1, qubits_));
   }
 
-  bool sa = p1.get_r();
-  bool sb = p2.get_r();
+  uint8_t sa = p1.get_r();
+  uint8_t sb = p2.get_r();
 
-  if (sa) {
-    if (sb) {
+  auto interpret_sign = [](uint8_t s) {
+    if (s == 0) {
+      return false;
+    } else if (s == 2) {
+      return true;
+    } else {
+      throw std::runtime_error("Anomolous phase detected in reduce.");
+    }
+  };
+
+  if (interpret_sign(sa)) {
+    if (interpret_sign(sb)) {
       // apply y
       (args.y(qubits[0]), ...);
       p1.y(0);
@@ -1019,7 +1055,7 @@ void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const std::vector<u
       p2.z(0);
     }
   } else {
-    if (sb) {
+    if (interpret_sign(sb)) {
       // apply x
       (args.x(qubits[0]), ...);
       p1.x(0);
@@ -1030,7 +1066,7 @@ void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const std::vector<u
 
 // Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
 template <typename... Args>
-void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::minstd_rand& rng, Args&... args) {
+void random_clifford_iteration_impl(const Qubits& qubits, std::minstd_rand& rng, Args&... args) {
   size_t num_qubits = qubits.size();
 
   // If only acting on one qubit, can easily lookup from a table
@@ -1040,21 +1076,21 @@ void random_clifford_iteration_impl(const std::vector<uint32_t>& qubits, std::mi
     return;
   }
 
-  std::vector<uint32_t> qubits_(num_qubits);
+  Qubits qubits_(num_qubits);
   std::iota(qubits_.begin(), qubits_.end(), 0);
 
-  PauliString p1 = PauliString::rand(num_qubits, rng);
-  PauliString p2 = PauliString::rand(num_qubits, rng);
+  PauliString p1 = PauliString::randh(num_qubits, rng);
+  PauliString p2 = PauliString::randh(num_qubits, rng);
   while (p1.commutes(p2)) {
-    p2 = PauliString::rand(num_qubits, rng);
+    p2 = PauliString::randh(num_qubits, rng);
   }
 
   reduce_paulis_inplace(p1, p2, qubits, args...);
 }
 
 template <typename... Args>
-void random_clifford_impl(const std::vector<uint32_t>& qubits, std::minstd_rand& rng, Args&... args) {
-  std::vector<uint32_t> qubits_(qubits.begin(), qubits.end());
+void random_clifford_impl(const Qubits& qubits, std::minstd_rand& rng, Args&... args) {
+  Qubits qubits_(qubits.begin(), qubits.end());
 
   for (uint32_t i = 0; i < qubits.size(); i++) {
     random_clifford_iteration_impl(qubits_, rng, args...);
@@ -1091,7 +1127,7 @@ class CliffordTable {
         }
       }
 
-      std::vector<uint32_t> qubits{0, 1};
+      Qubits qubits{0, 1};
       for (const auto& [X, Z] : basis) {
         for (size_t r = 0; r < 24; r++) {
           QuantumCircuit qc(2);
@@ -1128,7 +1164,7 @@ class CliffordTable {
     }
 
     template <typename... Args>
-    void apply_random(std::minstd_rand& rng, const std::vector<uint32_t>& qubits, Args&... args) {
+    void apply_random(std::minstd_rand& rng, const Qubits& qubits, Args&... args) {
       size_t r1 = rng() % circuits.size();
 
       auto [X, Z, r2] = circuits[r1];

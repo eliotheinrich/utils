@@ -1,5 +1,6 @@
 #include "QuantumStates.h"
 
+#include <MacTypes.h>
 #include <memory>
 #include <sstream>
 #include <random>
@@ -241,6 +242,21 @@ void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
   }
 }
 
+template <typename T1, typename T2, typename... Args>
+void swap_tags_(const Index& idx1, const Index& idx2, T1& first, T2& second, Args&... args) {
+  auto tags1 = idx1.tags();
+  auto tags2 = idx2.tags();
+
+  first.swapTags(tags1, tags2);
+  second.swapTags(tags2, tags1);
+
+  if constexpr (sizeof...(args) == 0) {
+    return;
+  } else {
+    swap_tags(idx1, idx2, args...);
+  }
+}
+
 template <typename... Tensors>
 void match_indices(const std::string& tags, const ITensor& base, Tensors&... tensors) {
   const auto idx = noPrime(findInds(base, tags)[0]);
@@ -263,7 +279,7 @@ void match_indices(const std::string& tags, const ITensor& base, Tensors&... ten
   (do_match_wrapper(tensors), ...);
 }
 
-bool contiguous(const std::vector<uint32_t>& v) {
+bool contiguous(const Qubits& v) {
   auto v_r = v;
   std::sort(v_r.begin(), v_r.end());
 
@@ -276,7 +292,7 @@ bool contiguous(const std::vector<uint32_t>& v) {
   return true;
 }
 
-bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_qubits) {
+bool is_bipartition(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_qubits) {
   std::vector<bool> mask(num_qubits, false);
   for (const uint32_t q : qubitsA) {
     mask[q] = true;
@@ -291,19 +307,27 @@ bool is_bipartition(const std::vector<uint32_t>& qubitsA, const std::vector<uint
 
 class MatrixProductStateImpl {
   friend class MatrixProductState;
+  friend class MatrixProductMixedStateImpl;
+  friend class PauliExpectationTreeImpl;
 
   private:
-		std::vector<itensor::ITensor> tensors;
-		std::vector<itensor::ITensor> singular_values;
-		std::vector<itensor::Index> external_indices;
-		std::vector<itensor::Index> internal_indices;
+		std::vector<ITensor> tensors;
+		std::vector<ITensor> singular_values;
+    std::vector<ITensor> blocks;
 
-    static const Eigen::Matrix2cd zero_projector() {
-      return (Eigen::Matrix2cd() << 1, 0, 0, 0).finished();
-    }
+		std::vector<Index> external_indices;
+		std::vector<Index> internal_indices;
 
-    static const Eigen::Matrix2cd one_projector() {
-      return (Eigen::Matrix2cd() << 0, 0, 0, 1).finished();
+    Index left_boundary_index;
+    Index right_boundary_index;
+
+    std::map<uint32_t, uint32_t> qubit_map;
+    std::vector<uint32_t> qubit_indices;
+    std::map<uint32_t, uint32_t> block_map;
+    std::vector<uint32_t> block_indices;
+
+    size_t num_blocks() const {
+      return tensors.size() + blocks.size();
     }
 
   public:
@@ -316,15 +340,27 @@ class MatrixProductStateImpl {
 
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
     : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold) {
-      std::random_device random_device;
-
       if ((bond_dimension > 1u << num_qubits) && (num_qubits < 32)) {
-        throw std::invalid_argument("Bond dimension must be smaller than 2^num_qubits.");
+        bond_dimension = 1u << num_qubits;
       }
 
-      if (num_qubits <= 1) {
+      if (num_qubits < 1) {
         throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
       }
+
+      blocks = {};
+      block_indices = {};
+
+      block_map = {};
+      qubit_indices = std::vector<uint32_t>(num_qubits);
+      std::iota(qubit_indices.begin(), qubit_indices.end(), 0);
+      for (size_t i = 0; i < num_qubits; i++) {
+        qubit_map[i] = i;
+        qubit_indices[i] = i;
+      }
+
+      left_boundary_index = Index(1, "Internal,LEdge");
+      right_boundary_index = Index(1, "Internal,REdge");
 
       for (uint32_t i = 0; i < num_qubits - 1; i++) {
         internal_indices.push_back(Index(1, fmt::format("Internal,Left,n={}", i)));
@@ -332,46 +368,61 @@ class MatrixProductStateImpl {
       }
 
       for (uint32_t i = 0; i < num_qubits; i++) {
+        qubit_map[i] = i;
         external_indices.push_back(Index(2, fmt::format("External,i={}", i)));
       }
 
       ITensor tensor;
 
-      tensor = ITensor(internal_indices[0], external_indices[0]);
-      for (auto j : range1(internal_indices[0])) {
-        tensor.set(j, 1, 1.0);
+      if (num_qubits == 1) {
+        tensor = ITensor(left_boundary_index, right_boundary_index, external_idx(0));
+        tensor.set(1, 1, 1, 1.0);
+        tensors.push_back(tensor);
+        return;
       }
+
+      // Setting singular values
+      for (uint32_t q = 0; q < num_qubits - 1; q++) {
+        tensor = ITensor(internal_idx(q, InternalDir::Left), internal_idx(q, InternalDir::Right));
+        tensor.set(1, 1, 1.0);
+        singular_values.push_back(tensor);
+      }
+
+      // Setting left boundary tensor
+      tensor = ITensor(left_boundary_index, internal_idx(0, InternalDir::Left), external_idx(0));
+      tensor.set(1, 1, 1, 1.0);
       tensors.push_back(tensor);
 
-      for (uint32_t i = 0; i < num_qubits-1; i++) {
-        tensor = ITensor(internal_indices[2*i], internal_indices[2*i + 1]);
-        tensor.set(1, 1, 1);
-        singular_values.push_back(tensor);
-
-        if (i == num_qubits - 2) {
-          tensor = ITensor(internal_indices[2*i + 1], external_indices[i+1]);
-          for (auto j : range1(internal_indices[2*i + 1])) {
-            tensor.set(j, 1, 1.0);
-          }
-        } else {
-          tensor = ITensor(internal_indices[2*i + 1], internal_indices[2*i + 2], external_indices[i+1]);
-          for (auto j1 : range1(internal_indices[2*i + 1])) {
-            tensor.set(j1, j1, 1, 1.0);
-          }
-        }
-
+      // Setting bulk tensors
+      for (uint32_t q = 1; q < num_qubits - 1; q++) {
+        tensor = ITensor(internal_idx(q - 1, InternalDir::Right), internal_idx(q, InternalDir::Left), external_idx(q));
+        tensor.set(1, 1, 1, 1.0);
         tensors.push_back(tensor);
       }
+
+      // Setting right boundary tensor
+      tensor = ITensor(internal_idx(num_qubits - 2, InternalDir::Right), right_boundary_index, external_idx(num_qubits - 1));
+      tensor.set(1, 1, 1, 1.0);
+      tensors.push_back(tensor);
     }
 
     MatrixProductStateImpl(const MatrixProductStateImpl& other) : MatrixProductStateImpl(other.num_qubits, other.bond_dimension, other.sv_threshold) {
       tensors = other.tensors;
       singular_values = other.singular_values;
+      blocks = other.blocks;
 
+      qubit_map = other.qubit_map;
+      qubit_indices = other.qubit_indices;
+      block_map = other.block_map;
+      block_indices = other.block_indices;
+
+      left_boundary_index = other.left_boundary_index;
+      right_boundary_index = other.right_boundary_index;
       internal_indices = other.internal_indices;
       external_indices = other.external_indices;
     }
 
+    // TODO fix
     static MatrixProductStateImpl from_mps(const MPS& mps_, size_t bond_dimension, double sv_threshold) {
       size_t num_qubits = mps_.length();
       MatrixProductStateImpl vidal_mps(num_qubits, bond_dimension, sv_threshold);
@@ -423,7 +474,172 @@ class MatrixProductStateImpl {
       vidal_mps.external_indices[num_qubits - 1] = findInds(V, "External")[0];
       vidal_mps.tensors[num_qubits - 1] = V;
 
+
+      // Add boundary indices
+      ITensor one;
+
+      one = ITensor(vidal_mps.left_boundary_index);
+      one.set(1, 1.0);
+      vidal_mps.tensors[0] *= one;
+
+      one = ITensor(vidal_mps.right_boundary_index);
+      one.set(1, 1.0);
+      vidal_mps.tensors[num_qubits - 1] *= one;
+
       return vidal_mps;
+    }
+
+    MatrixProductStateImpl partial_trace(const Qubits& qubits) const {
+      std::set<uint32_t> traced(qubits.begin(), qubits.end());
+
+      std::vector<ITensor> tensors_;
+      std::vector<ITensor> singular_values_;
+      std::vector<ITensor> blocks_;
+
+      std::map<uint32_t, uint32_t> qubit_map_;
+      std::vector<uint32_t> qubit_indices_;
+      std::map<uint32_t, uint32_t> block_map_;
+      std::vector<uint32_t> block_indices_;
+
+      std::vector<Index> internal_indices_;
+      std::vector<Index> external_indices_;
+
+      size_t k = 0;
+      size_t i = 0;
+      size_t qubit_i = 0;
+      size_t block_i = 0;
+
+
+      auto get_block_starting_at_index = [&](size_t& k) {
+        size_t i1 = k;
+        size_t i2 = k;
+        bool keep_going = true;
+        while (keep_going && i2 < num_blocks()) {
+          i2++;
+          if (qubit_map.contains(i2)) {
+            size_t q_ = qubit_map.at(i2);
+            if (!traced.contains(q_)) {
+              keep_going = false;
+            }
+          }
+        }
+
+        auto block = get_blocked_tensor_at_index(i1, false);
+        for (size_t i = i1; i < i2 - 1; i++) {
+          block *= singular_values[i];
+          block *= prime(singular_values[i]);
+          block *= get_blocked_tensor_at_index(i + 1, false);
+        }
+
+        k = i2;
+        return block;
+      };
+
+      while (k < num_blocks()) {
+        if (qubit_map.contains(k)) {
+          size_t q = qubit_map.at(k);
+          if (traced.contains(q)) {
+            auto block = get_block_starting_at_index(k);
+            blocks_.push_back(block);
+            block_map_[i] = block_i++;
+            block_indices_.push_back(i);
+          } else {
+            ITensor tensor = tensors[q];
+            tensors_.push_back(tensor);
+            qubit_map_[i] = qubit_i++;
+            qubit_indices_.push_back(i);
+            k++;
+          }
+        } else {
+          size_t q = block_map.at(k);
+          blocks_.push_back(blocks[q]);
+          block_map_[i] = block_i++;
+          block_indices_.push_back(i);
+          k++;
+        }
+
+        if (k != num_blocks()) {
+          singular_values_.push_back(singular_values[k - 1]);
+        }
+
+        i++;
+      }
+
+      for (size_t j = 0; j < i - 1; j++) {
+        auto left = findIndex(singular_values_[j], "Left");
+        auto right = findIndex(singular_values_[j], "Right");
+
+        Index left_(dim(left), fmt::format("n={},Internal,Left", j));
+        Index right_(dim(right), fmt::format("n={},Internal,Right", j));
+
+        try { 
+          singular_values_[j].replaceInds({left, right}, {left_, right_});
+        } catch (const ITError& e) {
+          singular_values_[j] = toDense(singular_values_[j]);
+          singular_values_[j].replaceInds({left, right}, {left_, right_});
+        }
+        if (qubit_map_.contains(j)) {
+          size_t q = qubit_map_.at(j);
+          tensors_[q].replaceInds({left}, {left_});
+        } else {
+          size_t b = block_map_.at(j);
+          blocks_[b].replaceInds({left, prime(left)}, {left_, prime(left_)});
+        }
+
+        if (qubit_map_.contains(j + 1)) {
+          size_t q = qubit_map_.at(j + 1);
+          tensors_[q].replaceInds({right}, {right_});
+        } else {
+          size_t b = block_map_.at(j + 1);
+          blocks_[b].replaceInds({right, prime(right)}, {right_, prime(right_)});
+        }
+        
+        internal_indices_.push_back(left_);
+        internal_indices_.push_back(right_);
+      }
+
+
+      size_t remaining_qubits = num_qubits - qubits.size();
+      for (size_t q = 0; q < remaining_qubits; q++) {
+        Index external = findIndex(tensors_[q], "External");
+        Index external_(dim(external), fmt::format("i={},External", q));
+        tensors_[q].replaceInds({external}, {external_});
+        external_indices_.push_back(external_);
+      }
+
+      MatrixProductStateImpl mps(remaining_qubits, bond_dimension, sv_threshold);
+
+      mps.tensors = tensors_;
+      mps.blocks = blocks_;
+      mps.singular_values = singular_values_;
+
+      mps.qubit_map = qubit_map_;
+      mps.qubit_indices = qubit_indices_;
+      mps.block_map = block_map_;
+      mps.block_indices = block_indices_;
+
+      mps.left_boundary_index = left_boundary_index;
+      mps.right_boundary_index = right_boundary_index;
+
+      mps.external_indices = external_indices_;
+      mps.internal_indices = internal_indices_;
+
+      return mps;
+    }
+
+    ITensor get_blocked_tensor_at_index(size_t i, bool expose_external_indices=true) const {
+      if (qubit_map.contains(i)) {
+        size_t q = qubit_map.at(i);
+        ITensor tensor = tensors[q];
+        if (expose_external_indices) {
+          return tensor*prime(conj(tensor));
+        } else {
+          return tensor*prime(conj(tensor), "Internal");
+        }
+      } else {
+        size_t q = block_map.at(i);
+        return blocks[q];
+      } 
     }
 
     Index external_idx(size_t i) const {
@@ -439,7 +655,7 @@ class MatrixProductStateImpl {
     };
 
     Index internal_idx(size_t i, InternalDir d) const {
-      if (i >= num_qubits - 1) {
+      if (i >= internal_indices.size()) {
         throw std::runtime_error(fmt::format("Cannot retrieve internal index for i = {}.", i));
       }
 
@@ -451,30 +667,50 @@ class MatrixProductStateImpl {
     }
 
     std::string to_string() const {
-      Statevector sv(coefficients());
-      return sv.to_string();
+      if (is_pure_state()) {
+        Statevector psi(coefficients_pure());
+        return psi.to_string();
+      } else {
+        DensityMatrix rho(coefficients_mixed());
+        return rho.to_string();
+      }
     }
 
     void print_mps(bool print_data=false) const {
-      if (print_data) {
-        PrintData(tensors[0]);
-      } else {
-        print(tensors[0]);
-      }
-      for (uint32_t i = 0; i < num_qubits - 1; i++) {
+      auto print_tensor_at_index = [&](size_t i) {
+        if (qubit_map.contains(i)) {
+          size_t q = qubit_map.at(i);
+          std::cout << fmt::format("Uncontracted qubit at {}\n", i);
+          if (print_data) {
+            PrintData(tensors[q]);
+          } else {
+            print(tensors[q]);
+          }
+        } else {
+          size_t b = block_map.at(i);
+          std::cout << fmt::format("Contracted block at {}\n", i);
+          if (print_data) {
+            PrintData(blocks[b]);
+          } else {
+            print(blocks[b]);
+          }
+        }
+      };
+
+      print_tensor_at_index(0);
+
+      for (size_t i = 0; i < num_blocks() - 1; i++) {
         if (print_data) {
           PrintData(singular_values[i]);
         } else {
           print(singular_values[i]);
         }
-        if (print_data) {
-          PrintData(tensors[i+1]);
-        } else {
-          print(tensors[i+1]);
-        }
+
+        print_tensor_at_index(i + 1);
       }
     }
 
+    // TODO check if this still works with partial states
     double entropy(uint32_t q, uint32_t index) {
       if (q < 0 || q > num_qubits) {
         throw std::invalid_argument("Invalid qubit passed to MatrixProductState.entropy; must have 0 <= q <= num_qubits.");
@@ -510,327 +746,246 @@ class MatrixProductStateImpl {
       return s;
     }
 
-    ITensor A_l(size_t i) const {
-      auto Ai = tensors[i];
-      if (i != 0) {
-        Ai *= singular_values[i - 1];
-      }
-
-      Index left;
-      Index right;
-
-      Index _left = (i > 0) ? internal_idx(i-1, InternalDir::Left) : Index();
-      Index _right = (i < num_qubits - 1) ? internal_idx(i, InternalDir::Left) : Index();
-
-      if (i == 0) {
-        left = Index(1, "m=0,Internal");
-        right = Index(dim(_right), "m=1,Internal");
-        Ai.replaceInds({_right}, {right});
-
-        ITensor one(left);
-        one.set(left=1, 1.0);
-        Ai *= one;
-      } else if (i == num_qubits - 1) {
-        left = Index(dim(_left), fmt::format("m={}, Internal", i));
-        right = Index(1, fmt::format("m={}, Internal",i+1));
-        Ai.replaceInds({_left}, {left});
-
-        ITensor one(right);
-        one.set(right=1, 1.0);
-        Ai *= one;
-      } else {
-        left = Index(dim(_left), fmt::format("m={}, Internal", i));
-        right = Index(dim(_right), fmt::format("m={}, Internal",i+1));
-        Ai.replaceInds({_left, _right}, {left, right});
-      }
-
-      return Ai;
-    }
-
-
-    std::vector<ITensor> A_l(size_t q1_, size_t q2_) const {
-      size_t q1 = std::min(q1_, q2_);
-      size_t q2 = std::max(q1_, q2_);
-      
-      // Generate all tensors
-      std::vector<ITensor> A;
-      for (size_t i = q1; i < q2; i++) {
-        A.push_back(A_l(i));
-      }
-      
-      if (A.size() > 1) {
-        // Align indices
-        for (size_t i = 1; i < (q2 - q1); i++) {
-          std::string s = fmt::format("m={}", i + q1);
-          auto ai = findInds(A[i - 1], s);
-          A[i].replaceInds(findInds(A[i], s), findInds(A[i - 1], s));
-        }
-      }
-
-      return A;
-    }
-
-    ITensor A_r(size_t i) const {
-      auto Ai = tensors[i];
-      if (i != num_qubits - 1) {
-        Ai *= singular_values[i];
-      }
-
-      Index left;
-      Index right;
-
-      Index _left = (i > 0) ? internal_idx(i-1, InternalDir::Right) : Index();
-      Index _right = (i < num_qubits - 1) ? internal_idx(i, InternalDir::Right) : Index();
-
-      if (i == 0) {
-        left = Index(1, "m=0,Internal");
-        right = Index(dim(_right), "m=1,Internal");
-        Ai.replaceInds({_right}, {right});
-
-        ITensor one(left);
-        one.set(left=1, 1.0);
-        Ai *= one;
-      } else if (i == num_qubits - 1) {
-        left = Index(dim(_left), fmt::format("m={},Internal", i));
-        right = Index(1, fmt::format("m={},Internal",i+1));
-        Ai.replaceInds({_left}, {left});
-
-        ITensor one(right);
-        one.set(right=1, 1.0);
-        Ai *= one;
-      } else {
-        left = Index(dim(_left), fmt::format("m={},Internal", i));
-        right = Index(dim(_right), fmt::format("m={},Internal",i+1));
-        Ai.replaceInds({_left, _right}, {left, right});
-      }
-
-      return Ai;
-    }
-
-    std::vector<ITensor> A_r(size_t q1_, size_t q2_) const {
-      size_t q1 = std::min(q1_, q2_);
-      size_t q2 = std::max(q1_, q2_);
-      
-      // Generate all tensors
-      std::vector<ITensor> A;
-      for (size_t i = q1; i < q2; i++) {
-        A.push_back(A_r(i));
-      }
-      
-      if (A.size() > 1) {
-        // Align indices
-        for (size_t i = 1; i < (q2 - q1); i++) {
-          std::string s = fmt::format("m={}", i + q1);
-          auto ai = findInds(A[i - 1], s);
-          A[i].replaceInds(findInds(A[i], s), findInds(A[i - 1], s));
-        }
-      }
-
-      return A;
-    }
-
-    ITensor left_boundary_tensor(size_t q) const {
+    ITensor left_boundary_tensor(size_t i) const {
       Index left_idx;
-      if (q == 0) {
-        left_idx = Index(1, "m=0,Internal");
+      if (i == 0) {
+        left_idx = left_boundary_index;
       } else {
-        left_idx = Index(dim(internal_idx(q-1, InternalDir::Left)), fmt::format("m={},Internal", q));
-      } 
+        left_idx = internal_idx(i-1, InternalDir::Left);
+      }
       return delta(left_idx, prime(left_idx));
     }
 
     // Do not assume normalization holds; this is temporarily the case when performing batch measurements.
-    ITensor left_environment_tensor(size_t q, const std::vector<ITensor>& external_tensors) const {
-      if (q != external_tensors.size()) {
-        throw std::runtime_error("Provided invalid number of external tensors to left_environment_tensor.");
-      }
-
+    ITensor left_environment_tensor(size_t i, const std::vector<ITensor>& external_tensors) const {
       ITensor L = left_boundary_tensor(0);
-
-      extend_left_environment_tensor(L, 0, q, external_tensors);
-
+      extend_left_environment_tensor(L, 0, i, external_tensors);
       return L;
     }
 
-    ITensor left_environment_tensor(size_t q) const {
+    ITensor left_environment_tensor(size_t i) const {
       std::vector<ITensor> external_tensors;
-      for (size_t i = 0; i < q; i++) {
-        Index idx = external_idx(i);
-        external_tensors.push_back(delta(idx, prime(idx)));
-      }
-
-      return left_environment_tensor(q, external_tensors);
-    }
-
-    void extend_left_environment_tensor(ITensor& L, uint32_t q1_, uint32_t q2_, const std::vector<ITensor>& external_tensors) const {
-      uint32_t q1 = std::min(q1_, q2_);
-      uint32_t q2 = std::max(q1_, q2_);
-      if (q2 - q1 != external_tensors.size()) {
-        throw std::runtime_error("Provided invalid number of external tensors to extend_left_environment_tensor.");
-      }
-
-      std::vector<ITensor> A = A_l(q1, q2);
-      for (size_t j = q1; j < q2; j++) {
-        ITensor Aj = A[j - q1];
-        match_indices(fmt::format("m={}", j), L, Aj);
-        L *= Aj;
-        L *= external_tensors[j - q1];
-        L *= conj(prime(Aj));
-      }
-    }
-
-    void extend_left_environment_tensor(ITensor& L, uint32_t q1_, uint32_t q2_) const {
-      uint32_t q1 = std::min(q1_, q2_);
-      uint32_t q2 = std::max(q1_, q2_);
-      std::vector<ITensor> external_tensors;
-      for (size_t j = q1; j < q2; j++) {
+      for (size_t j = 0; j < i; j++) {
         Index idx = external_idx(j);
         external_tensors.push_back(delta(idx, prime(idx)));
       }
-
-      extend_left_environment_tensor(L, q1, q2, external_tensors);
+      return left_environment_tensor(i, external_tensors);
     }
 
-    ITensor right_boundary_tensor(size_t q) const {
-      Index right_idx;
-      if (q == num_qubits - 1) {
-        right_idx = Index(1, fmt::format("m={},Internal", num_qubits));
-        return delta(right_idx, prime(right_idx));
-      } else {
-        right_idx = Index(dim(internal_idx(q, InternalDir::Right)), fmt::format("m={},Internal", q+1));
-        // This is horrible and hacky but if singular_values is DiagReal, then ITensor throws an error contracting with itself
-        // And if it is cast with toDense, it throws an error if it is already DenseReal.
-        ITensor tensor;
-        try {
-          tensor = singular_values[q] * conj(prime(singular_values[q], "Left"));
-        } catch (const ITError& e) {
-          tensor = toDense(singular_values[q]) * conj(prime(singular_values[q], "Left"));
+    void extend_left_environment_tensor(ITensor& L, uint32_t i1, uint32_t i2, const std::vector<ITensor>& external_tensors) const {
+      size_t k = 0;
+      for (size_t j = i1; j < i2; j++) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_map.at(j);
+          ITensor tensor = tensors[q];
+          if (j != 0) {
+            tensor *= singular_values[j - 1];
+          }
+          L *= tensor;
+          if (k < external_tensors.size()) {
+            L *= external_tensors[k++];
+          } else {
+            throw std::runtime_error("Invalid number of external tensors passed to extend_left_environment_tensor.");
+          }
+          L *= conj(prime(tensor));
+        } else {
+          size_t b = block_map.at(j);
+          L *= blocks[b];
+          if (j != 0) {
+            L *= singular_values[j - 1];
+            L *= prime(singular_values[j - 1]);
+          }
         }
-        Index right_idx_ = noPrime(inds(tensor)[0]);
-        return replaceInds(tensor, {right_idx_, prime(right_idx_)}, {right_idx, prime(right_idx)});
-      } 
+      }
     }
 
-    ITensor right_environment_tensor(size_t q, const std::vector<ITensor>& external_tensors) const {
-      if (num_qubits - q != external_tensors.size()) {
-        throw std::runtime_error("Provided invalid number of external tensors to right_environment_tensor.");
+    void extend_left_environment_tensor(ITensor& L, uint32_t i1, uint32_t i2) const {
+      std::vector<ITensor> external_tensors;
+      for (size_t j = i1; j < i2; j++) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_map.at(j);
+          Index idx = external_idx(q);
+          external_tensors.push_back(delta(idx, prime(idx)));
+        }
       }
 
-      ITensor R = right_boundary_tensor(num_qubits - 1);
+      extend_left_environment_tensor(L, i1, i2, external_tensors);
+    }
 
-      extend_right_environment_tensor(R, num_qubits, q, external_tensors);
+    ITensor right_boundary_tensor(size_t i) const {
+      if (i == num_blocks()) {
+        return delta(right_boundary_index, prime(right_boundary_index));
+      } else {
+        Index right_idx = internal_idx(i - 1, InternalDir::Left);
+        ITensor tensor;
+        try {
+          tensor = singular_values[i - 1] * conj(prime(singular_values[i - 1], "Left"));
+        } catch (const ITError& e) {
+          tensor = toDense(singular_values[i - 1]) * conj(prime(singular_values[i - 1], "Left"));
+        }
+        Index right_idx_ = noPrime(inds(tensor)[0]);
 
+        return replaceInds(tensor, {right_idx_, prime(right_idx_)}, {right_idx, prime(right_idx)});
+      }
+    }
+
+    ITensor right_environment_tensor(size_t i, const std::vector<ITensor>& external_tensors) const {
+      ITensor R = right_boundary_tensor(num_blocks());
+      extend_right_environment_tensor(R, num_blocks(), i, external_tensors);
       return R;
     }
 
-    ITensor right_environment_tensor(size_t q) const {
+    ITensor right_environment_tensor(size_t i) const {
       std::vector<ITensor> external_tensors;
-      for (size_t i = 0; i < q; i++) {
-        Index idx = external_idx(num_qubits - i - 1);
-        external_tensors.push_back(delta(idx, prime(idx)));
+      for (size_t j = num_blocks() - 1; j > i; j--) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_indices[j];
+          Index idx = external_idx(q);
+          external_tensors.push_back(delta(idx, prime(idx)));
+        }
       }
-
-      return right_environment_tensor(q, external_tensors);
+      return right_environment_tensor(i, external_tensors);
     }
 
-    void extend_right_environment_tensor(ITensor& R, uint32_t q1_, uint32_t q2_, const std::vector<ITensor>& external_tensors) const {
-      uint32_t q1 = std::max(q1_, q2_);
-      uint32_t q2 = std::min(q1_, q2_);
-      if (q1 - q2 != external_tensors.size()) {
-        throw std::runtime_error("Provided invalid number of external tensors to extend_right_environment_tensor.");
-      }
-
-      std::vector<ITensor> A = A_l(q2+1, q1+1);
-      for (size_t j = q1; j > q2; j--) {
-        ITensor Aj = A[j - q2 - 1];
-        match_indices(fmt::format("m={}", j + 1), R, Aj);
-        R *= Aj;
-        R *= external_tensors[q1 - j];
-        R *= conj(prime(Aj));
+    void extend_right_environment_tensor(ITensor& R, uint32_t i1, uint32_t i2, const std::vector<ITensor>& external_tensors) const {
+      size_t k = 0;
+      for (size_t j = i1 - 1; j >= i2; j--) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_map.at(j);
+          ITensor tensor = tensors[q];
+          if (j != 0) {
+            tensor *= singular_values[j - 1];
+          }
+          R *= tensor;
+          if (k < external_tensors.size()) {
+            R *= external_tensors[k++];
+          } else {
+            throw std::runtime_error("Invalid number of external tensors passed to extend_right_environment_tensor.");
+          }
+          R *= conj(prime(tensor));
+        } else {
+          size_t b = block_map.at(j);
+          R *= blocks[b];
+          if (j != 0) {
+            R *= singular_values[j - 1];
+            R *= prime(singular_values[j - 1]);
+          }
+        }
       }
     }
 
-    void extend_right_environment_tensor(ITensor& R, uint32_t q1_, uint32_t q2_) const {
-      uint32_t q1 = std::max(q1_, q2_);
-      uint32_t q2 = std::min(q1_, q2_);
-
+    void extend_right_environment_tensor(ITensor& R, uint32_t i1, uint32_t i2) const {
       std::vector<ITensor> external_tensors;
-      for (size_t j = q1; j > q2; j--) {
-        Index idx = external_idx(j);
-        external_tensors.push_back(delta(idx, prime(idx)));
+      for (size_t j = i1; j > i2; j--) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_indices[j];
+          Index idx = external_idx(q);
+          external_tensors.push_back(delta(idx, prime(idx)));
+        }
       }
-
-      extend_right_environment_tensor(R, q1, q2, external_tensors);
+      extend_right_environment_tensor(R, i1, i2, external_tensors);
     }
 
-    std::complex<double> partial_expectation(const Eigen::MatrixXcd& m, uint32_t q1, uint32_t q2, const ITensor& L, const ITensor& R) const {
-      ITensor contraction = L;
+    ITensor partial_contraction(size_t i1, size_t i2, const std::vector<ITensor>* external_tensors, const ITensor* L, const ITensor* R) const {
+      ITensor contraction;
 
+      size_t k = 0;
+      auto advance_contraction = [&](ITensor& C, size_t j) {
+        if (qubit_map.contains(j)) {
+          size_t q = qubit_map.at(j);
+          ITensor tensor = tensors[q];
+          if (j != 0) {
+            tensor *= singular_values[j - 1];
+          }
+
+          if (!C) {
+            C = tensor;
+          } else {
+            C *= tensor;
+          }
+
+          if (external_tensors != nullptr && k < external_tensors->size()) {
+            C *= (*external_tensors)[k++];
+          }
+          C *= conj(prime(tensor));
+        } else {
+          size_t b = block_map.at(j);
+          ITensor block = blocks[b];
+          if (j != 0) {
+            block *= singular_values[j - 1];
+            block *= prime(singular_values[j - 1]);
+          }
+
+          if (!C) {
+            C = block;
+          } else {
+            C *= block;
+          }
+        }
+      };
+
+      if (L != nullptr) {
+        contraction = *L;
+      }
+
+      advance_contraction(contraction, i1);
+
+      for (size_t j = i1 + 1; j < i2; j++) {
+        advance_contraction(contraction, j);
+      }
+
+      if (R != nullptr) {
+        contraction *= (*R);
+      }
+
+      return contraction;
+    }
+
+    std::complex<double> partial_expectation(const Eigen::MatrixXcd& m, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
       std::vector<Index> idxs;
       std::vector<Index> idxs_;
 
-      for (size_t i = q1; i <= q2; i++) {
-        Index idx = external_idx(i);
-        idxs.push_back(idx);
-        idxs_.push_back(prime(idx));
-      }
+      for (size_t i = i1; i < i2; i++) {
+        if (qubit_map.contains(i)) {
+          size_t q = qubit_map.at(i);
 
-      auto A = A_l(q1, q2 + 1);
-
-      ITensor mtensor = matrix_to_tensor(m, idxs_, idxs);
-
-      // Align indices
-      match_indices(fmt::format("m={}", q1), contraction, A[0]);
-      match_indices(fmt::format("m={}", q2+1), R, A[A.size()-1]);
-
-      bool first = true;
-      for (size_t i = q1; i <= q2; i++) {
-        const auto Ai = A[i - q1];
-        contraction *= Ai;
-        if (first) {
-          contraction *= mtensor;
-          first = false;
+          Index idx = external_idx(q);
+          idxs.push_back(idx);
+          idxs_.push_back(prime(idx));
         }
-        contraction *= prime(conj(Ai));
       }
 
-      contraction *= R;
+      std::vector<ITensor> mtensor = {matrix_to_tensor(m, idxs_, idxs)};
+      ITensor contraction = partial_contraction(i1, i2, &mtensor, &L, &R);
       return tensor_to_scalar(contraction);
     }
 
-    double partial_expectation(const PauliString& p, uint32_t q1, uint32_t q2, const ITensor& L, const ITensor& R) const {
-      uint32_t nqb = q2 - q1;
-      if (nqb != p.num_qubits) {
-        throw std::runtime_error(fmt::format("partial_expectation called for PauliString {} with {} qubits called on range [{}, {}]. Invalid number of qubits.", p, p.num_qubits, q1, q2));
+    std::complex<double> partial_expectation(const PauliString& p, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
+      std::vector<ITensor> paulis;
+      size_t k = 0;
+      for (size_t i = i1; i < i2; i++) {
+        if (qubit_map.contains(i)) {
+          size_t q = qubit_map.at(i);
+          Index idx = external_idx(q);
+          ITensor pauli = pauli_tensor(p.to_pauli(k++), prime(idx), idx);
+          paulis.push_back(pauli);
+        }
       }
 
-      ITensor contraction = L;
-
-      auto A = A_l(q1, q2);
-
-      // Align indices
-      match_indices(fmt::format("m={}", q1), contraction, A[0]);
-      match_indices(fmt::format("m={}", q2), R, A[A.size()-1]);
-
-      for (size_t i = 0; i < nqb; i++) {
-        const auto Ai = A[i];
-        Index idx = external_idx(i + q1);
-        ITensor pauli = pauli_tensor(p.to_pauli(i), prime(idx), idx);
-        contraction *= Ai;
-        contraction *= pauli;
-        contraction *= prime(conj(Ai));
+      if (paulis.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("Mismatched size of PauliString of {} qubits with number of external qubits between blocks {} and {}.", p.num_qubits, i1, i2));
       }
-
-      contraction *= R;
-      return p.sign()*tensor_to_scalar(contraction).real();
+      
+      ITensor contraction = partial_contraction(i1, i2, &paulis, &L, &R);
+      return p.sign() * tensor_to_scalar(contraction);
     }
 
-    double expectation(const PauliString& p) const {
+    std::complex<double> expectation(const PauliString& p) const {
       if (p.num_qubits != num_qubits) {
         throw std::runtime_error(fmt::format("Provided PauliString has {} qubits but MatrixProductState has {} qubits.", p.num_qubits, num_qubits));
       }
 
-      auto qubit_range = p.get_qubit_support_range();
+      auto qubit_range = p.support_range();
 
       // Pauli is proportional to I; return sign.
       if (qubit_range == std::nullopt) {
@@ -838,143 +993,43 @@ class MatrixProductStateImpl {
       }
 
       auto [q1, q2] = qubit_range.value();
-      std::vector<uint32_t> qubits(q2 - q1);
-      std::iota(qubits.begin(), qubits.end(), q1);
 
-      ITensor L = left_boundary_tensor(q1);
-      ITensor R = right_boundary_tensor(q2 - 1);
-      return partial_expectation(p.substring(qubits, true), q1, q2, L, R);
+      size_t i1 = qubit_indices[q1];
+      size_t i2 = qubit_indices[q2 - 1] + 1;
+
+      ITensor L = left_boundary_tensor(i1);
+      ITensor R = right_boundary_tensor(i2);
+
+      Qubits qubits(q2 - q1);
+      std::iota(qubits.begin(), qubits.end(), q1);
+      PauliString p_sub = p.substring(qubits, true);
+
+      return partial_expectation(p_sub, i1, i2, L, R);
     }
 
-    std::complex<double> expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
+    std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const {
       size_t r = m.rows();
       size_t c = m.cols();
-      size_t n = sites.size();
+      size_t n = qubits.size();
       if (r != c || (1u << n != r)) {
         throw std::runtime_error(fmt::format("Passed observable has dimension {}x{}, provided {} sites.", r, c, n));
       }
 
-      if (!contiguous(sites)) {
-        throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", sites));
+      if (!contiguous(qubits)) {
+        throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", qubits));
       }
 
-      std::vector<uint32_t> sites_(sites.begin(), sites.end());
-      std::sort(sites_.begin(), sites_.end());
-      uint32_t q1 = sites_[0];
-      uint32_t q2 = sites_[sites_.size() - 1];
-      
-      ITensor L = left_boundary_tensor(q1);
-      ITensor R = right_boundary_tensor(q2);
+      auto [q1, q2] = to_interval(qubits).value();
 
-      return partial_expectation(m, q1, q2, L, R);
+      size_t i1 = qubit_indices[q1];
+      size_t i2 = qubit_indices[q2 - 1] + 1;
+      ITensor L = left_boundary_tensor(i1);
+      ITensor R = right_boundary_tensor(i2);
+
+      return partial_expectation(m, i1, i2, L, R);
     }
 
-    std::vector<double> pauli_expectation_left_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
-      uint32_t q1 = std::min(q1_, q2_);
-      uint32_t q2 = std::max(q1_, q2_);
-      uint32_t subsystem_size = q2 - q1;
-      if (subsystem_size == 0) {
-        return {};
-      }
-
-      auto trace_tensor = [](const ITensor& T, const ITensor& R) {
-        Index i = noPrime(inds(T)[0]);
-
-        Index right_index = noPrime(inds(T)[0]);
-        Index right_index_ = noPrime(inds(R)[0]);
-        auto d1 = delta(right_index, right_index_);
-        auto d2 = delta(prime(right_index), prime(right_index_));
-
-        return tensor_to_scalar(T * delta(right_index, right_index_) * delta(prime(right_index), prime(right_index_)) * R).real();
-      };
-
-      std::vector<ITensor> paulis;
-      auto add_paulis = [this, &P, &paulis](uint32_t i, uint32_t j) {
-        for (size_t k = i; k < j; k++) {
-          Index idx = external_idx(k);
-          paulis.push_back(pauli_tensor(P.to_pauli(k), idx, prime(idx)));
-        }
-      };
-
-      add_paulis(0, q1);
-
-      ITensor L = left_boundary_tensor(0);
-      extend_left_environment_tensor(L, 0, q1, paulis);
-      ITensor R = right_boundary_tensor(q1);
-
-      add_paulis(q1, q2);
-
-      std::vector<uint32_t> qubits(q1);
-      std::iota(qubits.begin(), qubits.end(), 0);
-
-      std::vector<double> expectations;
-      for (size_t i = q1; i < q2; i++) {
-        extend_left_environment_tensor(L, i, i + 1, {paulis[i]});
-        R = right_boundary_tensor(i);
-
-        expectations.push_back(trace_tensor(L, R));
-
-        qubits.push_back(i);
-      }
-
-      return expectations;
-    }
-
-    std::vector<double> pauli_expectation_right_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
-      uint32_t q1 = std::max(q1_, q2_);
-      uint32_t q2 = std::min(q1_, q2_);
-      uint32_t subsystem_size = q1 - q2;
-      if (subsystem_size == 0) {
-        return {};
-      }
-
-      auto trace_tensor = [](const ITensor& T, const ITensor& R) {
-        Index i = noPrime(inds(T)[0]);
-
-        Index right_index = noPrime(inds(T)[0]);
-        Index right_index_ = noPrime(inds(R)[0]);
-        auto d1 = delta(right_index, right_index_);
-        auto d2 = delta(prime(right_index), prime(right_index_));
-
-        return tensor_to_scalar(T * delta(right_index, right_index_) * delta(prime(right_index), prime(right_index_)) * R).real();
-      };
-
-      std::vector<ITensor> paulis;
-      auto add_paulis = [this, &P, &paulis](uint32_t i, uint32_t j) {
-        for (size_t k = i; k > j; k--) {
-          Index idx = external_idx(k);
-          paulis.push_back(pauli_tensor(P.to_pauli(k), idx, prime(idx)));
-        }
-      };
-
-      add_paulis(num_qubits - 1, q1);
-
-      ITensor L = toDense(left_boundary_tensor(q1));
-      ITensor R = right_boundary_tensor(num_qubits - 1);
-      extend_right_environment_tensor(R, num_qubits - 1, q1, paulis);
-
-      add_paulis(q1, q2);
-
-      std::vector<uint32_t> qubits(num_qubits - q1 - 1);
-      std::iota(qubits.begin(), qubits.end(), q1 + 1);
-      std::reverse(qubits.begin(), qubits.end());
-
-      std::vector<double> expectations;
-      size_t k = num_qubits - q1 - 1;
-      for (size_t i = q1; i > q2; i--) {
-        auto pauli = paulis[k];
-        k++;
-        extend_right_environment_tensor(R, i, i - 1, {pauli});
-        L = toDense(left_boundary_tensor(i));
-        expectations.push_back(trace_tensor(L, R));
-
-        qubits.push_back(i);
-      }
-
-      return expectations;
-    }
-
-    PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& qubits, std::minstd_rand& rng) const {
+    PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& supports, std::minstd_rand& rng) const {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
@@ -984,36 +1039,37 @@ class MatrixProductStateImpl {
       ITensor L(i, j);
       L.set(i=1, j=1, 1.0);
 
-      for (size_t k = 0; k < num_qubits; k++) {
+      for (size_t q = 0; q < num_qubits; q++) {
         std::vector<double> probs(4);
-        std::vector<ITensor> tensors(4);
+        std::vector<ITensor> pauli_tensors(4);
 
-        auto Ak = A_r(k);
-        std::string label1 = fmt::format("m={}", k);
-        std::string label2 = fmt::format("m={}", k+1);
-        Index alpha_left = findInds(Ak, label1)[0];
-        L.replaceInds(inds(L), {alpha_left, prime(alpha_left)});
+        auto Ak = tensors[q]; //A_r(k);
+        if (q != num_qubits - 1) {
+          Ak *= singular_values[q];
+        }
 
-        Index s = external_indices[k];
+        Index s = external_indices[q];
 
         for (size_t p = 0; p < 4; p++) {
           auto sigma = pauli_tensor(static_cast<Pauli>(p), s, prime(s));
+          auto C = prime(Ak) * sigma;
+          C *= conj(Ak);
+          C *= L;
 
-          auto C = prime(Ak)*conj(Ak)*sigma*L;
-          auto contraction = conj(C)*C / 2.0;
+          auto contraction = conj(C) * C / 2.0;
 
           std::vector<size_t> inds;
           double prob = std::abs(eltC(contraction, inds));
           probs[p] = prob;
-          tensors[p] = C / std::sqrt(2.0 * prob);
+          pauli_tensors[p] = C / std::sqrt(2.0 * prob);
         }
 
         std::discrete_distribution<> dist(probs.begin(), probs.end());
         size_t a = dist(rng);
 
-        p[k] = static_cast<Pauli>(a);
+        p[q] = static_cast<Pauli>(a);
         P *= probs[a];
-        L = tensors[a];
+        L = pauli_tensors[a];
       }
 
       PauliString pauli(p);
@@ -1021,7 +1077,7 @@ class MatrixProductStateImpl {
       double t = std::sqrt(P*std::pow(2.0, num_qubits));
       std::vector<double> amplitudes{t};
       // TODO make this more efficient
-      for (const auto& support : qubits) {
+      for (const auto& support : supports) {
         PauliString ps = pauli.substring(support, false);
         amplitudes.push_back(std::abs(expectation(ps)));
       }
@@ -1029,50 +1085,130 @@ class MatrixProductStateImpl {
       return {pauli, amplitudes};
     }
 
-    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples, std::minstd_rand& rng) const {
+    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples, std::minstd_rand& rng) const {
       std::vector<PauliAmplitudes> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
-        samples[k] = sample_pauli(qubits, rng);
+        samples[k] = sample_pauli(supports, rng);
       } 
 
       return samples;
     }
 
-    ITensor coefficient_tensor() const {
-      ITensor C = tensors[0];
+    std::vector<PauliAmplitudes> sample_paulis_montecarlo(
+      PauliExpectationTree& tree, const std::vector<QubitSupport>& supports, 
+      size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PauliMutationFunc mutation, std::minstd_rand& rng
+    ) {
+      PauliString p = tree.to_pauli_string();
+      auto perform_mutation = [&](PauliString& p) -> double {
+        double t1 = std::abs(tree.expectation());
+        double p1 = prob(t1);
 
-      for (uint32_t i = 0; i < num_qubits-1; i++) {
-        C *= singular_values[i]*tensors[i+1];
+        PauliString q(p);
+        mutation(q, rng);
+
+        PauliString product = q*p;
+
+        tree.modify(product);
+
+        double t2 = std::abs(tree.expectation());
+        double p2 = prob(t2);
+
+        double r = static_cast<double>(rng())/static_cast<double>(RAND_MAX); 
+        if (r < p2 / p1) {
+          p = PauliString(q);
+          return t2;
+        } else {
+          // Put state back
+          tree.modify(product);
+          return t1;
+        }
+      };
+
+      for (size_t i = 0; i < equilibration_timesteps; i++) {
+        double t = perform_mutation(p);
       }
 
-      return C;
-    }
-
-    std::complex<double> coefficients(size_t z) const {
-      auto C = coefficient_tensor();
-
-      std::vector<int> assignments(num_qubits);
-      for (uint32_t j = 0; j < num_qubits; j++) {
-        assignments[j] = ((z >> j) & 1u) + 1;
+      std::vector<PauliAmplitudes> samples(num_samples);
+      for (size_t i = 0; i < num_samples; i++) {
+        double t = perform_mutation(p);
+        std::vector<double> amplitudes{t};
+        for (const auto& support : supports) {
+          PauliString ps = p.substring(support, false);
+          auto interval = ps.support_range();
+          if (interval) {
+            auto [q1, q2] = interval.value();
+            double ts = std::abs(tree.partial_expectation(q1, q2));
+            amplitudes.push_back(ts);
+          } else {
+            amplitudes.push_back(1.0);
+          }
+        }
+        samples[i] = {p, amplitudes};
       }
 
-      return eltC(C, assignments);
+      return samples;
     }
 
-    Eigen::VectorXcd coefficients() const {
+    bool is_pure_state() const {
+      return blocks.size() == 0;
+    }
+
+    ITensor singular_values_squared(size_t i) const {
+      try {
+        return toDense(singular_values[i]) * conj(prime(singular_values[i]));
+      } catch (const ITError& error) {
+        return singular_values[i] * conj(prime(singular_values[i]));
+      }
+    }
+
+    Eigen::MatrixXcd coefficients_mixed() const {
+      if (num_qubits > 15) {
+        throw std::runtime_error("Cannot generate coefficients for n > 15 qubits.");
+      }
+
+      ITensor L = left_boundary_tensor(0);
+      ITensor R = right_boundary_tensor(num_blocks());
+      auto contraction = partial_contraction(0, num_blocks(), nullptr, &L, &R);
+
+      size_t s = 1u << num_qubits; 
+      Eigen::MatrixXcd data = Eigen::MatrixXcd::Zero(s, s);
+
+      for (size_t z1 = 0; z1 < s; z1++) {
+        for (size_t z2 = 0; z2 < s; z2++) {
+          std::vector<int> assignments(2*num_qubits);
+          for (size_t j = 0; j < num_qubits; j++) {
+            assignments[2*j + 1] = ((z1 >> j) & 1u) + 1;
+            assignments[2*j] = ((z2 >> j) & 1u) + 1;
+          }
+
+          data(z1, z2) = eltC(contraction, assignments);
+        }
+      }
+
+      return data.conjugate();
+    }
+
+    Eigen::VectorXcd coefficients_pure() const {
       if (num_qubits > 31) {
         throw std::runtime_error("Cannot generate coefficients for n > 31 qubits.");
       }
 
+      if (!is_pure_state()) {
+        throw std::runtime_error("Cannot calculate coefficients for mixed MatrixProductState.");
+      }
+
+      ITensor C = tensors[0];
+
+      for (uint32_t q = 0; q < num_qubits - 1; q++) {
+        C *= singular_values[q]*tensors[q+1];
+      }
+
+      // TODO remove this trivial sum?
+      C *= delta(left_boundary_index, right_boundary_index);
+
       std::vector<uint32_t> indices(1u << num_qubits);
       std::iota(indices.begin(), indices.end(), 0);
-
-      return coefficients(indices);
-    }
-
-    Eigen::VectorXcd coefficients(const std::vector<uint32_t>& indices) const {
-      auto C = coefficient_tensor();
 
       Eigen::VectorXcd vals(1u << num_qubits);
       for (uint32_t i = 0; i < indices.size(); i++) {
@@ -1099,7 +1235,7 @@ class MatrixProductStateImpl {
       evolve(quantumstate_utils::SWAP::value, {q1, q2});
     }
 
-    void evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) {
+    void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
       if (qubits.size() == 1) {
         evolve(gate, qubits[0]);
         return;
@@ -1113,11 +1249,11 @@ class MatrixProductStateImpl {
       uint32_t q2 = std::max(qubits[0], qubits[1]);
 
       if (q2 - q1 > 1) {
-        for (size_t k = q1; k < q2 - 1; k++) {
-          swap(k, k+1);
+        for (size_t q = q1; q < q2 - 1; q++) {
+          swap(q, q+1);
         }
 
-        std::vector<uint32_t> qbits{q2 - 1, q2};
+        Qubits qbits{q2 - 1, q2};
         if (qubits[0] > qubits[1]) {
           Eigen::Matrix4cd SWAP = quantumstate_utils::SWAP::value;
           evolve(SWAP * gate * SWAP, qbits);
@@ -1126,39 +1262,50 @@ class MatrixProductStateImpl {
         }
 
         // Backward swaps
-        for (size_t k = q2 - 1; k > q1; k--) {
-          swap(k-1, k);
+        for (size_t q = q2 - 1; q > q1; q--) {
+          swap(q-1, q);
         }
 
         return;
       }
 
-      auto i1 = external_indices[qubits[0]];
-      auto i2 = external_indices[qubits[1]];
+      auto i1 = external_idx(qubits[0]);
+      auto i2 = external_idx(qubits[1]);
       ITensor gate_tensor = matrix_to_tensor(gate, 
         {prime(i1), prime(i2)}, 
         {i1, i2}
       );
 
+      size_t j1 = qubit_indices[q1];
+      size_t j2 = qubit_indices[q2];
+
+      if (j2 - j1 > 1) {
+        throw std::runtime_error("Cannot currently perform gate evolutions across qubits which have been partially traced.");
+      }
+
       ITensor theta = tensors[q1];
-      theta *= singular_values[q1];
+      theta *= singular_values[j1];
       theta *= tensors[q2];
       theta *= gate_tensor;
       theta = noPrime(theta);
 
-      std::vector<Index> u_inds{external_indices[q1]};
-      std::vector<Index> v_inds{external_indices[q2]};
+      std::vector<Index> u_inds{external_idx(q1)};
+      std::vector<Index> v_inds{external_idx(q2)};
 
-      if (q1 != 0) {
-        auto alpha = internal_indices[2*q1-2];
+      if (j1 != 0) {
+        auto alpha = internal_idx(j1 - 1, InternalDir::Left);
         u_inds.push_back(alpha);
-        theta *= singular_values[q1-1];
+        theta *= singular_values[j1 - 1];
+      } else {
+        u_inds.push_back(left_boundary_index);
       }
 
-      if (q2 != num_qubits - 1) {
-        auto gamma = internal_indices[2*q2+1];
+      if (j2 != num_blocks() - 1) {
+        auto gamma = internal_idx(j2, InternalDir::Right);
         v_inds.push_back(gamma);
-        theta *= singular_values[q2];
+        theta *= singular_values[j2];
+      } else {
+        v_inds.push_back(right_boundary_index);
       }
 
       auto [U, D, V] = svd(theta, u_inds, v_inds, 
@@ -1166,32 +1313,48 @@ class MatrixProductStateImpl {
            "LeftTags=",fmt::format("Internal,Left,n={}", q1),
            "RightTags=",fmt::format("Internal,Right,n={}", q1)});
 
-      internal_indices[2*q1] = commonIndex(U, D);
-      internal_indices[2*q2 - 1] = commonIndex(V, D);
+      internal_indices[2*j1] = commonIndex(U, D);
+      internal_indices[2*j2 - 1] = commonIndex(V, D);
 
 
-      auto inv = [](Real r) { return 1.0/r; };
-      if (q1 != 0) {
-        U *= apply(singular_values[q1-1], inv);
+      // TODO why are singular values becoming dense?
+      auto inv = [&](Real r) { 
+        if (r > sv_threshold) {
+          return 1.0/r;
+        } else {
+          return r;
+        }
+      };
+
+      if (j1 != 0) {
+        U *= apply(singular_values[j1 - 1], inv);
       }
-      if (q2 != num_qubits - 1) {
-        V *= apply(singular_values[q2], inv);
+      if (j2 != num_blocks() - 1) {
+        V *= apply(singular_values[j2], inv);
       }
 
       tensors[q1] = U;
       tensors[q2] = V;
-      singular_values[q1] = D;
+      singular_values[j1] = D;
     }
 
     void reset_from_tensor(const ITensor& tensor) {
-      ITensor c = tensor;
+      ITensor one_l(left_boundary_index);
+      one_l.set(1, 1.0);
+      ITensor one_r(right_boundary_index);
+      one_r.set(1, 1.0);
+
+      ITensor c = tensor * one_l * one_r;
+
       for (size_t i = 0; i < num_qubits - 1; i++) {
         std::vector<Index> u_inds = {external_idx(i)};
         if (i > 0) {
           u_inds.push_back(internal_idx(i-1, InternalDir::Right));
+        } else {
+          u_inds.push_back(left_boundary_index);
         }
 
-        std::vector<Index> v_inds;
+        std::vector<Index> v_inds{right_boundary_index};
         for (size_t j = i + 1; j < num_qubits; j++) {
           v_inds.push_back(external_idx(j));
         }
@@ -1220,6 +1383,23 @@ class MatrixProductStateImpl {
       return inner(*this).real();
     }
 
+    double purity() const {
+      if (is_pure_state()) {
+        return 1.0;
+      }
+
+      ITensor C = get_blocked_tensor_at_index(0) * delta(left_boundary_index, prime(left_boundary_index));
+      ITensor L = C * conj(prime(prime(C, "Internal"), "Internal"));
+      for (size_t k = 0; k < num_blocks() - 1; k++) {
+        C = singular_values_squared(k);
+        L *= C * prime(C, 2);
+        C = get_blocked_tensor_at_index(k + 1);
+        L *= C * conj(prime(prime(C, "Internal"), "Internal"));
+      }
+      L *= delta(right_boundary_index, prime(right_boundary_index), prime(right_boundary_index, 2), prime(right_boundary_index, 3));
+      return tensor_to_scalar(L).real();
+    }
+
     size_t bond_dimension_at_site(size_t i) const {
       if (i >= num_qubits - 1) {
         throw std::runtime_error(fmt::format("Cannot check bond dimension of site {} for MPS with {} sites.", i, num_qubits));
@@ -1229,61 +1409,139 @@ class MatrixProductStateImpl {
     }
 
     void reverse() {
+      // Swap constituent tensors
       for (size_t i = 0; i < num_qubits/2; i++) {
         size_t j = num_qubits - i - 1;
         std::swap(tensors[i], tensors[j]);
       }
 
-      size_t k = (num_qubits % 2) ? (num_qubits / 2) : (num_qubits / 2 - 1);
-      for (size_t i = 0; i < k; i++) {
-        size_t j = num_qubits - i - 2;
-        std::swap(singular_values[i], singular_values[j]);
+      for (size_t i = 0; i < blocks.size()/2; i++) {
+        size_t j = blocks.size() - i - 1;
+        std::swap(blocks[i], blocks[j]);
       }
 
+      for (size_t i = 0; i < singular_values.size()/2; i++) {
+        size_t j = num_qubits - i - 1;
+        std::swap(singular_values[i], singular_values[j]);
+      }
 
       // Relabel indices
       for (size_t i = 0; i < num_qubits/2; i++) {
         size_t j = num_qubits - i - 1;
-        std::swap(external_indices[i], external_indices[j]);
         swap_tags(external_indices[i], external_indices[j], tensors[i], tensors[j]);
+        std::swap(external_indices[i], external_indices[j]);
       }
 
-      for (size_t i = 0; i < num_qubits - 1; i++) {
+      for (size_t i = 0; i < internal_indices.size()/2; i++) {
         size_t j = internal_indices.size() - i - 1;
         std::swap(internal_indices[i], internal_indices[j]);
       }
 
-      for (size_t i = 0; i < k; i++) {
+      // Reform index labels
+      for (size_t q = 0; q < qubit_indices.size(); q++) {
+        qubit_indices[q] = num_blocks() - qubit_indices[q] - 1;
+      }
+      std::reverse(qubit_indices.begin(), qubit_indices.end());
+
+      for (size_t b = 0; b < block_indices.size(); b++) {
+        block_indices[b] = num_blocks() - block_indices[b] - 1;
+      }
+      std::reverse(block_indices.begin(), block_indices.end());
+
+      std::map<uint32_t, uint32_t> qubit_map_;
+      for (auto const& [i, q] : qubit_map) {
+        qubit_map_[num_blocks() - i - 1] = num_qubits - q - 1;
+      }
+      qubit_map = qubit_map_;
+
+      std::map<uint32_t, uint32_t> block_map_;
+      for (auto const& [i, b] : block_map) {
+        block_map_[num_blocks() - i - 1] = blocks.size() - b - 1;
+      }
+      block_map = block_map_;
+
+      // Fix index tags
+      for (size_t i = 0; i < internal_indices.size()/2; i++) {
         size_t j = internal_indices.size() - i - 1;
         size_t k1 = i / 2;
-        size_t k2 = num_qubits - k1 - 1;
+        size_t k2 = internal_indices.size() / 2 - k1 - 1;
 
-        if (i % 2 == 0) {
-          swap_tags(internal_indices[i], internal_indices[j], singular_values[k1], singular_values[k2 - 1], tensors[k1], tensors[k2]);
-        } else {
-          swap_tags(internal_indices[i], internal_indices[j], singular_values[k1], singular_values[k2 - 1], tensors[k1 + 1], tensors[k2 - 1]);
+        Index& i1 = internal_indices[i];
+        Index& i2 = internal_indices[j];
+        
+        swap_tags(i1, i2, singular_values[k1], singular_values[k2]);
+        if (k1 == k2) {
+          singular_values[k1].swapTags(tags(i1), tags(i2));
         }
       }
+
+      auto swap_internal_indices_at_block = [&](const Index& i1, const Index& i2, size_t k) {
+        if (qubit_map.contains(k)) {
+          size_t q = qubit_map.at(k);
+          tensors[q].swapTags(tags(i1), tags(i2));
+        } else {
+          size_t b = block_map.at(k);
+          blocks[b].swapTags(tags(i1), tags(i2));
+          blocks[b].swapPrime(0, 1);
+          blocks[b].swapTags(tags(i1), tags(i2));
+          blocks[b].swapPrime(0, 1);
+        }
+      };
+
+      for (size_t i = 0; i < internal_indices.size(); i++) {
+        size_t j = internal_indices.size() - i - 1;
+
+        Index i1 = internal_indices[i];
+        Index i2 = internal_indices[j];
+
+        size_t k = (i + 1) / 2;
+        swap_internal_indices_at_block(i1, i2, k);
+      }
+
+      if (num_blocks() % 2) {
+        size_t k = num_blocks() / 2;
+        size_t i = internal_indices.size()/2;
+        size_t j = internal_indices.size() - i - 1;
+
+        swap_internal_indices_at_block(internal_indices[i], internal_indices[j], k);
+      }
+
+      // Fix boundary indices
+      std::swap(left_boundary_index, right_boundary_index);
+      swap_tags(left_boundary_index, right_boundary_index);
+      swap_internal_indices_at_block(left_boundary_index, right_boundary_index, 0);
+      swap_internal_indices_at_block(left_boundary_index, right_boundary_index, num_blocks() - 1);
+    }
+
+    void close_boundary_indices(ITensor& tensor) const {
+      tensor *= delta(left_boundary_index, right_boundary_index);
+      tensor *= delta(prime(left_boundary_index), prime(right_boundary_index));
     }
 
     std::complex<double> inner(const MatrixProductStateImpl& other) const {
+      if (!is_pure_state() || !other.is_pure_state()) {
+        throw std::runtime_error("Can't compute inner product of mixed state.");
+      }
+
       if (num_qubits != other.num_qubits) {
-        throw std::runtime_error("Can't compute inner product of MPS; number of qubits do not match.");
+        throw std::runtime_error(fmt::format("Can't compute inner product of MPS; number of qubits do not match: {} and {}.", num_qubits, other.num_qubits));
       }
       
       Index ext1 = external_idx(0);
       Index ext2 = other.external_idx(0);
       ITensor contraction = tensors[0] * prime(conj(replaceInds(other.tensors[0], {ext2}, {ext1})), "Internal");
 
-      for (size_t i = 1; i < num_qubits; i++) {
-        ext1 = external_idx(i);
-        ext2 = other.external_idx(i);
-        contraction *= singular_values[i - 1];
-        contraction *= tensors[i];
-        contraction *= prime(other.singular_values[i - 1]);
-        contraction *= prime(conj(replaceInds(other.tensors[i], {ext2}, {ext1})), "Internal");
+      for (size_t q = 1; q < num_qubits; q++) {
+        ext1 = external_idx(q);
+        ext2 = other.external_idx(q);
+        contraction *= singular_values[q - 1];
+        contraction *= tensors[q];
+        contraction *= prime(other.singular_values[q - 1]);
+        contraction *= prime(conj(replaceInds(other.tensors[q], {ext2}, {ext1})), "Internal");
       }
 
+      contraction *= delta(left_boundary_index, prime(other.left_boundary_index));
+      contraction *= delta(right_boundary_index, prime(other.right_boundary_index));
       return std::conj(tensor_to_scalar(contraction));
     }
 
@@ -1315,56 +1573,8 @@ class MatrixProductStateImpl {
       return num_svd;
     }
 
-    MeasurementOutcome measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double r, const ITensor& L, const ITensor& R) const {
-      auto pm = p.to_matrix();
-      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
-      Eigen::MatrixXcd proj0 = (id + pm)/2.0;
-      Eigen::MatrixXcd proj1 = (id - pm)/2.0;
-
-      auto [q1, q2] = to_interval(qubits).value();
-
-      double prob_zero = (1.0 + partial_expectation(p, q1, q2, L, R))/2.0;
-
-      bool outcome = r > prob_zero;
-
-      auto proj = outcome ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
-
-      return {proj, prob_zero, outcome};
-    }
-
-    MeasurementOutcome measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double r) const {
-      if (qubits.size() == 0) {
-        throw std::runtime_error("Must perform measurement on nonzero qubits.");
-      }
-
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
-      }
-
-      auto [q1, q2] = to_interval(qubits).value();
-      ITensor L = left_boundary_tensor(q1);
-      ITensor R = right_boundary_tensor(q2);
-      return measurement_outcome(p, qubits, r, L, R);
-    }
-
-    void apply_measure(const MeasurementOutcome& outcome, const std::vector<uint32_t>& qubits, bool renormalize) {
-      auto proj = std::get<0>(outcome);
-      evolve(proj, qubits);
-      if (renormalize) {
-        auto [q1, q2] = to_interval(qubits).value();
-        normalize(q1, q2, 0, num_qubits - 1);
-      }
-    }
-
     template <typename T>
     std::vector<T> sort_measurements(const std::vector<T>& measurements) {
-      for (const auto& m : measurements) {
-        auto [q1, q2] = to_interval(std::get<1>(m)).value();
-        if (std::abs(static_cast<int>(q1) - static_cast<int>(q2)) > 1) {
-          throw std::runtime_error(fmt::format("Qubits = {} are not adjacent and thus cannot be measured on MPS.", std::get<1>(m)));
-        }
-      }
-
       std::vector<T> sorted_measurements = measurements;
 
       std::sort(sorted_measurements.begin(), sorted_measurements.end(), [](const T& m1, const T& m2) {
@@ -1377,7 +1587,7 @@ class MatrixProductStateImpl {
     }
 
     template <typename T>
-    std::vector<uint32_t> get_next_qubits(const std::vector<T>& measurements) {
+    Qubits get_next_qubits(const std::vector<T>& measurements) {
       size_t num_measurements = measurements.size();
       std::vector<bool> mask(num_qubits, false);
       size_t right_qubit = 0;
@@ -1391,11 +1601,11 @@ class MatrixProductStateImpl {
         }
       }
 
-      std::vector<uint32_t> next_qubit;
+      Qubits next_qubit;
       for (size_t i = 0; i < num_measurements - 1; i++) {
         auto qubits = std::get<1>(measurements[i]);
         auto [q1, q2] = to_interval(qubits).value();
-        size_t n = q2 + 1;
+        size_t n = q2;
         while (n < num_qubits) {
           if (mask[n]) {
             next_qubit.push_back(n);
@@ -1408,6 +1618,53 @@ class MatrixProductStateImpl {
       return next_qubit;
     }
     
+    MeasurementOutcome measurement_outcome(const PauliString& p, uint32_t i1, uint32_t i2, double r, const ITensor& L, const ITensor& R) const {
+      if (!p.hermitian()) {
+        throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+      }
+
+      auto pm = p.to_matrix();
+      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+      Eigen::MatrixXcd proj0 = (id + pm)/2.0;
+      Eigen::MatrixXcd proj1 = (id - pm)/2.0;
+
+      double prob_zero = (1.0 + partial_expectation(p, i1, i2, L, R).real())/2.0;
+      Qubits qubits = to_qubits(std::make_pair(i1, i2));
+
+      bool outcome = r > prob_zero;
+
+      auto proj = outcome ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
+
+      return {proj, prob_zero, outcome};
+    }
+
+    MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits, double r) const {
+      if (qubits.size() == 0) {
+        throw std::runtime_error("Must perform measurement on nonzero qubits.");
+      }
+
+      if (qubits.size() != p.num_qubits) {
+        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
+      }
+
+      auto [q1, q2] = to_interval(qubits).value();
+      size_t i1 = qubit_indices[q1];
+      size_t i2 = qubit_indices[q2 - 1] + 1;
+
+      ITensor L = left_boundary_tensor(i1);
+      ITensor R = right_boundary_tensor(i2);
+      return measurement_outcome(p, i1, i2, r, L, R);
+    }
+
+    void apply_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize) {
+      auto proj = std::get<0>(outcome);
+      evolve(proj, qubits);
+      if (renormalize) {
+        auto [q1, q2] = to_interval(qubits).value();
+        normalize(q1, q2-1, 0, num_qubits - 1);
+      }
+    }
+
     std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
       auto sorted_measurements = sort_measurements(measurements);
       size_t num_measurements = sorted_measurements.size();
@@ -1416,46 +1673,41 @@ class MatrixProductStateImpl {
       };
 
       size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
-      Index left_index = findIndex(A_l(left_qubit), fmt::format("m={}", left_qubit));
-      ITensor L = left_boundary_tensor(left_qubit);
+      size_t i0 = qubit_indices[left_qubit];
+      ITensor L = left_boundary_tensor(i0);
 
       std::vector<bool> results;
+      std::vector<MeasurementOutcome> outcomes;
       for (size_t i = 0; i < num_measurements; i++) {
         const auto& [p, qubits] = sorted_measurements[i];
         auto [q1, q2] = to_interval(qubits).value();
-        std::vector<ITensor> A = A_l(left_qubit, q1+1);
-        for (size_t j = left_qubit; j < q1; j++) {
-          ITensor Aj = A[j - left_qubit];
-          match_indices(fmt::format("m={}", j), L, Aj);
-          L *= Aj;
-          L *= conj(prime(Aj, "Internal"));
-        }
-        left_qubit = q1;
+        size_t i1 = qubit_indices[q1];
+        size_t i2 = qubit_indices[q2 - 1] + 1;
 
-        ITensor R = right_boundary_tensor(q2);
-        auto outcome = measurement_outcome(p, qubits, random_vals[i], L, R);
+        extend_left_environment_tensor(L, i0, i1);
+
+        i0 = i1;
+
+        ITensor R = right_boundary_tensor(i2);
+
+        auto outcome = measurement_outcome(p, i1, i2, random_vals[i], L, R);
+        outcomes.push_back(outcome);
         apply_measure(outcome, qubits, false);
         results.push_back(std::get<2>(outcome));
       }
 
-      for (size_t i = num_qubits - 1; i > 0; i--) {
-        uint32_t j = i - 1;
-        uint32_t k = i;
-
-        id(j, k);
+      for (size_t q = num_qubits - 1; q > 0; q--) {
+        id(q-1, q);
       }
 
-      for (size_t i = 0; i < num_qubits - 1; i++) {
-        uint32_t j = i;
-        uint32_t k = i + 1;
-
-        id(j, k);
+      for (size_t q = 0; q < num_qubits - 1; q++) {
+        id(q, q+1);
       }
 
       return results;
     }
 
-    bool measure(const PauliString& p, const std::vector<uint32_t>& qubits, double r) {
+    bool measure(const PauliString& p, const Qubits& qubits, double r) {
       auto outcome = measurement_outcome(p, qubits, r);
       apply_measure(outcome, qubits, true);
       return std::get<2>(outcome);
@@ -1465,14 +1717,16 @@ class MatrixProductStateImpl {
       return measure(PauliString("Z"), {q}, r);
     }
 
-    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r, const ITensor& L, const ITensor& R) const {
+    MeasurementOutcome weak_measurement_outcome(const PauliString& p, uint32_t i1, uint32_t i2, double beta, double r, const ITensor& L, const ITensor& R) const {
+      if (!p.hermitian()) {
+        throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+      }
+
       auto pm = p.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      auto [q1, q2] = to_interval(qubits).value();
-
-      double prob_zero = (1.0 + partial_expectation(p, q1, q2, L, R))/2.0;
+      double prob_zero = (1.0 + partial_expectation(p, i1, i2, L, R).real())/2.0;
 
       bool outcome = r >= prob_zero;
 
@@ -1484,14 +1738,14 @@ class MatrixProductStateImpl {
       Eigen::MatrixXcd proj = (beta*t).exp();
 
       Eigen::MatrixXcd P = proj.pow(2);
-      double norm = std::sqrt(std::abs(partial_expectation(P, q1, q2, L, R)));
+      double norm = std::sqrt(std::abs(partial_expectation(P, i1, i2, L, R)));
 
       proj = proj / norm;
 
       return {proj, prob_zero, outcome};
     }
 
-    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) const {
+    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta, double r) const {
       if (qubits.size() == 0) {
         throw std::runtime_error("Must perform measurement on nonzero qubits.");
       }
@@ -1501,12 +1755,15 @@ class MatrixProductStateImpl {
       }
 
       auto [q1, q2] = to_interval(qubits).value();
-      ITensor L = left_boundary_tensor(q1);
-      ITensor R = right_boundary_tensor(q2);
-      return weak_measurement_outcome(p, qubits, beta, r, L, R);
+      size_t i1 = qubit_indices[q1];
+      size_t i2 = qubit_indices[q2 - 1] + 1;
+
+      ITensor L = left_boundary_tensor(i1);
+      ITensor R = right_boundary_tensor(i2);
+      return weak_measurement_outcome(p, i1, i2, beta, r, L, R);
     }
 
-    bool weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta, double r) {
+    bool weak_measure(const PauliString& p, const Qubits& qubits, double beta, double r) {
       auto outcome = weak_measurement_outcome(p, qubits, beta, r);
       apply_measure(outcome, qubits, true);
       
@@ -1521,23 +1778,27 @@ class MatrixProductStateImpl {
       };
 
       size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
-      Index left_index = findIndex(A_r(left_qubit), fmt::format("m={}", left_qubit));
-      ITensor L = left_boundary_tensor(left_qubit);
+      size_t i0 = qubit_indices[left_qubit];
+      ITensor L = left_boundary_tensor(i0);
 
       std::vector<bool> results;
       for (size_t i = 0; i < num_measurements; i++) {
         const auto& [p, qubits, beta] = sorted_measurements[i];
         auto [q1, q2] = to_interval(qubits).value();
-        extend_left_environment_tensor(L, left_qubit, q1);
-        left_qubit = q1;
+        size_t i1 = qubit_indices[q1];
+        size_t i2 = qubit_indices[q2 - 1] + 1;
 
-        ITensor R = right_boundary_tensor(q2);
-        auto outcome = weak_measurement_outcome(p, qubits, beta, random_vals[i], L, R);
+        extend_left_environment_tensor(L, i0, i1);
+        i0 = i1;
+
+        ITensor R = right_boundary_tensor(i2);
+
+        auto outcome = weak_measurement_outcome(p, i1, i2, beta, random_vals[i], L, R);
         apply_measure(outcome, qubits, false);
         results.push_back(std::get<2>(outcome));
       }
 
-      extend_left_environment_tensor(L, left_qubit, num_qubits);
+      extend_left_environment_tensor(L, i0, num_qubits);
       L *= delta(inds(L));
       double tr = tensor_to_scalar(L).real();
 
@@ -1561,14 +1822,34 @@ class MatrixProductStateImpl {
     }
 
     // ======================================= DEBUG FUNCTIONS ======================================= //
-    ITensor orthogonality_tensor_r(uint32_t i) const {
-      ITensor A = A_r(i);
-      return A * conj(prime(A, fmt::format("m={}",i)));
+    ITensor orthogonality_tensor_l(uint32_t q) const {
+      ITensor A_l = tensors[q];
+      size_t i = qubit_indices[q];
+      Index left_index = left_boundary_index;
+      if (i != 0) {
+        left_index = internal_idx(i - 1, InternalDir::Right);
+      }
+
+      if (i != num_blocks() - 1) {
+        A_l *= singular_values[i];
+      }
+
+      return A_l * conj(prime(A_l, left_index));
     }
 
-    ITensor orthogonality_tensor_l(uint32_t i) const {
-      auto A = A_l(i);
-      return A * conj(prime(A, fmt::format("m={}", i+1)));
+    ITensor orthogonality_tensor_r(uint32_t q) const {
+      ITensor A_r = tensors[q];
+      size_t i = qubit_indices[q];
+      Index right_index = right_boundary_index;
+      if (i != num_blocks() - 1) {
+        right_index = internal_idx(i, InternalDir::Left);
+      }
+
+      if (i != 0) {
+        A_r *= singular_values[i - 1];
+      }
+      
+      return A_r * conj(prime(A_r, right_index));
     }
 
     std::vector<size_t> orthogonal_sites_r() const {
@@ -1710,593 +1991,72 @@ class MatrixProductStateImpl {
       display_masks(i1, i2, mask_left1, mask_left2, mask_right1, mask_right2);
     }
     // ======================================= DEBUG FUNCTIONS ======================================= //
-};
 
-using MPOBlock = std::optional<ITensor>;
+    // TEMPORARILY HERE
+    std::vector<double> process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& pauli_samples) {
+      size_t N = num_qubits/2 - 1;
+      size_t num_samples = pauli_samples.size();
+      std::vector<std::vector<double>> samplesA(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesB(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesAB(N, std::vector<double>(num_samples));
 
-class MatrixProductMixedStateImpl {
-  friend class MatrixProductMixedState;
+      for (size_t j = 0; j < num_samples; j++) {
+        auto const [P, t] = pauli_samples[j];
 
-  public:
-    size_t num_qubits;
-    uint32_t bond_dimension;
-    double sv_threshold;
+        std::vector<double> tA(N);
+        ITensor L = left_boundary_tensor(qubit_indices[0]);
+        for (size_t q = 0; q < N; q++) {
+          Index idx = external_idx(q);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = qubit_indices[q + 1];
+          extend_left_environment_tensor(L, i1, i2, p);
 
-    ITensor left_block;
-    std::vector<ITensor> ops;
-    std::vector<MPOBlock> blocks;
-    std::vector<Index> internal_indices;
-    std::vector<Index> external_indices;
+          ITensor contraction = L * right_boundary_tensor(i2);
+          samplesA[q][j] = std::abs(tensor_to_scalar(contraction));
+        }
 
-    static ITensor close_boundaries(const ITensor& tensor) {
-      auto tensor_ = tensor;
+        std::vector<double> tB(N);
+        ITensor R = right_boundary_tensor(num_blocks());
+        std::vector<ITensor> paulis;
+        for (size_t n = 0; n < num_qubits/2; n++) {
+          size_t q = num_qubits - n - 1;
+          Index idx = external_idx(q);
+          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
+        }
+        size_t i = qubit_indices[num_qubits/2];
+        extend_right_environment_tensor(R, num_blocks(), i, paulis);
+        for (size_t n = 0; n < N; n++) {
+          uint32_t q = num_qubits/2 - n;
+          Index idx = external_idx(q - 1);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q - 1), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = qubit_indices[q - 1];
+          extend_right_environment_tensor(R, i1, i2, p);
+          ITensor contraction = left_boundary_tensor(i2) * R;
+          samplesB[N - 1 - n][j] = std::abs(tensor_to_scalar(contraction));
+        }
 
-      auto left_idxs = findInds(tensor, "Left");
-      if (left_idxs.size() > 0) {
-        auto left = noPrime(left_idxs[0]);
-        tensor_ *= delta(left, prime(left));
-      }
-
-      auto right_idxs = findInds(tensor, "Right");
-      if (right_idxs.size() > 0) {
-        auto right = noPrime(right_idxs[0]);
-        tensor_ *= delta(right, prime(right));
-      }
-
-      return tensor_;
-    }
-
-    static ITensor get_block_left(const std::vector<ITensor>& A, size_t q, const Index& i_r) {
-      if (q == 0) {
-        // TODO see if toDense can be removed
-        return toDense(delta(i_r, prime(i_r)));
-      }
-
-      auto Ak = A[0];
-      auto a0 = findIndex(Ak, "m=0");
-      auto C = Ak*conj(prime(Ak, "Internal"))*delta(a0, prime(a0));
-      for (size_t k = 1; k < q; k++) {
-        Ak = A[k];
-        C *= Ak*conj(prime(Ak, "Internal"));
-      }
-
-      Index i = noPrime(findInds(C, fmt::format("m={}", q))[0]);
-
-      C.replaceInds({i, prime(i)}, {i_r, prime(i_r)});
-      return C;
-    }
-
-    static MPOBlock get_block_right(const std::vector<ITensor>& A, size_t q, const Index& i_l) {
-      size_t L = A.size();
-      if (q == L - 1) {
-        // TODO see if toDense can be removed
-        return toDense(delta(i_l, prime(i_l)));
-      }
-
-      auto Ak = A[L - 1];
-      auto aL = findIndex(Ak, fmt::format("m={}", L));
-      auto C = Ak*conj(prime(Ak, "Internal"))*delta(aL, prime(aL));
-
-      for (size_t k = L - 2; k > q; k--) {
-        Ak = A[k];
-        C *= Ak*conj(prime(Ak, "Internal"));
-      }
-
-      Index i = noPrime(findInds(C, fmt::format("m={}", q+1))[0]);
-
-      C.replaceInds({i, prime(i)}, {i_l, prime(i_l)});
-      return C;
-    }
-
-    static MPOBlock get_block(const std::vector<ITensor>& A, size_t q1, size_t q2, const Index& i_l, const Index& i_r) {
-      if (q2 == q1 + 1) {
-        return std::nullopt;
-      }
-
-      auto Ak = A[q1 + 1];
-      auto C = Ak*conj(prime(Ak, "Internal"));
-      for (size_t k = q1 + 2; k < q2; k++) {
-        Ak = A[k];
-        C *= Ak*conj(prime(Ak, "Internal"));
-      }
-
-      Index i1 = noPrime(findInds(C, fmt::format("m={}", q1+1))[0]);
-      Index i2 = noPrime(findInds(C, fmt::format("m={}", q2))[0]);
-
-      C.replaceInds({i1, prime(i1), i2, prime(i2)}, {i_l, prime(i_l), i_r, prime(i_r)});
-      return C;
-    }
-
-    enum InternalDir {
-      Left, Right
-    };
-
-    Index internal_idx(size_t i, InternalDir dir) const {
-      if (dir == InternalDir::Left) {
-        return internal_indices[2*i];
-      } else {
-        return internal_indices[2*i + 1];
-      } 
-    }
-
-    MatrixProductMixedStateImpl()=default;
-
-    MatrixProductMixedStateImpl(const MatrixProductMixedStateImpl& other) {
-      num_qubits = other.num_qubits;
-      bond_dimension = other.bond_dimension;
-      sv_threshold = other.sv_threshold;
-
-      left_block = other.left_block;
-      ops = other.ops;
-      blocks = other.blocks;
-
-      internal_indices = other.internal_indices;
-      external_indices = other.external_indices;
-    }
-
-    MatrixProductMixedStateImpl(const MatrixProductStateImpl& mps, const std::vector<uint32_t>& traced_qubits)
-      : num_qubits(mps.num_qubits - traced_qubits.size()), bond_dimension(mps.bond_dimension), sv_threshold(mps.sv_threshold) {
-      if (traced_qubits.size() >= mps.num_qubits) {
-        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductState with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mps.num_qubits));
-      }
-
-      std::vector<bool> mask(mps.num_qubits, false);
-      for (auto const q : traced_qubits) {
-        mask[q] = true;
-      }
-
-      // Generate all tensors
-      std::vector<ITensor> A = mps.A_r(0, mps.num_qubits);
-
-      std::vector<uint32_t> external_qubits;
-      size_t k = 0;
-      for (size_t i = 0; i < mps.num_qubits; i++) {
-        if (!mask[i]) {
-          external_qubits.push_back(i);
-          auto Ai = A[i];
-          Index external_idx = findIndex(Ai, "External");
-          Index external_idx_(dim(external_idx), fmt::format("i={},External",k));
-
-          Index internal_idx1 = findIndex(Ai, fmt::format("m={}", i));
-          Index internal_idx2 = findIndex(Ai, fmt::format("m={}", i+1));
-          Index internal_idx1_ = Index(dim(internal_idx1), fmt::format("n={},Internal,Left", k));
-          Index internal_idx2_ = Index(dim(internal_idx2), fmt::format("n={},Internal,Right", k));
-
-          ops.push_back(replaceInds(Ai, {external_idx, internal_idx1, internal_idx2}, {external_idx_, internal_idx1_, internal_idx2_}));
-
-          external_indices.push_back(external_idx_);
-          internal_indices.push_back(internal_idx1_);
-          internal_indices.push_back(internal_idx2_);
-          k++;
+        for (size_t n = 0; n < N; n++) {
+          samplesAB[n][j] = t[0];
         }
       }
 
-      blocks = std::vector<MPOBlock>();
-      left_block = get_block_left(A, external_qubits[0], internal_idx(0, InternalDir::Left));
-
-      for (size_t i = 0; i < num_qubits - 1; i++) {
-        size_t q1 = external_qubits[i];
-        size_t q2 = external_qubits[i + 1];
-
-        blocks.push_back(get_block(A, q1, q2, internal_idx(i, InternalDir::Right), internal_idx(i + 1, InternalDir::Left)));
+      std::vector<double> magic(N);
+      for (size_t n = 0; n < N; n++) {
+        magic[n] = QuantumState::calculate_magic_mutual_information_from_samples2({samplesAB[n], samplesA[n], samplesB[n]});
       }
 
-      blocks.push_back(get_block_right(A, external_qubits[num_qubits - 1], internal_idx(num_qubits - 1, InternalDir::Right)));
-    }
-
-    MatrixProductMixedStateImpl(const MatrixProductMixedStateImpl& mpo, const std::vector<uint32_t>& traced_qubits)
-      : num_qubits(mpo.num_qubits - traced_qubits.size()), bond_dimension(mpo.bond_dimension), sv_threshold(mpo.sv_threshold) {
-      if (traced_qubits.size() >= mpo.num_qubits) {
-        throw std::runtime_error(fmt::format("Passed {} qubits to trace over an MatrixProductMixedState with {} qubits. Must be at least one remaining physical qubit.", traced_qubits.size(), mpo.num_qubits));
-      }
-
-      std::vector<uint32_t> sorted_qubits(traced_qubits.begin(), traced_qubits.end());
-      std::sort(sorted_qubits.begin(), sorted_qubits.end());
-
-      size_t num_traced_qubits = traced_qubits.size();
-
-      // Mask of physical qubits vs traced qubits
-      std::vector<bool> mask(mpo.num_qubits, true);
-      for (auto q : sorted_qubits) {
-        mask[q] = false;
-      }
-
-      std::vector<uint32_t> physical_qubits;
-      for (size_t i = 0; i < mpo.num_qubits; i++) {
-        if (mask[i]) {
-          physical_qubits.push_back(i);
-        }
-      }
-
-      std::vector<ITensor> deltas;
-      for (size_t i = 0; i < physical_qubits[0]; i++) {
-        Index e = mpo.external_idx(i);
-        deltas.push_back(delta(e, prime(e)));
-      }
-
-      if (physical_qubits[0] == 0) {
-        left_block = mpo.left_block;
-      } else {
-        left_block = mpo.partial_contraction(0, physical_qubits[0], deltas);
-      }
-
-      for (size_t k = 0; k < physical_qubits.size(); k++) {
-        uint32_t q = physical_qubits[k];
-        ITensor new_op = mpo.ops[q];
-        Index i1 = findIndex(new_op, "External");
-        Index i2 = Index(dim(i1), fmt::format("i={},External", k));
-        new_op.replaceInds({i1}, {i2}); 
-        external_indices.push_back(i2);
-        ops.push_back(new_op);
-
-        if (q == mpo.num_qubits - 1 || mask[q + 1]) {
-          // If end of chain or next block is physical, next block is unchanged
-          blocks.push_back(mpo.blocks[q]);
-        } else { 
-          // Otherwise, next qubit is traced over; perform partial contraction
-          size_t q1 = q + 1;
-          size_t q2 = q1;
-          while (!mask[q2] && q2 < mpo.num_qubits) {
-            q2++;
-          }
-
-          deltas = std::vector<ITensor>();
-          for (size_t i = q1; i < q2; i++) {
-            Index e = mpo.external_idx(i);
-            deltas.push_back(delta(e, prime(e)));
-          }
-
-          auto new_block = mpo.partial_contraction(q1, q2, deltas);
-          
-          blocks.push_back(mpo.partial_contraction(q1, q2, deltas));
-        }
-      }
-
-      for (size_t i = 0; i < ops.size(); i++) {
-        Index aL = noPrime(findInds(ops[i], "Internal,Left")[0]);
-        Index aR = noPrime(findInds(ops[i], "Internal,Right")[0]);
-        Index aL_ = Index(dim(aL), fmt::format("n={},Internal,Left", i));
-        Index aR_ = Index(dim(aR), fmt::format("n={},Internal,Right", i));
-
-        ops[i].replaceInds({aL, aR}, {aL_, aR_});
-
-        if (i == 0) {
-          // TODO see if toDense can be removed
-          left_block.replaceInds({aL, prime(aL)}, {aL_, prime(aL_)});
-        } else {
-          if (blocks[i - 1]) {
-            blocks[i - 1] = blocks[i - 1].value() * delta(aL, aL_) * delta(prime(aL), prime(aL_));
-          }
-        }
-
-        if (i == ops.size() - 1) {
-          blocks[i] = toDense(delta(aR_, prime(aR_)));
-        } else if (blocks[i]) {
-          blocks[i] = blocks[i].value().replaceInds({aR, prime(aR)}, {aR_, prime(aR_)});
-        }
-
-        internal_indices.push_back(aL_);
-        internal_indices.push_back(aR_);
-      }
-    }
-
-    void print_mps() const {
-      std::cout << "left_block: " << block_to_string(left_block) << "\n";
-      for (size_t i = 0; i < num_qubits; i++) {
-        std::cout << fmt::format("ops[{}] = ", i);
-        std::cout << ops[i] << "\n";
-        std::cout << fmt::format("blocks[{}] = ", i);
-        std::cout << block_to_string(blocks[i]) << "\n";
-      }
-    }
-
-    Index external_idx(size_t i) const {
-      return findInds(ops[i], "External")[0];
-    }
-
-    ITensor apply_block_r(const ITensor& tensor, size_t i) const {
-      if (blocks[i]) {
-        return tensor*blocks[i].value();
-      } else {
-        Index i1 = internal_idx(i, InternalDir::Right);
-        Index i2 = internal_idx(i+1, InternalDir::Left);
-        return replaceInds(tensor, {i1, prime(i1)}, {i2, prime(i2)});
-      }
-    }
-
-    ITensor apply_block_l(const ITensor& tensor, size_t i) const {
-      if (i == 0) {
-        return tensor*left_block;
-      } else if (blocks[i-1].has_value()) {
-        return tensor*blocks[i-1].value();
-      } else {
-        Index i1 = internal_idx(i, InternalDir::Left);
-        Index i2 = internal_idx(i-1, InternalDir::Right);
-
-        return replaceInds(tensor, {i1, prime(i1)}, {i2, prime(i2)});
-      }
-    }
-
-    bool block_trivial(size_t k) const {
-      if (k < num_qubits - 1) {
-        return !blocks[k].has_value();
-      }
-
-      return is_identity(blocks[k].value());
-    }
-
-    double trace() const {
-      std::vector<ITensor> deltas;
-      for (size_t i = 0; i < num_qubits; i++) {
-        Index idx = external_idx(i);
-        deltas.push_back(delta(idx, prime(idx)));
-      }
-
-      auto t = partial_contraction(0, num_qubits, deltas);
-      return tensor_to_scalar(t).real();
-    }
-
-    Eigen::MatrixXcd coefficients() const {
-      if (num_qubits > 31) {
-        throw std::runtime_error("Cannot generate coefficients for n > 31 qubits.");
-      }
-
-      auto contraction = partial_contraction(0, num_qubits);
-
-      size_t s = 1u << num_qubits; 
-      Eigen::MatrixXcd data = Eigen::MatrixXcd::Zero(s, s);
-
-      for (size_t z1 = 0; z1 < s; z1++) {
-        for (size_t z2 = 0; z2 < s; z2++) {
-          std::vector<int> assignments(2*num_qubits);
-          for (size_t j = 0; j < num_qubits; j++) {
-            assignments[2*j + 1] = ((z1 >> j) & 1u) + 1;
-            assignments[2*j] = ((z2 >> j) & 1u) + 1;
-          }
-
-          data(z1, z2) = eltC(contraction, assignments);
-        }
-      }
-
-      return data;
-    }
-
-    ITensor partial_contraction(size_t _q1, size_t _q2, std::optional<std::vector<ITensor>> contraction_ops_opt=std::nullopt) const {
-      std::vector<ITensor> contraction_ops;
-      bool has_ops = contraction_ops_opt.has_value();
-      if (has_ops) {
-        contraction_ops = contraction_ops_opt.value();
-      }
-      size_t q1 = std::min(_q1, _q2);
-      size_t q2 = std::max(_q1, _q2);
-      
-      ITensor contraction;
-      if (q1 == 0) {
-        if (has_ops) {
-          contraction = apply_block_r(left_block * ops[0] * contraction_ops[0] * conj(prime(ops[0])), 0);
-        } else {
-          contraction = apply_block_r(left_block * ops[0] * conj(prime(ops[0])), 0);
-        }
-      } else {
-        if (has_ops) {
-          contraction = apply_block_r(ops[q1] * contraction_ops[0] * conj(prime(ops[q1])), q1);
-        } else {
-          contraction = apply_block_r(ops[q1] * conj(prime(ops[q1])), q1);
-        }
-
-        contraction = apply_block_l(contraction, q1);
-      }
-
-      size_t k = 1;
-      for (size_t q = q1 + 1; q < q2; q++) {
-        if (has_ops) {
-          contraction *= ops[q] * contraction_ops[k] * conj(prime(ops[q]));
-          contraction = apply_block_r(contraction, q);
-          k++;
-        } else {
-          contraction *= ops[q] * conj(prime(ops[q]));
-          contraction = apply_block_r(contraction, q);
-        }
-      }
-
-      return contraction;
-    }
-
-    double expectation(const PauliString& p) const {
-      print_mps();
-      if (p.num_qubits != num_qubits) {
-        throw std::runtime_error(fmt::format("Provided PauliString has {} qubits but MatrixProductMixedState has {} external qubits.", p.num_qubits, num_qubits));
-      }
-
-      auto qubit_range = p.get_qubit_support_range();
-
-      // Pauli is proportional to I; return sign.
-      if (qubit_range == std::nullopt) {
-        return p.sign();
-      }
-
-      auto [q1, q2] = qubit_range.value();
-
-      std::cout << fmt::format("P = {}, q1 = {}, q2 = {}\n", p, q1, q2);
-
-
-      size_t width = q2 - q1;
-      std::vector<ITensor> ops;
-      for (size_t i = 0; i < q1; i++) {
-        Index idx = external_idx(i);
-        ops.push_back(delta(idx, prime(idx)));
-      }
-
-      for (size_t i = q1; i < q2; i++) {
-        Index idx = external_idx(i);
-        ops.push_back(pauli_tensor(p.to_pauli(i), prime(idx), idx));
-      }
-
-      auto contraction = partial_contraction(0, q2, ops);
-      std::cout << fmt::format("partial_contraction(0, {}) = \n", q2);
-      print(contraction);
-
-      std::vector<ITensor> deltas;
-      for (size_t i = q2 - 1; i < num_qubits; i++) {
-        auto idx = Index(external_idx(i));
-        deltas.push_back(delta(idx, prime(idx)));
-      }
-      auto contraction2 = partial_contraction(q2 - 1, num_qubits, deltas);
-      std::cout << fmt::format("partial_contraction({}, {}) = \n", q2 - 1, num_qubits);
-      print(contraction2);
-      PrintData(contraction2);
-      contraction = close_boundaries(contraction);
-      //std::cout << "Contraction = \n";
-      //contraction *= contraction2;
-      print(contraction);
-
-      std::vector<int> _inds;
-      double sign = p.get_r() ? -1.0 : 1.0;
-      return sign*tensor_to_scalar(contraction).real();
-    }
-
-    // Check that MPO is bipartite, with the traced qubits on the left side 
-    bool left_bipartite() const {
-      for (size_t i = 0; i < num_qubits; i++) {
-        if (!block_trivial(i)) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-
-    PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& qubits, std::minstd_rand& rng) const {
-      std::vector<Pauli> p(num_qubits);
-      double P = 1.0;
-
-      ITensor L = left_block / std::sqrt(tensor_to_scalar(left_block * left_block).real());
-
-      for (size_t k = 0; k < num_qubits; k++) {
-        std::vector<double> probs(4);
-        std::vector<ITensor> tensors(4);
-
-        auto Ak = ops[k];
-        std::string label1 = fmt::format("n={},Left", k);
-        std::string label2 = fmt::format("n={},Right", k);
-        Index alpha_left = findInds(Ak, label1)[0];
-        L.replaceInds(inds(L), {alpha_left, prime(alpha_left)});
-
-        Index s = external_indices[k];
-
-        for (size_t p = 0; p < 4; p++) {
-          auto sigma = pauli_tensor(static_cast<Pauli>(p), s, prime(s));
-
-          auto C = prime(Ak)*conj(Ak)*sigma*L;
-          auto contraction = conj(C)*C / 2.0;
-
-          std::vector<size_t> inds;
-          double prob = std::abs(eltC(contraction, inds));
-          probs[p] = prob;
-          tensors[p] = C / std::sqrt(2.0 * prob);
-        }
-
-        std::discrete_distribution<> dist(probs.begin(), probs.end());
-        size_t a = dist(rng);
-
-        p[k] = static_cast<Pauli>(a);
-        P *= probs[a];
-        L = apply_block_r(tensors[a], k);
-      }
-
-      PauliString pauli(p);
-
-      double t = std::sqrt(P*std::pow(2.0, num_qubits));
-      std::vector<double> amplitudes{t};
-      for (const auto& support : qubits) {
-        PauliString ps = pauli.substring(support, false);
-        amplitudes.push_back(std::abs(expectation(ps)));
-      }
-
-      return {pauli, amplitudes};
-    }
-
-    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples, std::minstd_rand& rng) const {
-      if (!left_bipartite()) {
-        throw std::runtime_error("Cannot sample_paulis for a non-left-bipartite MPO.");
-      }
-      std::vector<PauliAmplitudes> samples(num_samples);
-
-      for (size_t k = 0; k < num_samples; k++) {
-        samples[k] = sample_pauli(qubits, rng);
-      } 
-
-      return samples;
-    }
-
-    double purity() const {
-      ITensor L = left_block * prime(left_block, 2);
-      for (size_t i = 0; i < num_qubits; i++) {
-        ITensor A = apply_block_r(ops[i] * conj(prime(ops[i])), i);
-        L *= A * prime(conj(A), 2, "Internal");
-      }
-
-      return tensor_to_scalar(L).real();
-    }
-    
-  private:
-    static std::string block_to_string(const MPOBlock& block) {
-      if (block) {
-        std::stringstream s;
-        s << block.value();
-        return s.str();
-      } else {
-        return "None\n";
-      }
+      return magic;
     }
 };
 
 class PauliExpectationTreeImpl {
   public:
-    static ITensor multiply_leftright(const ITensor& left, const ITensor& right) {
-      Index internal_idx_left = noPrime(findInds(left, "Right")[0]);
-      Index internal_idx_right = noPrime(findInds(right, "Left")[0]);
-      return left * replaceInds(right, {internal_idx_right, prime(internal_idx_right)},
-                                       {internal_idx_left, prime(internal_idx_left)});
-    }
-
-    static ITensor close_boundaries(const ITensor& tensor) {
-      std::cout << "Before close_boundaries, tensor = \n";
-      print(tensor);
-      auto tensor_ = tensor;
-
-      auto left_idxs = findInds(tensor, "Left");
-      if (left_idxs.size() > 0) {
-        Index idx = noPrime(left_idxs[0]);
-        tensor_ *= delta(idx, prime(idx));
-      }
-
-      auto right_idxs = findInds(tensor, "Right");
-      if (right_idxs.size() > 0) {
-        Index idx = noPrime(right_idxs[0]);
-        tensor_ *= delta(idx, prime(idx));
-      }
-      std::cout << "After close_boundaries, tensor = \n";
-      print(tensor_);
-      std::cout << "\n";
-
-      return tensor_;
-    }
-
-    //ITensor apply_block_r(const ITensor& tensor, const MPOBlock& block) const {
-    //  if (block) {
-    //    return tensor * block.value();
-    //  } else {
-    //    Index i1 = noPrime(findInds(tensor, "Right,Internal")[0]);
-    //    Index i2 = Index("Left,Internal", dim(i1));
-
-    //    return replaceInds(tensor, {i1, prime(i1)}, {i2, prime(i2)});
-    //  }
-    //}
-
-    const MatrixProductMixedStateImpl& state;
+    const MatrixProductStateImpl& state;
 
     Pauli pauli;
+    uint8_t phase;
 
     size_t depth;
     size_t min;
@@ -2311,7 +2071,8 @@ class PauliExpectationTreeImpl {
     std::shared_ptr<PauliExpectationTreeImpl> left;
     std::shared_ptr<PauliExpectationTreeImpl> right;
 
-    PauliExpectationTreeImpl(const MatrixProductMixedStateImpl& state, const PauliString& p, size_t min, size_t max) : state(state), min(min), max(max) {
+    PauliExpectationTreeImpl(const MatrixProductStateImpl& state, const PauliString& p, size_t min, size_t max)
+    : state(state), phase(p.get_r()), min(min), max(max) {
       size_t num_qubits = state.num_qubits;
 
       if (num_qubits != p.num_qubits) {
@@ -2328,116 +2089,70 @@ class PauliExpectationTreeImpl {
         size_t q = width/2;
         left = std::make_shared<PauliExpectationTreeImpl>(state, p, min, min + q);
         right = std::make_shared<PauliExpectationTreeImpl>(state, p, min + q, max);
-
-        //size_t n1 = num_qubits/2;
-        //std::vector<uint32_t> qubitsA(n1);
-        //std::iota(qubitsA.begin(), qubitsA.end(), 0);
-
-        //size_t n2 = num_qubits - num_qubits/2;
-        //std::vector<uint32_t> qubitsB(n2);
-        //std::iota(qubitsB.begin(), qubitsB.end(), n1);
-
-        //MatrixProductMixedStateImpl stateA(state, qubitsB);
-        //PauliString pA = p.substring(qubitsA, true);
-        //left = std::make_shared<PauliExpectationTreeImpl>(stateA, pA, min, min + n1);
-
-        //MatrixProductMixedStateImpl stateB(state, qubitsA);
-        //PauliString pB = p.substring(qubitsB, true);
-        //right = std::make_shared<PauliExpectationTreeImpl>(stateB, pB, min + n1, max);
       }
 
       update_node();
-
-      if (is_leaf()) {
-        std::cout << fmt::format("leaf. expectation = {}\n", tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real());
-      }
     }
 
     bool is_leaf() const {
       return depth == 0;
     }
 
-    double expectation() const {
-      return tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real();
+    bool is_root() const {
+      return min == 0 && max == state.num_qubits;
     }
 
-    ITensor get_partial_contraction(uint32_t q1, uint32_t q2) const {
-      std::cout << fmt::format("q1 = {}, q2 = {}\n", q1, q2);
-      std::cout << fmt::format("left: {}, {}\n", left->min, left->max);
-      std::cout << fmt::format("right: {}, {}\n", right->min, right->max);
+    ITensor partial_contraction(uint32_t q1, uint32_t q2) const {
       if (q1 == min && q2 == max) {
-        std::cout << "Returning\n";
         return tensor;
       }
 
       if (q2 <= right->min) {
-        std::cout << "Going left\n";
-        return left->get_partial_contraction(q1, q2);
+        return left->partial_contraction(q1, q2);
       } else if (q1 >= right->min) {
-        std::cout << "Going right\n";
-        return right->get_partial_contraction(q1, q2);
+        return right->partial_contraction(q1, q2);
       } else {
-        std::cout << fmt::format("Multiplying left({}, {}) and right({}, {})\n", q1, left->max, right->min, q2);
-        return PauliExpectationTreeImpl::multiply_leftright(left->get_partial_contraction(q1, left->max), 
-                                                           right->get_partial_contraction(right->min, q2));
+        return left->partial_contraction(q1, left->max) * right->partial_contraction(right->min, q2);
       }
     }
 
-    void display_norm() const {
-      std::cout << fmt::format("q1 = {}, q2 = {}, partial_expectation = {}\n", min, max, tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(tensor)).real());
-      if (!is_leaf()) {
-        left->display_norm();
-        right->display_norm();
-      }
+    std::complex<double> partial_expectation(uint32_t q1, uint32_t q2) const {
+      ITensor contraction = partial_contraction(q1, q2);
+      contraction *= state.left_boundary_tensor(left_boundary(q1));
+      contraction *= state.right_boundary_tensor(right_boundary(q2));
 
+      return sign_from_bits(phase) * tensor_to_scalar(contraction);
     }
 
-    double partial_expectation(uint32_t q1_, uint32_t q2_) const {
-      size_t q1 = std::min(q1_, q2_);
-      size_t q2 = std::max(q1_, q2_);
-      ITensor contraction = get_partial_contraction(q1, q2);
-      return tensor_to_scalar(PauliExpectationTreeImpl::close_boundaries(contraction)).real();
+    uint32_t left_boundary(size_t q) const {
+      return state.qubit_indices[q];
+    }
+
+    uint32_t right_boundary(uint32_t q) const {
+      if (q == state.num_qubits) {
+        return state.num_blocks();
+      } else {
+        return state.qubit_indices[q];
+      }
+    }
+
+    std::pair<uint32_t, uint32_t> get_boundaries() const {
+      return {left_boundary(min), right_boundary(max)};
     }
 
     void update_node() {
       if (is_leaf()) {
         Index idx = state.external_idx(min);
-        ITensor p = pauli_tensor(pauli, prime(idx), idx);
-        std::vector<ITensor> p_ = {p};
-        tensor = state.partial_contraction(min, max, p_);
-        //size_t q = min;
-        //const ITensor& op = state.ops[q];
-        //tensor = op * p * prime(conj(op));
-        //
-        //tensor = state.apply_block_r(tensor, q);
-        //if (q == 0) {
-        //  tensor = state.apply_block_l(tensor, q);
-        //}
+        std::vector<ITensor> p = {pauli_tensor(pauli, prime(idx), idx)};
+        auto [i1, i2] = get_boundaries();
 
-        auto left_indices = findInds(tensor, fmt::format("Internal,n={}", min));
-        if (left_indices.size() > 0) {
-          auto left = noPrime(left_indices[0]);
-          auto left_ = Index(dim(left), "Left");
-          tensor.replaceInds({left, prime(left)}, {left_, prime(left_)});
-        }
-
-        auto right_indices = findInds(tensor, fmt::format("Internal,n={}", max));
-        if (right_indices.size() > 0) {
-          auto right = noPrime(right_indices[0]);
-          auto right_ = Index(dim(right), "Right");
-          tensor.replaceInds({right, prime(right)}, {right_, prime(right_)});
-        }
-
-        std::cout << "After update_node, tensor = \n";
-        print(tensor);
-        std::cout << "\n";
+        tensor = state.partial_contraction(i1, i2, &p, nullptr, nullptr);
       } else {
-        tensor = multiply_leftright(left->tensor, right->tensor);
+        tensor = left->tensor * right->tensor;
       }
 
       active = false;
     }
-
 
     void update_tree() {
       if (active) {
@@ -2450,37 +2165,49 @@ class PauliExpectationTreeImpl {
       }
     }
 
-    void propogate_pauli(Pauli p, uint32_t q) {
+    uint8_t propogate_pauli(Pauli p, uint32_t q) {
+      active = true;
+
       if (is_leaf()) {
-        pauli *= p;
+        auto [result, r] = multiply_pauli(p, pauli);
+        pauli = result;
+        return r;
       } else {
         if (q < right->min) {
-          left->propogate_pauli(p, q);
+          return left->propogate_pauli(p, q);
         } else {
-          right->propogate_pauli(p, q);
+          return right->propogate_pauli(p, q);
         }
       }
-
-      active = true;
     }
 
     void modify(const PauliString& P) {
       auto support = P.get_support();
 
+      uint8_t phase_change = P.get_r();
       for (const auto q : support) {
         Pauli p = P.to_pauli(q);
-        propogate_pauli(p, q);
+        phase_change += propogate_pauli(p, q);
       }
+
+      phase = (phase + phase_change) & 0b11;
 
       update_tree();
     }
 
     std::string to_string() const {
+      std::string s;
       if (depth == 0) {
-        return std::string(1, pauli_to_char(pauli));
+        s = std::string(1, pauli_to_char(pauli));
       } else {
-        return left->to_string() + right->to_string();
+        s = left->to_string() + right->to_string();
       }
+
+      if (is_root()) {
+        s = PauliString::phase_to_string(phase) + s; 
+      }
+      
+      return s;
     }
 
     PauliString to_pauli_string() const {
@@ -2577,8 +2304,7 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q, index);
 }
 
-// TODO revist; see if can sample MPS with PDF ~<P>^4 (default is <P>^2)
-double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>& qubitsA, const std::vector<uint32_t>& qubitsB, size_t num_samples) {
+double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) {
   if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
     throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
   }
@@ -2592,8 +2318,8 @@ double MatrixProductState::magic_mutual_information(const std::vector<uint32_t>&
 }
 
 double MatrixProductState::magic_mutual_information_montecarlo(
-  const std::vector<uint32_t>& qubitsA, 
-  const std::vector<uint32_t>& qubitsB, 
+  const Qubits& qubitsA, 
+  const Qubits& qubitsB, 
   size_t num_samples, size_t equilibration_timesteps, 
   std::optional<PauliMutationFunc> mutation_opt
 ) {
@@ -2601,115 +2327,108 @@ double MatrixProductState::magic_mutual_information_montecarlo(
 
   auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
   std::vector<QubitSupport> supports = {_qubitsA, _qubitsB};
-  auto mpo = partial_trace_mpo(_qubits);
+  auto mpo = partial_trace_mps(_qubits);
 
   auto pauli_samples2 = mpo.sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
   return QuantumState::calculate_magic_mutual_information_from_samples2(extract_amplitudes(pauli_samples2));
 }
 
-std::vector<double> process_bipartite_pauli_samples(MatrixProductState& state, const std::vector<PauliAmplitudes>& pauli_samples) {
-  size_t N = state.num_qubits/2 - 1;
-  std::vector<std::vector<double>> samplesA(N);
-  std::vector<std::vector<double>> samplesB(N);
-  std::vector<std::vector<double>> samplesAB(N);
-
-  // TODO CHECK ON THIS
-  for (size_t j = 0; j < pauli_samples.size(); j++) {
-    auto const [P, t] = pauli_samples[j];
-    for (size_t i = 1; i <= N; i++) {
-      samplesAB[j].push_back(t[0]);
-      samplesA[j].push_back(t[i - 1]);
-      samplesB[j].push_back(t[i - 1 + N]);
-    }
-  }
-
-  std::vector<double> magic(N);
-  for (size_t j = 0; j < N; j++) {
-    magic[j] = QuantumState::calculate_magic_mutual_information_from_samples2({samplesA[j], samplesB[j], samplesAB[j]});
-  }
-
-  return magic;
-}
-
 std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_t num_samples) { 
-  std::vector<QubitSupport> supports = get_bipartite_supports(num_qubits);
-
-  auto pauli_samples = sample_paulis(supports, num_samples);
-
-  return process_bipartite_pauli_samples(*this, pauli_samples);
+  auto pauli_samples = sample_paulis({}, num_samples);
+  return impl->process_bipartite_pauli_samples(pauli_samples);
 }
 
 std::vector<double> MatrixProductState::bipartite_magic_mutual_information_montecarlo(
   size_t num_samples, size_t equilibration_timesteps, 
   std::optional<PauliMutationFunc> mutation_opt
 ) {
-  return QuantumState::bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps, mutation_opt);
-  auto prob = [](double t) -> double { return t*t; };
-
-  std::vector<QubitSupport> qubits = get_bipartite_supports(num_qubits);
-
-  auto pauli_samples = sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
-
-  return process_bipartite_pauli_samples(*this, pauli_samples);
-}
-
-std::vector<double> MatrixProductState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
-  return impl->pauli_expectation_left_sweep(P, q1, q2);
-}
-
-std::vector<double> MatrixProductState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1, uint32_t q2) const {
-  return impl->pauli_expectation_right_sweep(P, q1, q2);
+  auto pauli_samples = sample_paulis_montecarlo({}, num_samples, equilibration_timesteps, [](double t) { return t*t; }, mutation_opt);
+  return impl->process_bipartite_pauli_samples(pauli_samples);
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) {
-  return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+  //return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+  // Should these checks be done in Impl?
+  if (impl->is_pure_state()) {
+    return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+  } else if (impl->blocks.size() == 1) {
+    if (impl->block_map.contains(0)) { // Left-bipartite
+      // TODO check that this is correct!
+      return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+    } else if (impl->block_map.contains(impl->num_blocks() - 1)) { // Right-bipartite
+      MatrixProductState reversed(*this);
+      reversed.reverse();
+      return reversed.impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+    } else {
+      throw std::runtime_error("Cannot currently perform sample_paulis on non-bipartite mixed states.");
+    }
+  } else {
+    throw std::runtime_error("Cannot currently perform sample_paulis on non-bipartite mixed states.");
+  }
 }
 
-std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
-  MatrixProductMixedState mpo(*this, {});
-  return mpo.sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
+std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& supports, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
+  PauliMutationFunc mutation = single_qubit_random_mutation;
+  if (mutation_opt) {
+    mutation = mutation_opt.value();
+  }
+
+  PauliString p(num_qubits);
+  PauliExpectationTree tree(*this, p);
+
+  return impl->sample_paulis_montecarlo(tree, supports, num_samples, equilibration_timesteps, prob, mutation, QuantumState::rng);
 }
 
-double MatrixProductState::expectation(const PauliString& p) const {
+std::complex<double> MatrixProductState::expectation(const PauliString& p) const {
   return impl->expectation(p);
 }
 
-std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
-  return impl->expectation(m, sites);
+std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const {
+  return impl->expectation(m, qubits);
 }
 
 std::shared_ptr<QuantumState> MatrixProductState::partial_trace(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
+  auto interval = support_range(qubits);
   if (interval) {
     auto [q1, q2] = interval.value();
     if (q1 < 0 || q2 > num_qubits) {
       throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductState.partial_trace with {} qubits", qubits, num_qubits));
     }
   }
-  return std::make_shared<MatrixProductMixedState>(*this, qubits);
+
+  auto impl_ = std::make_unique<MatrixProductStateImpl>(impl->partial_trace(qubits));
+  std::shared_ptr<MatrixProductState> mps = std::make_shared<MatrixProductState>(impl_->num_qubits, impl->bond_dimension, impl->sv_threshold);
+  mps->impl = std::move(impl_);
+
+  return mps;
 }
 
-MatrixProductMixedState MatrixProductState::partial_trace_mpo(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
+MatrixProductState MatrixProductState::partial_trace_mps(const Qubits& qubits) const {
+  auto interval = support_range(qubits);
   if (interval) {
     auto [q1, q2] = interval.value();
     if (q1 < 0 || q2 > num_qubits) {
       throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductState.partial_trace with {} qubits", qubits, num_qubits));
     }
   }
-  return MatrixProductMixedState(*this, qubits);
+
+  auto impl_ = std::make_unique<MatrixProductStateImpl>(impl->partial_trace(qubits));
+  MatrixProductState mps(impl_->num_qubits, impl->bond_dimension, impl->sv_threshold);
+  mps.impl = std::move(impl_);
+  
+  return mps;
 }
 
-std::complex<double> MatrixProductState::coefficients(uint32_t z) const {
-  return impl->coefficients(z);
+bool MatrixProductState::is_pure_state() const {
+  return impl->is_pure_state();
 }
 
-Eigen::VectorXcd MatrixProductState::coefficients(const std::vector<uint32_t>& indices) const {
-  return impl->coefficients(indices);
+Eigen::MatrixXcd MatrixProductState::coefficients_mixed() const {
+  return impl->coefficients_mixed();
 }
 
-Eigen::VectorXcd MatrixProductState::coefficients() const {
-  return impl->coefficients();
+Eigen::VectorXcd MatrixProductState::coefficients_pure() const {
+  return impl->coefficients_pure();
 }
 
 double MatrixProductState::trace() const {
@@ -2733,12 +2452,16 @@ void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
   impl->evolve(gate, qubit);
 }
 
-void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) {
+void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
   impl->evolve(gate, qubits);
 }
 
 void MatrixProductState::id(uint32_t q1, uint32_t q2) {
   impl->evolve(Eigen::Matrix4cd::Identity(), {q1, q2});
+}
+
+double MatrixProductState::purity() const {
+  return impl->purity();
 }
 
 bool MatrixProductState::mzr(uint32_t q) {
@@ -2754,7 +2477,7 @@ std::vector<bool> MatrixProductState::measure(const std::vector<MeasurementData>
   return impl->measure(measurements, random_vals);
 }
 
-bool MatrixProductState::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+bool MatrixProductState::measure(const PauliString& p, const Qubits& qubits) {
   return impl->measure(p, qubits, QuantumState::randf());
 }
 
@@ -2767,12 +2490,12 @@ std::vector<bool> MatrixProductState::weak_measure(const std::vector<WeakMeasure
   return impl->weak_measure(measurements, random_vals);
 }
 
-bool MatrixProductState::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+bool MatrixProductState::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
   return impl->weak_measure(p, qubits, beta, QuantumState::randf());
 }
 
 // --- DEBUG FUNCTIONS
-void MatrixProductState::print_mps(bool print_data=false) const {
+void MatrixProductState::print_mps(bool print_data) const {
   impl->print_mps(print_data);
 }
 
@@ -2809,161 +2532,21 @@ bool MatrixProductState::debug_tests() {
 }
 
 // ----------------------------------------------------------------------- //
-// ------------ MatrixProductMixedState implementation --------------------- //
-// ----------------------------------------------------------------------- //
-
-MatrixProductMixedState::MatrixProductMixedState(const MatrixProductState& mps, const std::vector<uint32_t>& traced_qubits) : QuantumState(mps.num_qubits - traced_qubits.size()) {
-  impl = std::make_unique<MatrixProductMixedStateImpl>(*mps.impl.get(), traced_qubits);
-}
-
-MatrixProductMixedState::MatrixProductMixedState(const MatrixProductMixedState& mpo, const std::vector<uint32_t>& traced_qubits) : QuantumState(mpo.num_qubits - traced_qubits.size()) {
-  impl = std::make_unique<MatrixProductMixedStateImpl>(*mpo.impl.get(), traced_qubits);
-}
-
-MatrixProductMixedState::MatrixProductMixedState(const MatrixProductMixedState& other) : QuantumState(other.num_qubits) {
-  impl = std::make_unique<MatrixProductMixedStateImpl>(*other.impl.get());
-}
-
-MatrixProductMixedState::~MatrixProductMixedState()=default;
-
-MatrixProductMixedState& MatrixProductMixedState::operator=(const MatrixProductMixedState& other) {
-  if (this != &other) {
-    impl = std::make_unique<MatrixProductMixedStateImpl>(*other.impl);
-  }
-  return *this;
-}
-
-void MatrixProductMixedState::print_mps() const {
-  impl->print_mps();
-}
-
-Eigen::MatrixXcd MatrixProductMixedState::coefficients() const {
-  return impl->coefficients();
-}
-
-double MatrixProductMixedState::trace() const {
-  return impl->trace();
-}
-
-std::vector<PauliAmplitudes> MatrixProductMixedState::sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) {
-  return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
-}
-
-std::vector<PauliAmplitudes> MatrixProductMixedState::sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
-  //return QuantumState::sample_paulis_montecarlo(qubits, num_samples, equilibration_timesteps, prob, mutation_opt);
-  PauliMutationFunc mutation = single_qubit_random_mutation;
-  if (mutation_opt) {
-    mutation = mutation_opt.value();
-  }
-
-  PauliString p(num_qubits);
-  PauliExpectationTree environment(*this, p);
-
-  environment.display_norm();
-  throw std::runtime_error("");
-  auto perform_mutation = [&](PauliString& p) -> double {
-    double t1 = std::abs(environment.expectation());
-    double p1 = prob(t1);
-
-    PauliString q(p);
-    mutation(q, rng);
-
-    PauliString product = q*p;
-
-    environment.modify(product);
-
-    double t2 = std::abs(environment.expectation());
-    double p2 = prob(t2);
-
-    double r = static_cast<double>(rng())/static_cast<double>(RAND_MAX); 
-    if (r < p2 / p1) {
-      p = PauliString(q);
-      return t2;
-    } else {
-      // Put state back
-      environment.modify(product);
-      return t1;
-    }
-  };
-
-  for (size_t i = 0; i < equilibration_timesteps; i++) {
-    double t = perform_mutation(p);
-  }
-
-  std::vector<PauliAmplitudes> samples(num_samples);
-  for (size_t i = 0; i < num_samples; i++) {
-    double t = perform_mutation(p);
-    std::vector<double> amplitudes{t};
-    //std::cout << fmt::format("P = {}, t = {:.3f}\n", p, t);
-    for (const auto& support : qubits) {
-      PauliString ps = p.substring(support, false);
-      double ts = std::abs(expectation(ps));
-      auto [q1, q2] = to_interval(support).value();
-      double ts_ = std::abs(environment.partial_expectation(q1, q2));
-      std::cout << fmt::format("q1 = {}, q2 = {}\n", q1, q2);
-      std::cout << fmt::format("p = {}, ps = {}\n", p, ps);
-      std::cout << fmt::format("{:.3f} vs {:.3f}\n", ts, ts_);
-
-      if (std::abs(ts - ts_) > 1e-4) {
-        throw std::runtime_error("FAILED\n");
-      }
-      //std::cout << fmt::format("{}, {} -> {:.3f}\n", to_qubits(support), ps, ts);
-      amplitudes.push_back(ts);
-    }
-    samples[i] = {p, amplitudes};
-  }
-
-  return samples;
-}
-
-double MatrixProductMixedState::expectation(const PauliString& p) const {
-  return impl->expectation(p);
-}
-
-std::shared_ptr<QuantumState> MatrixProductMixedState::partial_trace(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
-  if (interval) {
-    auto [q1, q2] = interval.value();
-    if (q1 < 0 || q2 >= num_qubits) {
-      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductMixedState.partial_trace with {} qubits", qubits, num_qubits));
-    }
-  }
-  return std::make_shared<MatrixProductMixedState>(*this, qubits);
-}
-
-MatrixProductMixedState MatrixProductMixedState::partial_trace_mpo(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
-  if (interval) {
-    auto [q1, q2] = interval.value();
-    if (q1 < 0 || q2 >= num_qubits) {
-      throw std::runtime_error(fmt::format("qubits = {} passed to MatrixProductMixedState.partial_trace with {} qubits", qubits, num_qubits));
-    }
-  }
-  return MatrixProductMixedState(*this, qubits);
-}
-
-double MatrixProductMixedState::purity() const {
-  return impl->purity();
-}
-
-// ----------------------------------------------------------------------- //
 // --------------- PauliExpectationTree implementation ------------------- //
 // ----------------------------------------------------------------------- //
 
-PauliExpectationTree::PauliExpectationTree(const MatrixProductMixedState& state, const PauliString& p) : num_qubits(state.num_qubits) {
+PauliExpectationTree::PauliExpectationTree(const MatrixProductState& state, const PauliString& p) : num_qubits(state.num_qubits) {
   impl = std::make_unique<PauliExpectationTreeImpl>(*state.impl, p, 0, num_qubits);
 }
 
-void PauliExpectationTree::display_norm() const {
-  impl->display_norm();
-}
+PauliExpectationTree::~PauliExpectationTree()=default;
 
-double PauliExpectationTree::expectation() const {
-  return impl->expectation();
-}
-
-double PauliExpectationTree::partial_expectation(uint32_t q1, uint32_t q2) const {
+std::complex<double> PauliExpectationTree::expectation() const {
   return impl->partial_expectation(0, num_qubits);
+}
+
+std::complex<double> PauliExpectationTree::partial_expectation(uint32_t q1, uint32_t q2) const {
+  return impl->partial_expectation(q1, q2);
 }
 
 void PauliExpectationTree::propogate_pauli(Pauli p, uint32_t q) {
@@ -2981,4 +2564,3 @@ std::string PauliExpectationTree::to_string() const {
 PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
 }
-

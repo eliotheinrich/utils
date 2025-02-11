@@ -205,7 +205,7 @@ class Tableau {
     }
 
     void rowsum(uint32_t h, uint32_t i) {
-      rows[h] *= rows[i];
+      rows[h] = rows[h] * rows[i];
     }
 
     void evolve(const QuantumCircuit& qc) {
@@ -230,27 +230,27 @@ class Tableau {
           std::string name = gate->label();
 
           if (name == "H") {
-            h(gate->qbits[0]);
+            h(gate->qubits[0]);
           } else if (name == "S") {
-            s(gate->qbits[0]);
+            s(gate->qubits[0]);
           } else if (name == "X") {
-            x(gate->qbits[0]);
+            x(gate->qubits[0]);
           } else if (name == "Y") {
-            y(gate->qbits[0]);
+            y(gate->qubits[0]);
           } else if (name == "Z") {
-            z(gate->qbits[0]);
+            z(gate->qubits[0]);
           } else if (name == "Sd") {
-            sd(gate->qbits[0]);
+            sd(gate->qubits[0]);
           } else if (name == "CX") {
-            cx(gate->qbits[0], gate->qbits[1]);
+            cx(gate->qubits[0], gate->qubits[1]);
           } else if (name == "CZ") {
-            cz(gate->qbits[0], gate->qbits[1]);
+            cz(gate->qubits[0], gate->qubits[1]);
           } else {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to Tableau.evolve.", name));
           }
 				},
 				[this, &rng](Measurement m) { 
-					for (auto const &q : m.qbits) {
+					for (auto const &q : m.qubits) {
 						mzr(q, rng);
 					}
 				},
@@ -386,7 +386,14 @@ class Tableau {
     }
 
     inline bool get_r(uint32_t i) const { 
-      return rows[i].get_r(); 
+      uint8_t r = rows[i].get_r();
+      if (r == 0) {
+        return false;
+      } else if (r == 2) {
+        return true;
+      } else {
+        throw std::runtime_error("Anomolous phase detected in Clifford tableau.");
+      }
     }
 
     inline void set_x(uint32_t i, uint32_t j, bool v) { 
@@ -398,7 +405,7 @@ class Tableau {
     }
 
     inline void set_r(uint32_t i, bool v) { 
-      rows[i].set_r(v); 
+      rows[i].set_r(2 * static_cast<uint8_t>(v)); 
     }
 };
 

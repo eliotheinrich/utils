@@ -96,7 +96,7 @@ class QuantumCHPState : public CliffordState {
       tableau.h(b);
     }
 
-    virtual void random_clifford(std::vector<uint32_t> &qubits) override {
+    virtual void random_clifford(const Qubits& qubits) override {
       random_clifford_impl(qubits, rng, *this);
     }
 
@@ -117,7 +117,7 @@ class QuantumCHPState : public CliffordState {
       return tableau.sparsity();
     }
 
-    virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override {
+    virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override {
       uint32_t system_size = this->num_qubits;
       uint32_t partition_size = qubits.size();
 
@@ -141,7 +141,7 @@ class QuantumCHPState : public CliffordState {
       return static_cast<double>(s);
     }
 
-    int partial_rank(const std::vector<uint32_t> &qubits) {
+    int partial_rank(const Qubits& qubits) {
       return tableau.rank(qubits);
     }
 

@@ -25,7 +25,7 @@ Statevector::Statevector(const Eigen::VectorXcd& vec) : Statevector(std::log2(ve
   data = vec;
 }
 
-Statevector::Statevector(const MatrixProductState& state) : Statevector(state.coefficients()) {}
+Statevector::Statevector(const MatrixProductState& state) : Statevector(state.coefficients_pure()) {}
 
 std::string Statevector::to_string() const {
   Statevector tmp(*this);
@@ -63,10 +63,10 @@ double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index)
 }
 
 std::shared_ptr<QuantumState> Statevector::partial_trace(const Qubits& qubits) const {
-  auto interval = to_interval(qubits);
+  auto interval = support_range(qubits);
   if (interval) {
     auto [q1, q2] = interval.value();
-    if (q1 < 0 || q2 >= num_qubits) {
+    if (q1 < 0 || q2 > num_qubits) {
       throw std::runtime_error(fmt::format("qubits = {} passed to Statevector.partial_trace with {} qubits", qubits, num_qubits));
     }
   }
@@ -74,7 +74,7 @@ std::shared_ptr<QuantumState> Statevector::partial_trace(const Qubits& qubits) c
   return rho.partial_trace(qubits);
 }
 
-double Statevector::expectation(const PauliString& p) const {
+std::complex<double> Statevector::expectation(const PauliString& p) const {
   if (p.num_qubits != num_qubits) {
     throw std::runtime_error(fmt::format("P = {} has {} qubits but state has {} qubits. Cannot compute expectation.", p.to_string_ops(), p.num_qubits, num_qubits));
   }
@@ -82,22 +82,21 @@ double Statevector::expectation(const PauliString& p) const {
   Statevector s(*this);
 
   for (uint32_t i = 0; i < num_qubits; i++) {
-    uint32_t j = i;
     Pauli op = p.to_pauli(i);
     if (op == Pauli::X) {
-      s.evolve(quantumstate_utils::X::value, j);
+      s.evolve(quantumstate_utils::X::value, i);
     } else if (op == Pauli::Y) {
-      s.evolve(quantumstate_utils::Y::value, j);
+      s.evolve(quantumstate_utils::Y::value, i);
     } else if (op == Pauli::Z) {
-      s.evolve(quantumstate_utils::Z::value, j);
+      s.evolve(quantumstate_utils::Z::value, i);
     }
   }
 
-  return p.sign() * inner(s).real();
+  return p.sign() * inner(s);
 }
 
-std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const std::vector<uint32_t>& sites) const {
-  Eigen::MatrixXcd M = full_circuit_unitary(m, sites, num_qubits);
+std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const {
+  Eigen::MatrixXcd M = full_circuit_unitary(m, qubits, num_qubits);
   return expectation(M);
 }
 
@@ -154,7 +153,11 @@ bool Statevector::mzr(uint32_t q) {
   return outcome;
 }
 
-MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits) {
+MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const Qubits& qubits) {
+  if (!p.hermitian()) {
+    throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+  }
+
   Eigen::MatrixXcd pm = p.to_matrix();
   Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(1u << qubits.size(), 1u << qubits.size());
 
@@ -174,7 +177,7 @@ MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const 
   return {proj, prob_zero, outcome};
 }
 
-void Statevector::internal_measure(const MeasurementOutcome& outcome, const std::vector<uint32_t>& qubits, bool renormalize) {
+void Statevector::internal_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize) {
   auto proj = std::get<0>(outcome);
   evolve(proj, qubits);
   if (renormalize) {
@@ -182,7 +185,7 @@ void Statevector::internal_measure(const MeasurementOutcome& outcome, const std:
   }
 }
 
-bool Statevector::measure(const PauliString& p, const std::vector<uint32_t>& qubits) {
+bool Statevector::measure(const PauliString& p, const Qubits& qubits) {
   if (qubits.size() != p.num_qubits) {
     throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
@@ -204,7 +207,11 @@ std::vector<bool> Statevector::measure(const std::vector<MeasurementData>& measu
   return results;
 }
 
-MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta) {
+  if (!p.hermitian()) {
+    throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+  }
+
   PauliString p_ = p.superstring(qubits, num_qubits);
 
   auto pm = p.to_matrix();
@@ -226,7 +233,7 @@ MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, c
   return {proj, prob_zero, outcome};
 }
 
-bool Statevector::weak_measure(const PauliString& p, const std::vector<uint32_t>& qubits, double beta) {
+bool Statevector::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
   if (qubits.size() != p.num_qubits) {
     throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
@@ -247,7 +254,7 @@ std::vector<bool> Statevector::weak_measure(const std::vector<WeakMeasurementDat
   return results;
 }
 
-void Statevector::evolve(const Eigen::MatrixXcd &gate, const std::vector<uint32_t> &qubits) {
+void Statevector::evolve(const Eigen::MatrixXcd &gate, const Qubits& qubits) {
   uint32_t s = 1u << num_qubits;
   uint32_t h = 1u << qubits.size();
   if ((gate.rows() != h) || gate.cols() != h) {
@@ -285,7 +292,7 @@ void Statevector::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
 }
 
 // Vector representing diagonal gate
-void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const std::vector<uint32_t> &qubits) {
+void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const Qubits& qubits) {
   throw std::runtime_error("evolve_diagonal is currently bugged.");
 
   //uint32_t s = 1u << num_qubits;
@@ -323,7 +330,7 @@ void Statevector::evolve(const QuantumCircuit& circuit, const std::vector<bool>&
       QuantumState::evolve(inst);
     } else {
       Measurement m = std::get<Measurement>(inst);
-      for (auto const& q : m.qbits) {
+      for (auto const& q : m.qubits) {
         mzr(q, outcomes[d]);
         d++;
       }
@@ -359,7 +366,7 @@ void Statevector::fix_gauge() {
   data = data/a;
 }
 
-double Statevector::probabilities(uint32_t z, const std::vector<uint32_t>& qubits) const {
+double Statevector::probabilities(uint32_t z, const Qubits& qubits) const {
   uint32_t s = 1u << num_qubits;
   double p = 0.;
   for (uint32_t i = 0; i < s; i++) {
@@ -407,7 +414,7 @@ std::complex<double> Statevector::inner(const Statevector& other) const {
 }
 
 
-Eigen::VectorXd Statevector::svd(const std::vector<uint32_t>& qubits) const {
+Eigen::VectorXd Statevector::svd(const Qubits& qubits) const {
   Eigen::MatrixXcd matrix(data);
 
   uint32_t r = 1u << qubits.size();

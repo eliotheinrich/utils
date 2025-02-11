@@ -6,7 +6,7 @@
 
 #define GATECLONE(A) 								              \
 virtual std::shared_ptr<Gate> clone() override { 	\
-  return std::shared_ptr<Gate>(new A(this->qbits)); 	  \
+  return std::shared_ptr<Gate>(new A(this->qubits)); 	  \
 }
 
 #define GATE_PI 3.14159265359
@@ -16,9 +16,9 @@ class RxRotationGate : public Gate {
     bool adj;
 
   public:
-    RxRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
-      if (qbits.size() != 1) {
-        std::string error_message = "Rx gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
+    RxRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Rx gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
         throw std::invalid_argument(error_message);
       }
     }
@@ -56,11 +56,11 @@ class RxRotationGate : public Gate {
     }
 
     virtual std::shared_ptr<Gate> adjoint() const override {
-      return std::shared_ptr<Gate>(new RxRotationGate(qbits, !adj));
+      return std::shared_ptr<Gate>(new RxRotationGate(qubits, !adj));
     }
 
     virtual std::shared_ptr<Gate> clone() override {
-      return std::shared_ptr<Gate>(new RxRotationGate(qbits, adj));
+      return std::shared_ptr<Gate>(new RxRotationGate(qubits, adj));
     }
 };
 
@@ -69,9 +69,9 @@ class RyRotationGate : public Gate {
     bool adj;
 
   public:
-    RyRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
-      if (qbits.size() != 1) {
-        std::string error_message = "Ry gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
+    RyRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Ry gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
         throw std::invalid_argument(error_message);
       }
     }
@@ -109,11 +109,11 @@ class RyRotationGate : public Gate {
     }
 
     virtual std::shared_ptr<Gate> adjoint() const override {
-      return std::shared_ptr<Gate>(new RyRotationGate(qbits, !adj));
+      return std::shared_ptr<Gate>(new RyRotationGate(qubits, !adj));
     }
 
     virtual std::shared_ptr<Gate> clone() override {
-      return std::shared_ptr<Gate>(new RyRotationGate(qbits, adj));
+      return std::shared_ptr<Gate>(new RyRotationGate(qubits, adj));
     }
 };
 
@@ -122,9 +122,9 @@ class RzRotationGate : public Gate {
     bool adj;
 
   public:
-    RzRotationGate(const std::vector<uint32_t>& qbits, bool adj=false) : Gate(qbits), adj(adj) {
-      if (qbits.size() != 1) {
-        std::string error_message = "Rz gate can only have a single qubit. Passed " + std::to_string(qbits.size()) + ".";
+    RzRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Rz gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
         throw std::invalid_argument(error_message);
       }
     }
@@ -162,11 +162,11 @@ class RzRotationGate : public Gate {
     }
 
     virtual std::shared_ptr<Gate> adjoint() const override {
-      return std::shared_ptr<Gate>(new RzRotationGate(qbits, !adj));
+      return std::shared_ptr<Gate>(new RzRotationGate(qubits, !adj));
     }
 
     virtual std::shared_ptr<Gate> clone() override {
-      return std::shared_ptr<Gate>(new RzRotationGate(qbits, adj));
+      return std::shared_ptr<Gate>(new RzRotationGate(qubits, adj));
     }
 };
 
@@ -181,7 +181,7 @@ class MemoizedGate : public GateType {
     static void generate_memoized_gates(uint32_t res, double min, double max) {
       MemoizedGate<GateType>::memoized_gates = std::vector<Eigen::MatrixXcd>(res);
       double bin_width = (max - min)/res;
-      std::vector<uint32_t> qubits{0};
+      Qubits qubits{0};
 
       for (uint32_t i = 0; i < res; i++) {
         double d = min + bin_width*i;
@@ -202,7 +202,7 @@ class MemoizedGate : public GateType {
     }
 
   public:
-    MemoizedGate(const std::vector<uint32_t>& qbits, bool adj=false) : GateType(qbits), adj(adj) {}
+    MemoizedGate(const Qubits& qubits, bool adj=false) : GateType(qubits), adj(adj) {}
 
     virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
       if (!MemoizedGate<GateType>::defined) {
@@ -232,11 +232,11 @@ class MemoizedGate : public GateType {
     }
     
     virtual std::shared_ptr<Gate> adjoint() const override {
-      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qbits, !adj));
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qubits, !adj));
     }
 
     virtual std::shared_ptr<Gate> clone() override {
-      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qbits, adj));
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qubits, adj));
     }
 };
 
@@ -246,60 +246,60 @@ std::vector<Eigen::MatrixXcd> MemoizedGate<GateType>::memoized_gates;
 template <class GateType>
 bool MemoizedGate<GateType>::defined = false;
 
-static std::shared_ptr<Gate> parse_gate(const std::string& s, const std::vector<uint32_t>& qbits) {
-  Eigen::MatrixXcd data(1u << qbits.size(), 1u << qbits.size());
+static std::shared_ptr<Gate> parse_gate(const std::string& s, const Qubits& qubits) {
+  Eigen::MatrixXcd data(1u << qubits.size(), 1u << qubits.size());
   std::complex<double> i(0.0, 1.0);
   double sqrt2 = 1.41421356237;
 
   if (s == "H" || s == "h") {
     data << 1.0, 1.0, 1.0, -1.0;
     data /= sqrt2;
-    return std::make_shared<MatrixGate>(data, qbits, "h");
+    return std::make_shared<MatrixGate>(data, qubits, "h");
   } else if (s == "X" || s == "x") {
     data << 0.0, 1.0, 1.0, 0.0;
-    return std::make_shared<MatrixGate>(data, qbits, "x");
+    return std::make_shared<MatrixGate>(data, qubits, "x");
   } else if (s == "Y" || s == "y") {
     data << 0.0, 1.0*i, -1.0*i, 0.0;
-    return std::make_shared<MatrixGate>(data, qbits);
+    return std::make_shared<MatrixGate>(data, qubits);
   } else if (s == "Z" || s == "z") {
     data << 1.0, 0.0, 0.0, -1.0;
-    return std::make_shared<MatrixGate>(data, qbits);
+    return std::make_shared<MatrixGate>(data, qubits);
   } else if (s == "RX" || s == "Rx" || s == "rx") {
-    return std::make_shared<RxRotationGate>(qbits);
+    return std::make_shared<RxRotationGate>(qubits);
   } else if (s == "RXM" || s == "Rxm" || s == "rxm") {
-    return std::make_shared<MemoizedGate<RxRotationGate>>(qbits);
+    return std::make_shared<MemoizedGate<RxRotationGate>>(qubits);
   } else if (s == "RY" || s == "Ry" || s == "ry") {
-    return std::make_shared<RyRotationGate>(qbits);
+    return std::make_shared<RyRotationGate>(qubits);
   } else if (s == "RYM" || s == "Rym" || s == "rym") {
-    return std::make_shared<MemoizedGate<RyRotationGate>>(qbits);
+    return std::make_shared<MemoizedGate<RyRotationGate>>(qubits);
   } else if (s == "RZ" || s == "Rz" || s == "rz") {
-    return std::make_shared<RzRotationGate>(qbits);
+    return std::make_shared<RzRotationGate>(qubits);
   } else if (s == "RZM" || s == "Rzm" || s == "rzm") {
-    return std::make_shared<MemoizedGate<RzRotationGate>>(qbits);
+    return std::make_shared<MemoizedGate<RzRotationGate>>(qubits);
   } else if (s == "CZ" || s == "cz") {
     data << 1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, -1.0;
-    return std::make_shared<MatrixGate>(data, qbits, "cz");
+    return std::make_shared<MatrixGate>(data, qubits, "cz");
   } else if (s == "CX" || s == "cx") {
     data << 1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0,
             0.0, 0.0, 1.0, 0.0;
-    return std::make_shared<MatrixGate>(data, qbits, "cx");
+    return std::make_shared<MatrixGate>(data, qubits, "cx");
   } else if (s == "CY" || s == "cy") {
     data << 1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 0.0, -1.0*i,
             0.0, 0.0, 1.0*i, 0.0;
-    return std::make_shared<MatrixGate>(data, qbits, "cy");
+    return std::make_shared<MatrixGate>(data, qubits, "cy");
   } else if (s == "swap" || s == "SWAP") {
     data << 1.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0;
-    return std::make_shared<MatrixGate>(data, qbits, "swap");
+    return std::make_shared<MatrixGate>(data, qubits, "swap");
   } else {
     throw std::invalid_argument("Invalid gate type: " + s);
   }
