@@ -1065,6 +1065,63 @@ class MatrixProductStateImpl {
       return samples;
     }
 
+    std::vector<double> process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& pauli_samples) {
+      size_t N = num_qubits/2 - 1;
+      size_t num_samples = pauli_samples.size();
+      std::vector<std::vector<double>> samplesA(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesB(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesAB(N, std::vector<double>(num_samples));
+
+      for (size_t j = 0; j < num_samples; j++) {
+        auto const [P, t] = pauli_samples[j];
+
+        std::vector<double> tA(N);
+        ITensor L = left_boundary_tensor(qubit_indices[0]);
+        for (size_t q = 0; q < N; q++) {
+          Index idx = external_idx(q);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = qubit_indices[q + 1];
+          extend_left_environment_tensor(L, i1, i2, p);
+
+          ITensor contraction = L * right_boundary_tensor(i2);
+          samplesA[q][j] = std::abs(tensor_to_scalar(contraction));
+        }
+
+        std::vector<double> tB(N);
+        ITensor R = right_boundary_tensor(num_blocks());
+        std::vector<ITensor> paulis;
+        for (size_t n = 0; n < num_qubits/2; n++) {
+          size_t q = num_qubits - n - 1;
+          Index idx = external_idx(q);
+          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
+        }
+        size_t i = qubit_indices[num_qubits/2];
+        extend_right_environment_tensor(R, num_blocks(), i, paulis);
+        for (size_t n = 0; n < N; n++) {
+          uint32_t q = num_qubits/2 - n;
+          Index idx = external_idx(q - 1);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q - 1), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = qubit_indices[q - 1];
+          extend_right_environment_tensor(R, i1, i2, p);
+          ITensor contraction = left_boundary_tensor(i2) * R;
+          samplesB[N - 1 - n][j] = std::abs(tensor_to_scalar(contraction));
+        }
+
+        for (size_t n = 0; n < N; n++) {
+          samplesAB[n][j] = t[0];
+        }
+      }
+
+      std::vector<double> magic(N);
+      for (size_t n = 0; n < N; n++) {
+        magic[n] = QuantumState::calculate_magic_mutual_information_from_samples2({samplesAB[n], samplesA[n], samplesB[n]});
+      }
+
+      return magic;
+    }
+
     bool is_pure_state() const {
       return blocks.size() == 0;
     }
@@ -1439,11 +1496,6 @@ class MatrixProductStateImpl {
       swap_tags(left_boundary_index, right_boundary_index);
       swap_internal_indices_at_block(left_boundary_index, right_boundary_index, 0);
       swap_internal_indices_at_block(left_boundary_index, right_boundary_index, num_blocks() - 1);
-    }
-
-    void close_boundary_indices(ITensor& tensor) const {
-      tensor *= delta(left_boundary_index, right_boundary_index);
-      tensor *= delta(prime(left_boundary_index), prime(right_boundary_index));
     }
 
     std::complex<double> inner(const MatrixProductStateImpl& other) const {
@@ -1919,64 +1971,6 @@ class MatrixProductStateImpl {
       display_masks(i1, i2, mask_left1, mask_left2, mask_right1, mask_right2);
     }
     // ======================================= DEBUG FUNCTIONS ======================================= //
-
-    // TEMPORARILY HERE
-    std::vector<double> process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& pauli_samples) {
-      size_t N = num_qubits/2 - 1;
-      size_t num_samples = pauli_samples.size();
-      std::vector<std::vector<double>> samplesA(N, std::vector<double>(num_samples));
-      std::vector<std::vector<double>> samplesB(N, std::vector<double>(num_samples));
-      std::vector<std::vector<double>> samplesAB(N, std::vector<double>(num_samples));
-
-      for (size_t j = 0; j < num_samples; j++) {
-        auto const [P, t] = pauli_samples[j];
-
-        std::vector<double> tA(N);
-        ITensor L = left_boundary_tensor(qubit_indices[0]);
-        for (size_t q = 0; q < N; q++) {
-          Index idx = external_idx(q);
-          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q), prime(idx), idx)};
-          uint32_t i1 = qubit_indices[q];
-          uint32_t i2 = qubit_indices[q + 1];
-          extend_left_environment_tensor(L, i1, i2, p);
-
-          ITensor contraction = L * right_boundary_tensor(i2);
-          samplesA[q][j] = std::abs(tensor_to_scalar(contraction));
-        }
-
-        std::vector<double> tB(N);
-        ITensor R = right_boundary_tensor(num_blocks());
-        std::vector<ITensor> paulis;
-        for (size_t n = 0; n < num_qubits/2; n++) {
-          size_t q = num_qubits - n - 1;
-          Index idx = external_idx(q);
-          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
-        }
-        size_t i = qubit_indices[num_qubits/2];
-        extend_right_environment_tensor(R, num_blocks(), i, paulis);
-        for (size_t n = 0; n < N; n++) {
-          uint32_t q = num_qubits/2 - n;
-          Index idx = external_idx(q - 1);
-          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q - 1), prime(idx), idx)};
-          uint32_t i1 = qubit_indices[q];
-          uint32_t i2 = qubit_indices[q - 1];
-          extend_right_environment_tensor(R, i1, i2, p);
-          ITensor contraction = left_boundary_tensor(i2) * R;
-          samplesB[N - 1 - n][j] = std::abs(tensor_to_scalar(contraction));
-        }
-
-        for (size_t n = 0; n < N; n++) {
-          samplesAB[n][j] = t[0];
-        }
-      }
-
-      std::vector<double> magic(N);
-      for (size_t n = 0; n < N; n++) {
-        magic[n] = QuantumState::calculate_magic_mutual_information_from_samples2({samplesAB[n], samplesA[n], samplesB[n]});
-      }
-
-      return magic;
-    }
 };
 
 class PauliExpectationTreeImpl {

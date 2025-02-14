@@ -319,21 +319,6 @@ class PauliString {
       return p;
     }
 
-    //PauliString& operator*=(const PauliString& other) {
-    //  if (num_qubits != other.num_qubits) {
-    //    throw std::runtime_error(fmt::format("Multiplying PauliStrings with {} qubits and {} qubits do not match.", num_qubits, other.num_qubits));
-    //  }
-
-    //  set_r(PauliString::get_multiplication_phase(*this, other));
-
-    //  uint32_t width = other.width;
-    //  for (uint32_t j = 0; j < width; j++) {
-    //    bit_string[j] ^= other.bit_string[j];
-    //  }
-
-    //  return *this;
-    //}
-
     PauliString operator-() { 
       set_r(get_r() + 2);
       return *this;
@@ -893,13 +878,13 @@ class PauliString {
 namespace fmt {
   template <>
   struct formatter<PauliString> {
-    constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    constexpr auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
       return ctx.begin();
     }
 
     // Format function
     template <typename FormatContext>
-      auto format(const PauliString& ps, FormatContext& ctx) -> decltype(ctx.out()) {
+      auto format(const PauliString& ps, FormatContext& ctx) const -> decltype(ctx.out()) {
         return fmt::format_to(ctx.out(), "{}", ps.to_string_ops());
       }
   };
