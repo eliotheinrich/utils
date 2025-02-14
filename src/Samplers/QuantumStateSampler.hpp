@@ -41,6 +41,8 @@ class QuantumStateSampler {
 
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", false);
 
+      sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
+
       sample_stabilizer_renyi_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_renyi_entropy", false);
       save_sre_samples = dataframe::utils::get<int>(params, "save_sre_samples", 0);
       sre_num_samples = dataframe::utils::get<int>(params, "sre_num_samples", 1000);
@@ -151,17 +153,8 @@ class QuantumStateSampler {
         add_bitstring_distribution(samples, state);
       }
 
-      // Helper lambdas for SRE sampling
-      auto extract_amplitudes = [](const std::vector<PauliAmplitudes>& samples) {
-        std::vector<double> amplitudes;
-        for (const auto [_, p] : samples) {
-          amplitudes.push_back(p[0]);
-        }
-        return amplitudes;
-      };
-
-      auto compute_sre_montecarlo = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
-        std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
+      auto compute_sre_montecarlo = [&](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
+        std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
           double M = state->stabilizer_renyi_entropy(index, amplitudes);
@@ -170,8 +163,8 @@ class QuantumStateSampler {
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
 
-      auto compute_sre_exhaustive = [&extract_amplitudes](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
-        std::vector<double> amplitudes = extract_amplitudes(pauli_samples);
+      auto compute_sre_exhaustive = [&](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
+        std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
         std::vector<double> stabilizer_renyi_entropy;
         double purity = std::pow(2.0, state->num_qubits) * state->purity();
         for (auto index : indices) {
@@ -196,6 +189,8 @@ class QuantumStateSampler {
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
+
+      state->set_use_parent_implementation(sre_use_parent_methods);
 
       if (sample_stabilizer_renyi_entropy) {
         ProbabilityFunc prob = [](double t) -> double { return t*t; };
@@ -298,6 +293,8 @@ class QuantumStateSampler {
     bool sample_probabilities;
 
     bool sample_bitstring_distribution;
+
+    bool sre_use_parent_methods;
 
     bool sample_stabilizer_renyi_entropy;
     std::vector<size_t> renyi_indices;

@@ -482,6 +482,7 @@ std::vector<MutualMagicData> QuantumState::bipartite_magic_mutual_information_sa
 
     for (size_t j = 0; j < num_samples; j++) {
       auto const [P, t] = pauli_samples[j];
+      std::cout << fmt::format("Sample[{}] = {}, {}\n", j, P, t);
 
       for (size_t i = 0; i < N; i++) {
         samples[i][0].push_back(t[0]);
@@ -489,6 +490,7 @@ std::vector<MutualMagicData> QuantumState::bipartite_magic_mutual_information_sa
         samples[i][2].push_back(t[i + N + 1]);
       }
     }
+    std::cout << "\n\n";
 
     return samples;
   };

@@ -41,6 +41,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       return static_cast<double>(QuantumState::rand())/static_cast<double>(RAND_MAX); 
     }
 
+    bool use_parent;
+
 	public:
 
 		static void seed(int s) {
@@ -59,7 +61,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		QuantumState()=default;
     ~QuantumState()=default;
 
-		QuantumState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {}
+		QuantumState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits), use_parent(false) {}
 
     std::vector<PartialState> get_partial_states(const std::vector<QubitSupport>& qubits) const;
 
@@ -208,6 +210,10 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     }
 
     double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples) const;
+
+    void set_use_parent_implementation(bool use_parent) {
+      this->use_parent = use_parent;
+    }
 
     static double calculate_magic_mutual_information_from_samples(const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4);
     static double calculate_magic_mutual_information_from_samples(const MutualMagicData& data) { return calculate_magic_mutual_information_from_samples(data.first, data.second); }

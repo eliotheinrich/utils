@@ -279,6 +279,9 @@ NB_MODULE(qutils_bindings, m) {
     .def("mzr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.mzr_expectation(q); })
     .def("to_statevector", &QuantumCHPState::to_statevector)
     .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
+    .def("entropy_surface", [](QuantumCHPState& self) {
+      return self.get_entropy_surface<int>(2u);
+    })
     .def("random_clifford", &QuantumCHPState::random_clifford)
     .def("get_texture", [](QuantumCHPState& state, 
         const std::vector<float>& color_x, const std::vector<float>& color_z, const std::vector<float>& color_y

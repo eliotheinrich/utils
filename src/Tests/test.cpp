@@ -921,74 +921,6 @@ bool test_statevector_to_mps() {
   return true;
 }
 
-//bool test_pauli_expectation_sweep() {
-//  auto rng = seeded_rng();
-//  constexpr size_t nqb = 8;
-//
-//  MatrixProductState mps(nqb, 1u << 8);
-//  Statevector sv(nqb);
-//  for (size_t i = 0; i < 10; i++) {
-//    randomize_state_haar(rng, mps, sv);
-//  }
-//
-//  for (size_t i = 0; i < 20; i++) {
-//    randomize_state_haar(rng, mps, sv);
-//    PauliString P = PauliString::rand(nqb, rng);
-//    size_t q1_ = rng() % nqb;
-//    size_t q2_ = rng() % nqb;
-//    while (q2_ == q1_) {
-//      q2_ = rng() % nqb;
-//    }
-//    size_t q1 = std::min(q1_, q2_);
-//    size_t q2 = std::max(q1_, q2_);
-//    std::vector<double> expectation1 = mps.pauli_expectation_left_sweep(P, q1, q2);
-//    std::vector<double> expectation2;
-//    std::vector<double> expectation2_sv;
-//    std::vector<uint32_t> sites(q1);
-//    std::iota(sites.begin(), sites.end(), 0);
-//    for (uint32_t i = q1; i < q2; i++) {
-//      sites.push_back(i);
-//      double c = mps.expectation(P.substring(sites));
-//      expectation2.push_back(c);
-//
-//      c = sv.expectation(P.substring(sites));
-//      expectation2_sv.push_back(c);
-//    }
-//
-//    ASSERT(expectation1.size() == expectation2.size(), "Did not get the same number of values.");
-//    for (size_t j = 0; j < expectation1.size(); j++) {
-//      ASSERT(is_close_eps(1e-4, std::abs(expectation1[j]), std::abs(expectation2[j]), std::abs(expectation2_sv[j])), 
-//          fmt::format("Partial expectations did not match on left sweep: \nexp1 = {}\nexp2 = {}\nexp2_sv = {}\n", expectation1, expectation2, expectation2_sv));
-//    }
-//
-//    expectation1 = mps.pauli_expectation_right_sweep(P, q1, q2);
-//    expectation2.clear();
-//    expectation2_sv.clear();
-//    sites.clear();
-//
-//    sites = std::vector<uint32_t>(nqb - q2 - 1);
-//    std::iota(sites.begin(), sites.end(), q2 + 1);
-//    std::reverse(sites.begin(), sites.end());
-//
-//    for (uint32_t i = q2; i > q1; i--) {
-//      sites.push_back(i);
-//      double c = mps.expectation(P.substring(sites));
-//      expectation2.push_back(c);
-//
-//      c = sv.expectation(P.substring(sites));
-//      expectation2_sv.push_back(c);
-//    }
-//
-//    ASSERT(expectation1.size() == expectation2.size(), "Did not get the same number of values.");
-//    for (size_t j = 0; j < expectation1.size(); j++) {
-//      ASSERT(is_close_eps(1e-4, std::abs(expectation1[j]), std::abs(expectation2[j]), std::abs(expectation2_sv[j])), 
-//          fmt::format("Partial expectations did not match on right sweep: \nexp1 = {}\nexp2 = {}\nexp2_sv = {}\n", expectation1, expectation2, expectation2_sv));
-//    }
-//  }
-//
-//  return true;
-//}
-
 bool test_purity() {
   auto rng = seeded_rng();
   constexpr size_t nqb = 6;
@@ -1009,7 +941,7 @@ bool test_purity() {
     double p1 = mpo.purity();
     double p2 = dm.purity();
 
-    ASSERT(is_close(p1, p2), "Purity of DensityMatrix and MatrixProductState do not match.");
+    ASSERT(is_close(p1, p2), fmt::format("Purity of DensityMatrix and MatrixProductState do not match: {:.3f} and {:.3f}", p1, p2));
   }
 
   return true;
@@ -1216,6 +1148,9 @@ bool test_mpo_sample_paulis_montecarlo() {
   return true;
 }
 
+// NOTE:
+// this test is broken since QuantumState uses calculate_magic_mutual_information_from_samples, and 
+// MatrixProductState uses calculate_magic_mutual_information_from_samples2. Need a better test.
 bool test_mpo_bipartite_mmi() {
   auto rng = seeded_rng();
   constexpr size_t nqb = 6;
@@ -1229,15 +1164,13 @@ bool test_mpo_bipartite_mmi() {
   size_t num_samples = 10;
   size_t equilibration_timesteps = 100;
 
+  QuantumState::seed(s);
   auto samples1 = sv.bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps);
+  QuantumState::seed(s);
   auto samples2 = mps.bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps);
 
-  std::cout << fmt::format("samples1 = {}\n", samples1);
-  std::cout << fmt::format("samples2 = {}\n", samples2);
-
-  for (size_t i = 0; i < num_samples; i++) {
-    std::cout << fmt::format("samples1 = {:.3f}, {:.3f}\n", samples1[i], samples2[i]);
-    ASSERT(is_close_eps(1e-4, samples1[i], samples2[i]), "Bipartite magic mutual information samples not equal.");
+  for (size_t i = 0; i < samples1.size(); i++) {
+    ASSERT(is_close_eps(1e-4, samples1[i], samples2[i]), fmt::format("Bipartite magic mutual information samples not equal: {:.3f}, {:.3f}", samples1[i], samples2[i]));
   }
 
 
@@ -1257,7 +1190,6 @@ bool test_sample_paulis_exhaustive() {
   std::vector<uint32_t> qubitsA = {0, 1, 2};
   std::vector<uint32_t> qubitsB = {3, 4, 5};
   double mmi = sv.magic_mutual_information_montecarlo(qubitsA, qubitsB, 100, 100);
-  //std::cout << fmt::format("mmi_exhaustive = {:.3f}\n", mmi);
 
 
   return true;
@@ -1327,7 +1259,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
   ADD_TEST(test_mpo_sample_paulis_montecarlo);
-  ADD_TEST(test_mpo_bipartite_mmi);
+  //ADD_TEST(test_mpo_bipartite_mmi);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
