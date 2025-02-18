@@ -11,17 +11,6 @@
 
 using namespace itensor;
 
-ITensor tensor_slice(const ITensor& tensor, const Index& index, int i) {
-	if (!hasIndex(tensor, index)) {
-		throw std::invalid_argument("Provided tensor cannot be sliced by provided index.");
-	}
-
-	auto v = ITensor(index);
-	v.set(i, 1.0);
-
-	return tensor*v;
-}
-
 ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
   size_t num_qubits = idxs.size();
   if (num_qubits != std::log2(v.size())) {
@@ -106,53 +95,6 @@ ITensor matrix_to_tensor(const Eigen::MatrixXcd& matrix, const std::vector<Index
   return tensor;
 }
 
-// This function is quite gross; cleanup?
-Index pad(ITensor& tensor, const Index& idx, uint32_t new_dim) {
-	if (!hasIndex(tensor, idx)) {
-		throw std::invalid_argument("Provided tensor does not have provided index.");
-	}
-
-	uint32_t old_dim = dim(idx);
-	if (old_dim > new_dim) {
-		throw std::invalid_argument("Provided dimension is smaller than existing dimension.");
-	}
-
-	if (old_dim == new_dim) {
-		return idx;
-	}
-
-	Index new_idx(new_dim, idx.tags());
-
-	std::vector<Index> new_inds;
-	uint32_t j = -1;
-	auto old_inds = inds(tensor);
-	for (uint32_t i = 0; i < old_inds.size(); i++) {
-		if (old_inds[i] == idx) {
-			j = i;
-		}
-
-		new_inds.push_back(old_inds[i]);
-	}
-
-	new_inds[j] = new_idx;
-	ITensor new_tensor(new_inds);
-
-	for (const auto& it : iterInds(new_tensor)) {
-		if (it[j].val <= old_dim) {
-			std::vector<uint32_t> idx_vals(it.size());
-			for (uint32_t j = 0; j < it.size(); j++) {
-				idx_vals[j] = it[j].val;
-			}
-
-			new_tensor.set(it, eltC(tensor, idx_vals));
-		}
-	}
-	
-	tensor = new_tensor;
-
-	return new_idx;
-}
-
 bool is_identity(const ITensor& I, double tol=1e-1) {
   auto idxs = inds(I);
   if (idxs.size() != 2) {
@@ -177,27 +119,6 @@ bool is_identity(const ITensor& I, double tol=1e-1) {
   }
 
   return true;
-}
-
-Eigen::MatrixXcd tensor_to_matrix(const ITensor& A) {
-  auto idxs = inds(A);
-  if (idxs.size() != 2) {
-    throw std::runtime_error("Can only convert order = 2 tensor to matrix.");
-  }
-
-  auto id1 = idxs[0];
-  auto id2 = idxs[1];
-
-  Eigen::MatrixXcd m(dim(id1), dim(id2));
-  for (uint32_t i = 0; i < dim(id1); i++) {
-    for (uint32_t j = 0; j < dim(id2); j++) {
-      std::vector<uint32_t> assignments = {i + 1, j + 1};
-
-      m(i, j) = eltC(A, assignments);
-    }
-  }
-
-  return m;
 }
 
 std::complex<double> tensor_to_scalar(const ITensor& A) {
@@ -1283,8 +1204,8 @@ class MatrixProductStateImpl {
       size_t N = dim(inds(D)[0]);
       double d = 0.0;
       for (uint32_t q = 1; q <= N; q++) {
-          std::vector<uint32_t> assignment = {q, q};
-          d += std::pow(std::abs(eltC(D, assignment)), 2.0);
+        std::vector<uint32_t> assignment = {q, q};
+        d += std::pow(std::abs(eltC(D, assignment)), 2.0);
       }
 
       D /= std::sqrt(d);
