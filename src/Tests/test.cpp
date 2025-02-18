@@ -9,7 +9,6 @@
 #include "Graph.hpp"
 #include "Display.h"
 #include <iostream>
-#include <cassert>
 
 #define GET_MACRO(_1, _2, NAME, ...) NAME
 #define ASSERT(...) GET_MACRO(__VA_ARGS__, ASSERT_TWO_ARGS, ASSERT_ONE_ARG)(__VA_ARGS__)
@@ -145,11 +144,10 @@ void randomize_state_haar(std::minstd_rand& rng, QuantumStates&... states) {
 }
 
 template <typename... QuantumStates>
-void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
+void randomize_state_clifford(std::minstd_rand& rng, size_t depth, QuantumStates&... states) {
   size_t num_qubits = get_num_qubits(states...);
 
   QuantumCircuit qc(num_qubits);
-  size_t depth = num_qubits;
 
   for (size_t k = 0; k < depth; k++) {
     for (size_t i = 0; i < num_qubits/2 - 1; i++) {
@@ -1212,6 +1210,32 @@ bool test_mps_ising_model() {
   return true;
 }
 
+bool test_mps_random_clifford() {
+  constexpr size_t nqb = 20;
+  auto rng = seeded_rng();
+
+  MatrixProductState mps(nqb, 32, 0.0);
+
+  for (size_t i = 0; i < 50; i++) {
+    randomize_state_clifford(rng, 2, mps);
+    for (size_t q = 0; q < nqb; q++) {
+      double r = double(rng())/double(RAND_MAX);
+      if (r < 0.1) {
+        mps.mzr(q);
+      }
+    }
+  }
+
+
+  for (size_t i = 0; i < nqb - 1; i++) {
+    double t = mps.trace();
+    ASSERT(is_close(t, 1.0), fmt::format("Trace was not preserved. Trace = {:.3f}", t));
+  }
+
+
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1263,6 +1287,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
+  ADD_TEST(test_mps_random_clifford);
 
 
   constexpr char green[] = "\033[1;32m";

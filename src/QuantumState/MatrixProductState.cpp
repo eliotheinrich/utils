@@ -1126,14 +1126,6 @@ class MatrixProductStateImpl {
       return blocks.size() == 0;
     }
 
-    ITensor singular_values_squared(size_t i) const {
-      try {
-        return toDense(singular_values[i]) * conj(prime(singular_values[i]));
-      } catch (const ITError& error) {
-        return singular_values[i] * conj(prime(singular_values[i]));
-      }
-    }
-
     Eigen::MatrixXcd coefficients_mixed() const {
       if (num_qubits > 15) {
         throw std::runtime_error("Cannot generate coefficients for n > 15 qubits.");
@@ -1176,7 +1168,6 @@ class MatrixProductStateImpl {
         C *= singular_values[q]*tensors[q+1];
       }
 
-      // TODO remove this trivial sum?
       C *= delta(left_boundary_index, right_boundary_index);
 
       std::vector<uint32_t> indices(1u << num_qubits);
@@ -1288,8 +1279,16 @@ class MatrixProductStateImpl {
       internal_indices[2*j1] = commonIndex(U, D);
       internal_indices[2*j2 - 1] = commonIndex(V, D);
 
+      // Renormalize singular values
+      size_t N = dim(inds(D)[0]);
+      double d = 0.0;
+      for (uint32_t q = 1; q <= N; q++) {
+          std::vector<uint32_t> assignment = {q, q};
+          d += std::pow(std::abs(eltC(D, assignment)), 2.0);
+      }
 
-      // TODO why are singular values becoming dense?
+      D /= std::sqrt(d);
+
       auto inv = [&](Real r) { 
         if (r > sv_threshold) {
           return 1.0/r;
