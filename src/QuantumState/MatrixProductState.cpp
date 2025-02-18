@@ -2226,6 +2226,21 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 	return impl->entropy(q, index);
 }
 
+std::vector<double> MatrixProductState::singular_values(uint32_t i) const {
+  if (i >= impl->singular_values.size()) {
+    throw std::runtime_error(fmt::format("Cannot retrieve singular values in index {} for MPS with {} blocks.", i, impl->num_blocks()));
+  }
+
+  std::vector<double> singular_values(impl->bond_dimension, 0.0);
+  uint32_t N = dim(inds(impl->singular_values[i])[0]);
+  for (uint32_t j = 0; j < N; j++) {
+    std::vector<uint32_t> assignments{j + 1, j + 1};
+    singular_values[j] = elt(impl->singular_values[i], assignments);
+  }
+
+  return singular_values;
+}
+
 double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) {
   if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
     throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
