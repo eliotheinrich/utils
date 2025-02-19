@@ -2162,6 +2162,10 @@ std::vector<double> MatrixProductState::singular_values(uint32_t i) const {
 }
 
 double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) {
+  if (use_parent) {
+    return QuantumState::magic_mutual_information(qubitsA, qubitsB, num_samples);
+  }
+
   if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
     throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
   }
@@ -2212,6 +2216,9 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
+  if (use_parent) {
+    return QuantumState::sample_paulis(supports, num_samples);
+  }
   //return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
   // Should these checks be done in Impl?
   if (impl->is_pure_state()) {

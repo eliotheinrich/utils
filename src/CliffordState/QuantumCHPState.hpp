@@ -153,6 +153,10 @@ class QuantumCHPState : public CliffordState {
       tableau.set_z(i, j, v);
     }
 
+    std::vector<char> serialize() const;
+
+    void deserialize(const std::vector<char>& bytes);
+
     Texture get_texture(Color x_color, Color z_color, Color y_color) {
       size_t N = num_qubits*num_qubits;
       Texture texture(num_qubits, num_qubits);
@@ -183,4 +187,3 @@ struct glz::meta<QuantumCHPState> {
     "tableau", &QuantumCHPState::tableau
   );
 };
-

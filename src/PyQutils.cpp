@@ -285,6 +285,8 @@ NB_MODULE(qutils_bindings, m) {
       return self.get_entropy_surface<int>(2u);
     })
     .def("random_clifford", &QuantumCHPState::random_clifford)
+    .def("serialize", [](QuantumCHPState& self) { return convert_bytes(self.serialize()); })
+    .def("deserialize", [](QuantumCHPState& self, const nanobind::bytes& bytes) { self.deserialize(convert_bytes(bytes)); })
     .def("get_texture", [](QuantumCHPState& state, 
         const std::vector<float>& color_x, const std::vector<float>& color_z, const std::vector<float>& color_y
     ) -> std::tuple<std::vector<float>, size_t, size_t> {

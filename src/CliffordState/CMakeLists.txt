@@ -2,6 +2,7 @@ add_library(clifford_state
     CliffordState.hpp
     CliffordState.cpp
     QuantumCHPState.hpp
+    QuantumCHPState.cpp
     QuantumGraphState.cpp
     Tableau.hpp
 )
