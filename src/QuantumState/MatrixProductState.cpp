@@ -1004,26 +1004,23 @@ class MatrixProductStateImpl {
       std::vector<Pauli> p(num_qubits);
       double P = 1.0;
 
-      Index i(1, "i");
-      Index j(1, "j");
-
-      ITensor L(i, j);
-      L.set(i=1, j=1, 1.0);
+      Index left = left_boundary_index;
+      ITensor L(left, prime(left));
+      L.set(1, 1, 1.0);
 
       for (size_t q = 0; q < num_qubits; q++) {
         std::vector<double> probs(4);
         std::vector<ITensor> pauli_tensors(4);
 
-        auto Ak = tensors[q];
-        if (q != num_qubits - 1) {
-          Ak *= singular_values[q];
-        }
-
         Index s = external_indices[q];
 
         for (size_t p = 0; p < 4; p++) {
           std::vector<ITensor> sigma = {pauli_tensor(static_cast<Pauli>(p), prime(s), s)};
-          auto C = partial_contraction(q, q + 1, &sigma, &L, nullptr);
+          auto C = partial_contraction(q, q + 1, &sigma, &L, nullptr, false, InternalDir::Left);
+          if (q != num_qubits - 1) {
+            C *= singular_values[q];
+            C *= prime(singular_values[q]);
+          }
 
           auto contraction = conj(C) * C / 2.0;
 
@@ -1045,7 +1042,7 @@ class MatrixProductStateImpl {
 
       double t = std::sqrt(P*std::pow(2.0, num_qubits));
       std::vector<double> amplitudes{t};
-      // TODO make this more efficient
+      // TODO make this more efficient with partial contractions
       for (const auto& support : supports) {
         PauliString ps = pauli.substring(support, false);
         amplitudes.push_back(std::abs(expectation(ps)));
@@ -1055,7 +1052,6 @@ class MatrixProductStateImpl {
     }
 
     std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples, std::minstd_rand& rng) {
-      orthogonalize();
       std::vector<PauliAmplitudes> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
@@ -2195,6 +2191,10 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   impl->bond_dimension = bond_dimension;
   impl->sv_threshold = sv_threshold;
 
+  impl->set_left_ortho_lim(0);
+  impl->set_right_ortho_lim(num_qubits - 1);
+  impl->orthogonalize();
+
   MatrixProductState mps(num_qubits, bond_dimension, sv_threshold);
   mps.impl = std::move(impl);
 
@@ -2296,9 +2296,12 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
+  impl->orthogonalize();
+
   if (use_parent) {
     return QuantumState::sample_paulis(supports, num_samples);
   }
+
   //return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
   // Should these checks be done in Impl?
   if (impl->is_pure_state()) {
@@ -2320,6 +2323,8 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& supports, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
+  impl->orthogonalize();
+
   if (use_parent) {
     return QuantumState::sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
   }
@@ -2329,7 +2334,6 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const 
     mutation = mutation_opt.value();
   }
 
-  impl->orthogonalize();
   PauliString p(num_qubits);
   PauliExpectationTree tree(*this, p);
 
