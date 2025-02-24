@@ -451,6 +451,9 @@ class MatrixProductStateImpl {
         std::vector<ITensor> external_tensors = get_deltas_between(i1, i2);
         InternalDir direction = (i2 == num_blocks()) ? InternalDir::Right : InternalDir::Left;
         auto block = partial_contraction(i1, i2, &external_tensors, nullptr, nullptr, false, direction);
+        if (order(block) > 4) {
+          throw std::runtime_error("Something went wrong with partial_contraction of blocks.");
+        }
 
         k = i2;
         return block;
@@ -812,7 +815,7 @@ class MatrixProductStateImpl {
 
     void extend_right_environment_tensor(ITensor& R, uint32_t i1, uint32_t i2, const std::vector<ITensor>& external_tensors) const {
       if (i1 != i2) {
-        R = partial_contraction(i2, i1, &external_tensors, nullptr, &R);
+        R = partial_contraction(i2, i1, &external_tensors, nullptr, &R, true, InternalDir::Right);
       }
     }
 
@@ -828,26 +831,25 @@ class MatrixProductStateImpl {
       ITensor contraction;
 
       size_t k = 0;
+
+      auto add_tensor = [](ITensor& C, ITensor& tensor) {
+        if (!C) {
+          C = tensor;
+        } else {
+          C *= tensor;
+        }
+      };
+
       auto advance_contraction = [&](ITensor& C, size_t j, bool include_sv) {
         if (qubit_map.contains(j)) {
           size_t q = qubit_map.at(j);
           ITensor tensor = tensors[q];
 
-          if (left) {
-            if ((j != 0) && include_sv) {
-              tensor *= singular_values[j - 1];
-            }
-          } else {
-            if ((j != num_blocks() - 1) && include_sv) {
-              tensor *= singular_values[j];
-            }
+          if (j != 0 && include_sv) {
+            tensor *= singular_values[j - 1];
           }
 
-          if (!C) {
-            C = tensor;
-          } else {
-            C *= tensor;
-          }
+          add_tensor(C, tensor);
 
           if (external_tensors != nullptr && k < external_tensors->size()) {
             size_t p = left ? k : (external_tensors->size() - 1 - k);
@@ -859,23 +861,12 @@ class MatrixProductStateImpl {
           size_t b = block_map.at(j);
           ITensor block = blocks[b];
 
-          if (left) {
-            if ((j != 0) && include_sv) {
-              block *= singular_values[j - 1];
-              block *= prime(singular_values[j - 1]);
-            }
-          } else {
-            if ((j != num_blocks() - 1) && include_sv) {
-              block *= singular_values[j];
-              block *= prime(singular_values[j]);
-            }
+          if (j != 0 && include_sv) {
+            block *= singular_values[j - 1];
+            block *= prime(singular_values[j - 1]);
           }
 
-          if (!C) {
-            C = block;
-          } else {
-            C *= block;
-          }
+          add_tensor(C, block);
         }
       };
 
@@ -886,14 +877,16 @@ class MatrixProductStateImpl {
         contraction = *T1;
       }
 
-      size_t start = left ? i1 : (i2 - 1);
       size_t width = i2 - i1;
 
-      advance_contraction(contraction, start, include_sv);
-
-      for (size_t j = 1; j < width; j++) {
+      for (size_t j = 0; j < width; j++) {
         size_t n = left ? (i1 + j) : (i2 - j - 1);
-        advance_contraction(contraction, n, true);
+        bool include_sv_ = true;
+        if (n == i1) {
+          include_sv_ = include_sv;
+        }
+
+        advance_contraction(contraction, n, include_sv_);
       }
 
       if (T2 != nullptr) {
@@ -922,23 +915,16 @@ class MatrixProductStateImpl {
       return tensor_to_scalar(contraction);
     }
 
-    std::vector<ITensor> paulis_between(const PauliString& p, uint32_t i1, uint32_t i2) const {
+    std::complex<double> partial_expectation(const PauliString& p, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
       std::vector<ITensor> paulis;
       size_t k = 0;
       for (size_t i = i1; i < i2; i++) {
         if (qubit_map.contains(i)) {
           size_t q = qubit_map.at(i);
           Index idx = external_idx(q);
-          ITensor pauli = pauli_tensor(p.to_pauli(k++), prime(idx), idx);
-          paulis.push_back(pauli);
+          paulis.push_back(pauli_tensor(p.to_pauli(k++), prime(idx), idx));
         }
       }
-      
-      return paulis;
-    }
-
-    std::complex<double> partial_expectation(const PauliString& p, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
-      std::vector<ITensor> paulis = paulis_between(p, i1, i2);
 
       if (paulis.size() != p.num_qubits) {
         throw std::runtime_error(fmt::format("Mismatched size of PauliString of {} qubits with number of external qubits between blocks {} and {}.", p.num_qubits, i1, i2));
@@ -1016,8 +1002,8 @@ class MatrixProductStateImpl {
 
         for (size_t p = 0; p < 4; p++) {
           std::vector<ITensor> sigma = {pauli_tensor(static_cast<Pauli>(p), prime(s), s)};
-          auto C = partial_contraction(q, q + 1, &sigma, &L, nullptr, false, InternalDir::Left);
-          if (q != num_qubits - 1) {
+          auto C = partial_contraction(q, q + 1, &sigma, &L, nullptr, false);
+          if (q != num_blocks() - 1) {
             C *= singular_values[q];
             C *= prime(singular_values[q]);
           }
@@ -1143,10 +1129,14 @@ class MatrixProductStateImpl {
 
         std::vector<double> tB(N);
         ITensor R = right_boundary_tensor(num_blocks());
-        std::vector<ITensor> paulis = paulis_between(P, num_qubits/2, num_qubits);
-        std::reverse(paulis.begin(), paulis.end());
+        std::vector<ITensor> paulis;
+        for (size_t q = num_qubits/2; q < num_qubits; q++) {
+          Index idx = external_idx(q);
+          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
+        }
         size_t i = qubit_indices[num_qubits/2];
         extend_right_environment_tensor(R, num_blocks(), i, paulis);
+
         for (size_t n = 0; n < N; n++) {
           uint32_t q = num_qubits/2 - n;
           Index idx = external_idx(q - 1);
@@ -1154,6 +1144,7 @@ class MatrixProductStateImpl {
           uint32_t i1 = qubit_indices[q];
           uint32_t i2 = qubit_indices[q - 1];
           extend_right_environment_tensor(R, i1, i2, p);
+
           ITensor contraction = left_boundary_tensor(i2) * R;
           samplesB[N - 1 - n][j] = std::abs(tensor_to_scalar(contraction));
         }
@@ -1699,12 +1690,6 @@ class MatrixProductStateImpl {
         }
         set_right_ortho_lim(q1);
       }
-
-      //if (qubits.size() == 1) {
-      //} else {
-      //  set_left_ortho_lim(q1);
-      //  set_right_ortho_lim(q2 - 2);
-      //}
     }
 
     std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
@@ -1872,26 +1857,6 @@ class MatrixProductStateImpl {
       return A_r * conj(prime(A_r, right_index));
     }
 
-    std::vector<double> orthogonal_sites_r() const {
-      std::vector<double> sites;
-      for (size_t i = 0; i < num_qubits; i++) {
-        auto I = orthogonality_tensor_r(i);
-        sites.push_back(distance_from_identity(I));
-      }
-
-      return sites;
-    }
-
-    std::vector<double> orthogonal_sites_l() const {
-      std::vector<double> sites;
-      for (size_t i = 0; i < num_qubits; i++) {
-        auto I = orthogonality_tensor_l(i);
-        sites.push_back(distance_from_identity(I));
-      }
-
-      return sites;
-    }
-
     std::vector<double> sv_sums() const {
       std::vector<double> sums;
       for (size_t i = 0; i < singular_values.size(); i++) {
@@ -1909,8 +1874,18 @@ class MatrixProductStateImpl {
     }
 
     void print_orthogonal_sites() {
-      auto ortho_l = orthogonal_sites_l();
-      auto ortho_r = orthogonal_sites_r();
+      std::vector<double> ortho_l;
+      for (size_t i = 0; i < num_qubits; i++) {
+        auto I = orthogonality_tensor_l(i);
+        ortho_l.push_back(distance_from_identity(I));
+      }
+
+      std::vector<double> ortho_r;
+      for (size_t i = 0; i < num_qubits; i++) {
+        auto I = orthogonality_tensor_r(i);
+        ortho_r.push_back(distance_from_identity(I));
+      }
+
       Qubits sites(num_qubits);
       std::iota(sites.begin(), sites.end(), 0);
       std::cout << fmt::format("ortho lims = {}, {}, tr = {:.4f}\n", left_ortho_lim, right_ortho_lim, trace());
