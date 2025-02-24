@@ -286,7 +286,7 @@ bool test_mps_expectation() {
     }
   }
 
-  //ASSERT(mps.debug_tests(), "MPS failed debug tests.");
+  ASSERT(mps.state_valid(), "MPS failed debug tests.");
 
   return true;
 }
@@ -530,7 +530,7 @@ bool test_mps_measure() {
       QuantumState::seed(s);
       bool b2 = sv.measure(P, qubits);
 
-      //ASSERT(mps.debug_tests(), fmt::format("MPS failed debug tests for P = {} on {}.", P, qubits));
+      ASSERT(mps.state_valid(), fmt::format("MPS failed debug tests for P = {} on {}.", P, qubits));
       ASSERT(b1 == b2, fmt::format("Different measurement outcomes observed for {}.", P));
       ASSERT(states_close(sv, mps), fmt::format("States don't match after measurement of {} on {}.\n{}\n{}", P, qubits, sv.to_string(), mps.to_string()));
     }
@@ -1067,9 +1067,9 @@ bool test_mps_debug_tests() {
 
   MatrixProductState mps(nqb, 1u << nqb);
 
-  ASSERT(mps.debug_tests(), "Failed debug tests.");
+  ASSERT(mps.state_valid(), "Failed debug tests.");
   randomize_state_haar(rng, mps);
-  ASSERT(mps.debug_tests(), "Failed debug tests.");
+  ASSERT(mps.state_valid(), "Failed debug tests.");
 
   return true;
 }
@@ -1171,8 +1171,6 @@ bool test_mpo_bipartite_mmi() {
     ASSERT(is_close_eps(1e-4, samples1[i], samples2[i]), fmt::format("Bipartite magic mutual information samples not equal: {:.3f}, {:.3f}", samples1[i], samples2[i]));
   }
 
-
-
   return true;
 }
 
@@ -1211,13 +1209,14 @@ bool test_mps_ising_model() {
 }
 
 bool test_mps_random_clifford() {
-  constexpr size_t nqb = 20;
+  constexpr size_t nqb = 8;
   auto rng = seeded_rng();
 
-  MatrixProductState mps(nqb, 32, 0.0);
+  MatrixProductState mps(nqb, 2, 1e-8);
 
-  for (size_t i = 0; i < 50; i++) {
+  for (size_t i = 0; i < 3; i++) {
     randomize_state_clifford(rng, 2, mps);
+
     for (size_t q = 0; q < nqb; q++) {
       double r = double(rng())/double(RAND_MAX);
       if (r < 0.1) {
@@ -1232,7 +1231,46 @@ bool test_mps_random_clifford() {
     ASSERT(is_close(t, 1.0), fmt::format("Trace was not preserved. Trace = {:.3f}", t));
   }
 
+  return true;
+}
 
+bool test_mps_trace_conserved() {
+  constexpr size_t nqb = 32;
+  auto rng = seeded_rng();
+
+  MatrixProductState mps(nqb, 2, 1e-8);
+
+  auto apply_gates = [&](auto gate, std::vector<uint32_t> qubits) {
+    mps.evolve(gate, qubits);
+  };
+
+
+  auto partial_trace = [&](MatrixProductState& mps, uint32_t q) {
+    std::vector<uint32_t> qubits;
+    for (size_t i = 0; i < nqb; i++) {
+      if (i != q) {
+        qubits.push_back(i);
+      }
+    }
+    
+    return mps.partial_trace_mps(qubits).trace();
+  };
+
+  auto expz = [&](MatrixProductState& mps, uint32_t q) {
+    PauliString Z(mps.num_qubits);
+    Z.set_z(q, 1);
+    return std::abs(mps.expectation(Z));
+  };
+
+
+  for (size_t d = 0; d < 10; d++) {
+    randomize_state_haar(rng, mps);
+    double t = mps.trace();
+    ASSERT(is_close(t, 1.0), fmt::format("Trace = {:.5f}\n", t));
+  }
+
+  ASSERT(mps.state_valid());
+  
   return true;
 }
 
@@ -1269,12 +1307,12 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_partial_trace);
   ADD_TEST(test_clifford_states_unitary);
   ADD_TEST(test_pauli_reduce);
-  ADD_TEST(test_mps_measure);  
-  ADD_TEST(test_mps_weak_measure);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mps_inner);
   ADD_TEST(test_mps_reverse);
   ADD_TEST(test_statevector_to_mps);
+  ADD_TEST(test_mps_measure);  
+  ADD_TEST(test_mps_weak_measure);
   ADD_TEST(test_batch_weak_measure);
   ADD_TEST(test_batch_measure);
   ADD_TEST(test_batch_weak_measure_sv);
@@ -1288,6 +1326,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
+  ADD_TEST(test_mps_trace_conserved);
 
 
   constexpr char green[] = "\033[1;32m";

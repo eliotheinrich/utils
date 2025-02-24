@@ -483,10 +483,7 @@ class MatrixProductState : public QuantumState {
 
 		void print_mps(bool print_data=false) const;
 
-    void id_debug(uint32_t i, uint32_t j);
-    std::vector<size_t> orthogonal_sites() const;
-    void show_problem_sites() const;
-    bool debug_tests();
+    bool state_valid();
 };
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
@@ -502,4 +499,3 @@ std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmpli
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};
 }
-

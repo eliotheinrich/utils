@@ -144,7 +144,7 @@ void benchmark_stabilizer_renyi_entropy_montecarlo() {
   auto rng = seeded_rng();
   constexpr size_t nqb = 16;
 
-  MatrixProductState mps(nqb, 8);
+  MatrixProductState mps(nqb, 32);
   size_t depth = 10;
 
   for (size_t i = 0; i < depth; i++) {

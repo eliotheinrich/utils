@@ -37,7 +37,7 @@ using namespace nanobind::literals;
     .def("init", [](                                                                      \
           A& self,                                                                        \
           const std::optional<nanobind::bytes>& data = std::nullopt) {                    \
-      std::optional<std::vector<dataframe::byte_t>> _data;                                \
+          std::optional<std::vector<dataframe::byte_t>> _data;                            \
       if (data.has_value()) {                                                             \
         _data = convert_bytes(data.value());                                              \
       } else {                                                                            \
