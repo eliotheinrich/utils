@@ -1321,7 +1321,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
   ADD_TEST(test_mpo_sample_paulis_montecarlo);
-  //ADD_TEST(test_mpo_bipartite_mmi);
+  ADD_TEST(test_mpo_bipartite_mmi);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);

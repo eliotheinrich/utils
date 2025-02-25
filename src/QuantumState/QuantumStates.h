@@ -481,6 +481,8 @@ class MatrixProductState : public QuantumState {
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
     std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
+    std::vector<double> get_logged_truncerr();
+
 		void print_mps(bool print_data=false) const;
 
     bool state_valid();

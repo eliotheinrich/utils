@@ -190,6 +190,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("__str__", &MatrixProductState::to_string)
     .def("print_mps", &MatrixProductState::print_mps)
     .def("singular_values", &MatrixProductState::singular_values)
+    .def("get_logged_truncerr", &MatrixProductState::get_logged_truncerr)
     .def("trace", &MatrixProductState::trace)
     .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })

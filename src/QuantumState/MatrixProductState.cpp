@@ -241,6 +241,8 @@ class MatrixProductStateImpl {
     uint32_t left_ortho_lim;
     uint32_t right_ortho_lim;
 
+    std::vector<double> log;
+
     size_t num_blocks() const {
       return tensors.size() + blocks.size();
     }
@@ -266,6 +268,8 @@ class MatrixProductStateImpl {
       if (num_qubits < 1) {
         throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
       }
+
+      log = {};
 
       blocks = {};
       block_indices = {};
@@ -342,6 +346,8 @@ class MatrixProductStateImpl {
 
       left_ortho_lim = other.left_ortho_lim;
       right_ortho_lim = other.right_ortho_lim;
+
+      log = other.log;
     }
 
     static MatrixProductStateImpl from_mps(const MPS& mps_, size_t bond_dimension, double sv_threshold) {
@@ -1366,6 +1372,7 @@ class MatrixProductStateImpl {
       double truncerr = svd_bond(q1, &gate_tensor);
       set_left_ortho_lim(q1);
       set_right_ortho_lim(q1);
+      log.push_back(truncerr);
     }
 
     void reset_from_tensor(const ITensor& tensor) {
@@ -2424,6 +2431,12 @@ std::vector<bool> MatrixProductState::weak_measure(const std::vector<WeakMeasure
 
 bool MatrixProductState::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
   return impl->weak_measure(p, qubits, beta, QuantumState::randf());
+}
+
+std::vector<double> MatrixProductState::get_logged_truncerr() {
+  std::vector<double> vals = impl->log;
+  impl->log.clear();
+  return vals;
 }
 
 // --- DEBUG FUNCTIONS
