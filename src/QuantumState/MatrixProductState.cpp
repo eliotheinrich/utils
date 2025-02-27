@@ -11,11 +11,6 @@
 
 using namespace itensor;
 
-// TODO
-// work out changes to partially orthonormalized mixed states
-// fix measure/weak measure
-// test against non-reorthonormalized version?
-
 ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
   size_t num_qubits = idxs.size();
   if (num_qubits != std::log2(v.size())) {
@@ -704,7 +699,7 @@ class MatrixProductStateImpl {
       int d = dim(inds(singular_vals)[0]);
 
       std::vector<double> sv(d);
-      for (size_t i = 0; i < d; i++) {
+      for (int i = 0; i < d; i++) {
         sv[i] = std::pow(elt(singular_vals, i+1, i+1), 2);
       }
 
@@ -1924,7 +1919,7 @@ class MatrixProductStateImpl {
       for (size_t i = 0; i < num_qubits - 1; i++) {
         size_t d = dim(inds(singular_values[i])[0]);
         double s = 0.0;
-        for (size_t j = 1; j <= d; j++) {
+        for (int j = 1; j <= d; j++) {
           double v = elt(singular_values[i], j, j);
           s += v*v;
           // Valid singular values (between 0 and 1)

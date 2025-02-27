@@ -241,8 +241,13 @@ class PauliString {
     }
 
     static PauliString from_bitstring(uint32_t num_qubits, uint32_t bits) {
+      if (num_qubits > 15) {
+        throw std::runtime_error("Cannot create a >15 qubit PauliString from a 32-bit integer.");
+      }
+
       PauliString p = PauliString(num_qubits);
-      p.bit_string = {bits};
+      p.bit_string = std::vector<uint32_t>(1);
+      p.bit_string[0] = bits;
       return p;
     }
 
