@@ -153,9 +153,25 @@ bool Statevector::mzr(uint32_t q) {
   return outcome;
 }
 
-MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const Qubits& qubits) {
+void Statevector::internal_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize) {
+  auto proj = std::get<0>(outcome);
+  evolve(proj, qubits);
+  if (renormalize) {
+    normalize();
+  }
+}
+
+MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const Qubits& qubits, outcome_t outcome) {
   if (!p.hermitian()) {
     throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+  }
+
+  if (qubits.size() == 0) {
+    throw std::runtime_error("Must perform measurement on nonzero qubits.");
+  }
+
+  if (qubits.size() != p.num_qubits) {
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
 
   Eigen::MatrixXcd pm = p.to_matrix();
@@ -166,39 +182,44 @@ MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const 
 
   double prob_zero = std::abs(expectation(proj0, qubits));
 
-  double r = QuantumState::randf();
-  bool outcome = r >= prob_zero;
+  bool b;
+  if (outcome.index() == 0) {
+    b = std::get<bool>(outcome);
+  } else {
+    double r = std::get<double>(outcome);
+    b = (r >= prob_zero);
+  }
 
   proj0 = proj0/std::sqrt(prob_zero);
   proj1 = proj1/std::sqrt(1.0 - prob_zero);
 
-  Eigen::MatrixXcd proj = outcome ? proj1 : proj0;
+  Eigen::MatrixXcd proj = b ? proj1 : proj0;
 
-  return {proj, prob_zero, outcome};
-}
-
-void Statevector::internal_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize) {
-  auto proj = std::get<0>(outcome);
-  evolve(proj, qubits);
-  if (renormalize) {
-    normalize();
-  }
+  return {proj, prob_zero, b};
 }
 
 bool Statevector::measure(const PauliString& p, const Qubits& qubits) {
-  if (qubits.size() != p.num_qubits) {
-    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-  }
-
-  auto outcome = measurement_outcome(p, qubits);
+  auto outcome = measurement_outcome(p, qubits, QuantumState::randf());
   internal_measure(outcome, qubits, true);
-
   return std::get<2>(outcome);
 }
 
-MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta) {
+void Statevector::measure(const PauliString& p, const Qubits& qubits, bool b) {
+  auto outcome = measurement_outcome(p, qubits, b);
+  internal_measure(outcome, qubits, true);
+}
+
+MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta, outcome_t outcome) {
   if (!p.hermitian()) {
     throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
+  }
+
+  if (qubits.size() == 0) {
+    throw std::runtime_error("Must perform measurement on nonzero qubits.");
+  }
+
+  if (qubits.size() != p.num_qubits) {
+    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
   }
 
   PauliString p_ = p.superstring(qubits, num_qubits);
@@ -209,35 +230,39 @@ MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, c
 
   double prob_zero = std::abs(expectation(proj0, qubits));
 
-  double r = QuantumState::randf();
-  bool outcome = r >= prob_zero;
+  bool b;
+  if (outcome.index() == 0) {
+    b = std::get<bool>(outcome);
+  } else {
+    double r = std::get<double>(outcome);
+    b = (r >= prob_zero);
+  }
 
   Eigen::MatrixXcd t = pm;
-  if (outcome) {
+  if (b) {
     t = -t;
   }
 
   Eigen::MatrixXcd proj = (beta*t).exp();
 
-  return {proj, prob_zero, outcome};
+  return {proj, prob_zero, b};
 }
 
 bool Statevector::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
-  if (qubits.size() != p.num_qubits) {
-    throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p.to_string_ops(), p.num_qubits, qubits.size()));
-  }
-
-  auto outcome = weak_measurement_outcome(p, qubits, beta);
+  auto outcome = weak_measurement_outcome(p, qubits, beta, QuantumState::randf());
   internal_measure(outcome, qubits, true);
   return std::get<2>(outcome);
+}
+
+void Statevector::weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool b) {
+  auto outcome = weak_measurement_outcome(p, qubits, beta, b);
+  internal_measure(outcome, qubits, true);
 }
 
 void Statevector::evolve(const Eigen::MatrixXcd &gate, const Qubits& qubits) {
   uint32_t s = 1u << num_qubits;
   uint32_t h = 1u << qubits.size();
-  if ((gate.rows() != h) || gate.cols() != h) {
-    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
-  }
+  assert_gate_shape(gate, qubits);
 
   Eigen::VectorXcd ndata = Eigen::VectorXcd::Zero(s);
 

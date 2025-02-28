@@ -42,6 +42,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     bool use_parent;
 
 	public:
+    using outcome_t = std::variant<double, bool>;
 
 		static void seed(int s) {
       QuantumState::rng.seed(s);
@@ -356,11 +357,13 @@ class Statevector : public QuantumState {
 
     void internal_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize);
 
-    MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits);
+    MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits, outcome_t outcome);
     bool measure(const PauliString& p, const Qubits& qubits);
+    void measure(const PauliString& p, const Qubits& qubits, bool outcome);
 
-    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta);
+    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta, outcome_t outcome);
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
+    void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
 
 		double norm() const;
 		void normalize();
@@ -472,14 +475,17 @@ class MatrixProductState : public QuantumState {
 		virtual bool mzr(uint32_t q) override;
 
     bool measure(const PauliString& p, const Qubits& qubits);
+    void measure(const PauliString& p, const Qubits& qubits, bool outcome);
 
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
+    void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
 
     std::vector<double> get_logged_truncerr();
 
 		void print_mps(bool print_data=false) const;
 
     bool state_valid();
+    void set_debug_level(int i);
 };
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
@@ -496,4 +502,9 @@ inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const M
   return {samples[0], samples[1], samples[2]};
 }
 
-bool test_svd();
+inline void assert_gate_shape(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+  uint32_t h = 1u << qubits.size();
+  if ((gate.rows() != h) || gate.cols() != h) {
+    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+  }
+}

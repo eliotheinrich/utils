@@ -22,39 +22,6 @@ void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
   }
 }
 
-//std::vector<double> QuantumState::pauli_expectation_left_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
-//  uint32_t q1 = std::min(q1_, q2_);
-//  uint32_t q2 = std::max(q1_, q2_);
-//  std::vector<double> expectations;
-//  
-//  std::vector<uint32_t> sites(q1);
-//  std::iota(sites.begin(), sites.end(), 0);
-//  for (uint32_t i = q1; i < q2; i++) {
-//    sites.push_back(i);
-//    double c = expectation(P.substring(sites));
-//    expectations.push_back(c);
-//  }
-//
-//  return expectations;
-//}
-//
-//std::vector<double> QuantumState::pauli_expectation_right_sweep(const PauliString& P, uint32_t q1_, uint32_t q2_) const {
-//  uint32_t q1 = std::min(q1_, q2_);
-//  uint32_t q2 = std::max(q1_, q2_);
-//  std::vector<double> expectations;
-//  
-//  std::vector<uint32_t> sites(num_qubits - q2 - 1);
-//  std::iota(sites.begin(), sites.end(), q2 + 1);
-//  std::reverse(sites.begin(), sites.end());
-//  for (uint32_t i = q2; i > q1; i--) {
-//    sites.push_back(i);
-//    double c = expectation(P.substring(sites));
-//    expectations.push_back(c);
-//  }
-//
-//  return expectations;
-//}
-
 QubitSupport combine_supports(const QubitSupport& s1, const QubitSupport& s2) {
   // TODO check for overlap
   Qubits qubits1 = to_qubits(s1);

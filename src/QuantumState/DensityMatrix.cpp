@@ -188,6 +188,7 @@ void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {
 }
 
 void DensityMatrix::evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+  assert_gate_shape(gate, qubits);
 	evolve(full_circuit_unitary(gate, qubits, num_qubits));
 }
 

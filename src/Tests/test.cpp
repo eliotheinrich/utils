@@ -1115,6 +1115,16 @@ bool test_mps_trace_conserved() {
   return true;
 }
 
+bool test_mps_evolve() {
+  size_t nqb = 4;
+  MatrixProductState mps(nqb, 4);
+  Eigen::Matrix4cd g = Eigen::Matrix4cd::Identity();
+
+  Qubits qubits = {0};
+  mps.evolve(g, qubits);
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1165,7 +1175,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
-  ADD_TEST(test_svd);
+  ADD_TEST(test_mps_evolve);
 
 
   constexpr char green[] = "\033[1;32m";
