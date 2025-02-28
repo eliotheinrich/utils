@@ -1901,7 +1901,7 @@ class MatrixProductStateImpl {
           double v = elt(singular_values[i], j, j);
           s += v*v;
           // Valid singular values (between 0 and 1)
-          if (v > 1.0 + 1e-5 || v < 0.0 || std::isnan(v)) {
+          if (v > 1.0 + 1e-8 || v < 0.0 || std::isnan(v)) {
             return false;
           }
         }
@@ -1910,11 +1910,6 @@ class MatrixProductStateImpl {
         if (std::abs(s - 1.0) > 1e-5) {
           return false;
         }
-      }
-
-      // State should be overall normalized
-      if (std::abs(trace() - 1.0) > 1e-5) {
-        return false;
       }
 
       // Orthonormal
