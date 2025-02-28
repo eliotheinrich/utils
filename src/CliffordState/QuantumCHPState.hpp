@@ -6,6 +6,8 @@
 #include "CliffordState.hpp"
 #include "Tableau.hpp"
 
+#include <glaze/glaze.hpp>
+
 class QuantumCHPState : public CliffordState {
   private:
     static uint32_t get_num_qubits(const std::string &s) {
@@ -153,9 +155,9 @@ class QuantumCHPState : public CliffordState {
       tableau.set_z(i, j, v);
     }
 
-    std::vector<char> serialize() const;
+    std::vector<dataframe::byte_t> serialize() const;
 
-    void deserialize(const std::vector<char>& bytes);
+    void deserialize(const std::vector<dataframe::byte_t>& bytes);
 
     Texture get_texture(Color x_color, Color z_color, Color y_color) {
       size_t N = num_qubits*num_qubits;
@@ -179,11 +181,25 @@ class QuantumCHPState : public CliffordState {
     }
 };
 
-#include <glaze/glaze.hpp>
-
 template<>
 struct glz::meta<QuantumCHPState> {
   static constexpr auto value = glz::object(
     "tableau", &QuantumCHPState::tableau
   );
 };
+
+std::vector<dataframe::byte_t> QuantumCHPState::serialize() const {
+      std::vector<dataframe::byte_t> bytes;
+      auto write_error = glz::write_beve(*this, bytes);
+      if (write_error) {
+        throw std::runtime_error(fmt::format("Error writing QuantumCHPState to binary: \n{}", glz::format_error(write_error, bytes)));
+      }
+      return bytes;
+    }
+
+void QuantumCHPState::deserialize(const std::vector<dataframe::byte_t>& bytes) {
+  auto parse_error = glz::read_beve(*this, bytes);
+  if (parse_error) {
+    throw std::runtime_error(fmt::format("Error reading QuantumCHPState from binary: \n{}", glz::format_error(parse_error, bytes)));
+  }
+}

@@ -1273,10 +1273,33 @@ class MatrixProductStateImpl {
 
       double threshold = truncate ? sv_threshold : 1e-15;
 
-      auto [U, S, V] = svd(theta, u_inds, v_inds, 
-          {"Cutoff=",threshold,"MaxDim=",bond_dimension,
-           "LeftTags=",fmt::format("Internal,Left,n={}", q),
-           "RightTags=",fmt::format("Internal,Right,n={}", q)});
+      ITensor U, S, V;
+      try {
+        std::tie(U, S, V) = svd(theta, u_inds, v_inds, 
+            {"Cutoff=",threshold,"MaxDim=",bond_dimension,
+             "LeftTags=",fmt::format("Internal,Left,n={}", q),
+             "RightTags=",fmt::format("Internal,Right,n={}", q)});
+      } catch (const std::runtime_error& e) {
+        std:: cout << " ============================================================================= \n";
+        if (T) {
+          print(*T);
+        }
+        std:: cout << " ============================================================================= \n";
+        print(theta);
+        std:: cout << " ============================================================================= \n";
+        print(singular_values[j1]);
+        std:: cout << " ============================================================================= \n";
+        if (j2 != num_blocks() - 1) {
+          print(singular_values[j2]);
+        }
+
+        std:: cout << " ============================================================================= \n";
+        if (j1 != 0) {
+          print(singular_values[j1 - 1]);
+        }
+        
+        throw e;
+      }
 
 
       double truncerr = sqr(norm(U*S*V - theta)/norm(theta));
@@ -1291,11 +1314,11 @@ class MatrixProductStateImpl {
       }
       S /= std::sqrt(d);
 
-      auto inv = [](Real r) { 
-        if (r > 1e-8) {
+      auto inv = [&](Real r) { 
+        if (r > sv_threshold) {
           return 1.0/r;
         } else {
-          return r;
+          return 0.0;
         }
       };
 
@@ -1335,6 +1358,8 @@ class MatrixProductStateImpl {
 
       uint32_t q1 = std::min(qubits[0], qubits[1]);
       uint32_t q2 = std::max(qubits[0], qubits[1]);
+
+      move_orthogonality_center(q1);
 
       if (q2 - q1 > 1) {
         for (size_t q = q1; q < q2 - 1; q++) {
@@ -1694,42 +1719,6 @@ class MatrixProductStateImpl {
       }
     }
 
-    std::vector<bool> measure(const std::vector<MeasurementData>& measurements, const std::vector<double>& random_vals) {
-      auto sorted_measurements = sort_measurements(measurements);
-      size_t num_measurements = sorted_measurements.size();
-      if (num_measurements == 0) {
-        return {};
-      };
-
-      size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
-      size_t i0 = qubit_indices[left_qubit];
-      ITensor L = orthogonalize_and_get_left_boundary_tensor(i0);
-
-      std::vector<bool> results;
-      std::vector<MeasurementOutcome> outcomes;
-      for (size_t i = 0; i < num_measurements; i++) {
-        const auto& [p, qubits] = sorted_measurements[i];
-        auto [q1, q2] = to_interval(qubits).value();
-        size_t i1 = qubit_indices[q1];
-        size_t i2 = qubit_indices[q2 - 1] + 1;
-
-        extend_left_environment_tensor(L, i0, i1);
-
-        i0 = i1;
-
-        ITensor R = right_boundary_tensor(i2);
-
-        auto outcome = measurement_outcome(p, i1, i2, random_vals[i], L, R);
-        outcomes.push_back(outcome);
-        apply_measure(outcome, qubits);
-        results.push_back(std::get<2>(outcome));
-      }
-
-      orthogonalize();
-
-      return results;
-    }
-
     bool measure(const PauliString& p, const Qubits& qubits, double r) {
       auto outcome = measurement_outcome(p, qubits, r);
       apply_measure(outcome, qubits);
@@ -1793,39 +1782,6 @@ class MatrixProductStateImpl {
       apply_measure(outcome, qubits);
       
       return std::get<2>(outcome);
-    }
-
-    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements, const std::vector<double>& random_vals) {
-      auto sorted_measurements = sort_measurements(measurements);
-      size_t num_measurements = sorted_measurements.size();
-      if (num_measurements == 0) {
-        return {};
-      };
-
-      size_t left_qubit = to_interval(std::get<1>(sorted_measurements[0])).value().first;
-      size_t i0 = qubit_indices[left_qubit];
-      ITensor L = orthogonalize_and_get_left_boundary_tensor(i0);
-
-      std::vector<bool> results;
-      for (size_t i = 0; i < num_measurements; i++) {
-        const auto& [p, qubits, beta] = sorted_measurements[i];
-        auto [q1, q2] = to_interval(qubits).value();
-        size_t i1 = qubit_indices[q1];
-        size_t i2 = qubit_indices[q2 - 1] + 1;
-
-        extend_left_environment_tensor(L, i0, i1);
-        i0 = i1;
-
-        ITensor R = right_boundary_tensor(i2);
-
-        auto outcome = weak_measurement_outcome(p, i1, i2, beta, random_vals[i], L, R);
-        apply_measure(outcome, qubits);
-        results.push_back(std::get<2>(outcome));
-      }
-
-      orthogonalize();
-
-      return results;
     }
 
     // ======================================= DEBUG FUNCTIONS ======================================= //
@@ -2402,26 +2358,8 @@ bool MatrixProductState::mzr(uint32_t q) {
   return impl->measure(q, QuantumState::randf());
 }
 
-std::vector<bool> MatrixProductState::measure(const std::vector<MeasurementData>& measurements) {
-  std::vector<double> random_vals(measurements.size());
-  for (size_t i = 0; i < measurements.size(); i++) {
-    random_vals[i] = QuantumState::randf();
-  }
-
-  return impl->measure(measurements, random_vals);
-}
-
 bool MatrixProductState::measure(const PauliString& p, const Qubits& qubits) {
   return impl->measure(p, qubits, QuantumState::randf());
-}
-
-std::vector<bool> MatrixProductState::weak_measure(const std::vector<WeakMeasurementData>& measurements) {
-  std::vector<double> random_vals(measurements.size());
-  for (size_t i = 0; i < measurements.size(); i++) {
-    random_vals[i] = QuantumState::randf();
-  }
-
-  return impl->weak_measure(measurements, random_vals);
 }
 
 bool MatrixProductState::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
@@ -2476,3 +2414,68 @@ std::string PauliExpectationTree::to_string() const {
 PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
 }
+
+bool test_svd() {
+  size_t nqb = 4;
+  MatrixProductState mps(nqb, 4);
+  mps.h(0);
+  mps.h(1);
+  mps.h(2);
+  mps.h(3);
+
+  Eigen::Matrix2cd g; g << 0.0, 0.0, 0.0, 0.0;
+  std::cout << mps.to_string() << "\n";
+  mps.evolve(g, 3);
+
+  std::cout << mps.to_string() << "\n";
+  mps.cx(0, 1);
+  mps.cx(2, 3);
+  mps.cx(1, 2);
+  std::cout << fmt::format("trace = {:.5f}\n", mps.trace());
+  mps.cx(0, 1);
+  mps.cx(2, 3);
+  mps.cx(1, 2);
+  std::cout << mps.to_string() << "\n";
+  mps.print_mps(true);
+  return true;
+}
+
+//#include <glaze/glaze.hpp>
+//
+//template<>
+//struct glz::meta<MatrixProductStateImpl> {
+//  static constexpr auto value = glz::object(
+//    "num_qubits", &MatrixProductStateImpl::num_qubits,
+//    "sv_threshold", &MatrixProductStateImpl::sv_threshold,
+//    "tensors", &MatrixProductStateImpl::tensors,
+//    "singular_values", &MatrixProductStateImpl::singular_values,
+//    "blocks", &MatrixProductStateImpl::blocks,
+//    "internal_indices", &MatrixProductStateImpl::internal_indices,
+//    "external_indices", &MatrixProductStateImpl::external_indices,
+//    "left_boundary_index", &MatrixProductStateImpl::left_boundary_index,
+//    "right_boundary_index", &MatrixProductStateImpl::right_boundary_index,
+//    "qubit_map", &MatrixProductStateImpl::qubit_map,
+//    "qubit_indices", &MatrixProductStateImpl::qubit_indices,
+//    "block_map", &MatrixProductStateImpl::block_map,
+//    "block_indices", &MatrixProductStateImpl::block_indices,
+//    "left_ortho_lim", &MatrixProductStateImpl::left_ortho_lim,
+//    "right_ortho_lim", &MatrixProductStateImpl::right_ortho_lim,
+//    "log", MatrixProductState::log
+//  );
+//};
+//
+//std::vector<char> MatrixProductState::serialize() const {
+//      std::vector<char> bytes;
+//      auto write_error = glz::write_beve(*this, bytes);
+//      if (write_error) {
+//        throw std::runtime_error(fmt::format("Error writing MatrixProductState to binary: \n{}", glz::format_error(write_error, bytes)));
+//      }
+//      return bytes;
+//    }
+//
+//void MatrixProductState::deserialize(const std::vector<char>& bytes) {
+//  auto parse_error = glz::read_beve(*this, bytes);
+//  if (parse_error) {
+//    throw std::runtime_error(fmt::format("Error reading MatrixProductState from binary: \n{}", glz::format_error(parse_error, bytes)));
+//  }
+//}

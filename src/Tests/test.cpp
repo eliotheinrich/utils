@@ -745,164 +745,6 @@ bool test_mps_reverse() {
   return true;
 }
 
-bool test_batch_weak_measure_sv() {
-  auto rng = seeded_rng();
-
-  constexpr size_t nqb = 6;
-
-  Statevector state1;
-  Statevector state2;
-
-  for (size_t i = 0; i < 100; i++) {
-    state1 = Statevector(nqb);
-    state2 = Statevector(nqb);
-
-    QuantumCircuit qc(nqb);
-    qc.h(0);
-    qc.cx(0, 1);
-    qc.apply(state1, state2);
-
-    std::vector<WeakMeasurementData> measurements;
-    measurements.push_back({PauliString("+Z"), {0u}, 1.0});
-    measurements.push_back({PauliString("+Z"), {1u}, 1.0});
-    
-    int s = rng();
-
-    QuantumState::seed(s);
-    for (auto [p, q, b] : measurements) {
-      state1.weak_measure(p, q, b);
-    }
-
-    QuantumState::seed(s);
-    state2.weak_measure(measurements);
-
-    auto c = std::abs(state1.inner(state2));
-    ASSERT(is_close_eps(1e-4, c, 1.0), "States not close after weak measurements.");
-  }
-
-  return true;
-}
-
-bool test_batch_measure() {
-  auto rng = seeded_rng();
-
-  constexpr size_t nqb = 12;
-
-  MatrixProductState mps1(nqb, 64, 1e-8);
-  MatrixProductState mps2(nqb, 64, 1e-8);
-
-  int t1 = 0;
-  int t2 = 0;
-
-  for (size_t i = 0; i < 100; i++) {
-    randomize_state_haar(rng, mps1, mps2);
-    std::vector<MeasurementData> measurements;
-
-    size_t num_measurements = rng() % (nqb/2);
-    for (size_t i = 0; i < num_measurements; i++) {
-      std::vector<uint32_t> qubits;
-      PauliString P;
-      if (rng() % 2) {
-        uint32_t q = rng() % (nqb - 1);
-        qubits = {q, q+1};
-        P = PauliString::randh(2, rng);
-      } else {
-        uint32_t q = rng() % nqb;
-        qubits = {q};
-        P = PauliString::randh(1, rng);
-      }
-      measurements.push_back({P, qubits});
-    }
-
-    std::sort(measurements.begin(), measurements.end(), [](const MeasurementData& m1, const MeasurementData& m2) {
-      return std::get<1>(m1)[0] < std::get<1>(m2)[0];
-    });
-
-    int s = rng();
-
-
-    auto start = std::chrono::high_resolution_clock::now();
-    QuantumState::seed(s);
-    for (auto [p, q] : measurements) {
-      mps1.measure(p, q);
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    t1 += duration_cast<std::chrono::microseconds>(stop - start).count();
-
-    start = std::chrono::high_resolution_clock::now();
-    QuantumState::seed(s);
-    mps2.measure(measurements);
-    stop = std::chrono::high_resolution_clock::now();
-    t2 += duration_cast<std::chrono::microseconds>(stop - start).count();
-
-    auto c = std::abs(mps1.inner(mps2));
-
-    ASSERT(is_close_eps(1e-2, c, 1.0), fmt::format("States not equal after batch measurements. Inner product = {:.5f}", std::abs(c)));
-  }
-
-  return true;
-}
-
-bool test_batch_weak_measure() {
-  auto rng = seeded_rng();
-
-  constexpr size_t nqb = 8;
-
-  MatrixProductState mps1(nqb, 32);
-  MatrixProductState mps2(nqb, 32);
-  Statevector sv(nqb);
-
-  for (size_t i = 0; i < 100; i++) {
-    randomize_state_haar(rng, mps1, mps2, sv);
-    std::vector<WeakMeasurementData> measurements;
-
-
-    size_t num_measurements = rng() % (nqb/2);
-    std::vector<bool> mask(nqb, false);
-    for (size_t i = 0; i < num_measurements; i++) {
-      std::vector<uint32_t> qubits;
-      PauliString P;
-      if (rng() % 2) {
-        uint32_t q = rng() % (nqb - 1);
-        qubits = {q, q+1};
-        P = PauliString::randh(2, rng);
-      } else {
-        uint32_t q = rng() % nqb;
-        qubits = {q};
-        P = PauliString::randh(1, rng);
-      }
-      double beta = 1.0;
-      measurements.push_back({P, qubits, beta});
-    }
-
-    std::sort(measurements.begin(), measurements.end(), [](const WeakMeasurementData& m1, const WeakMeasurementData& m2) {
-      return std::get<1>(m1)[0] < std::get<1>(m2)[0];
-    });
-
-    int s = rng();
-
-    QuantumState::seed(s);
-    auto c0 = std::abs(mps1.inner(mps2));
-    for (auto [p, q, b] : measurements) {
-      mps1.weak_measure(p, q, b);
-    }
-
-    QuantumState::seed(s);
-    mps2.weak_measure(measurements);
-
-    QuantumState::seed(s);
-    sv.weak_measure(measurements);
-
-    auto c1 = std::abs(mps1.inner(mps2));
-
-    // TODO states likely differ for LOCAL observables. Need to confirm by checking against local observables.
-    ASSERT(is_close_eps(1e-2, c1, 1.0), fmt::format("States not equal after batch weak measurements. Inner product = {:.5f}, c0 = {:.5f}", c1, c0));
-    ASSERT(states_close(sv, mps2), fmt::format("MPS does not match statevector after batch weak_measurements."));
-  }
-
-  return true;
-}
-
 bool test_statevector_to_mps() {
   auto rng = seeded_rng();
   constexpr size_t nqb = 4;
@@ -1130,7 +972,6 @@ bool test_mpo_sample_paulis_montecarlo() {
     for (uint32_t k = 0; k < rqb; k++) {
       auto rqubits = random_qubits(rqb, rng() % rqb, rng);
       std::sort(rqubits.begin(), rqubits.end());
-      rqubits = {k};
       supports.push_back(rqubits);
     }
 
@@ -1313,9 +1154,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector_to_mps);
   ADD_TEST(test_mps_measure);  
   ADD_TEST(test_mps_weak_measure);
-  ADD_TEST(test_batch_weak_measure);
-  ADD_TEST(test_batch_measure);
-  ADD_TEST(test_batch_weak_measure_sv);
   ADD_TEST(test_purity);
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
@@ -1327,6 +1165,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
+  ADD_TEST(test_svd);
 
 
   constexpr char green[] = "\033[1;32m";

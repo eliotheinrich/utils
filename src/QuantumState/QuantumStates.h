@@ -25,8 +25,6 @@ using ProbabilityFunc = std::function<double(double)>;
 using MutualMagicAmplitudes = std::vector<std::vector<double>>; // tA, tB, tAB
 using MutualMagicData = std::pair<MutualMagicAmplitudes, MutualMagicAmplitudes>; // t2, t4
 
-using WeakMeasurementData = std::tuple<PauliString, Qubits, double>;
-using MeasurementData = std::tuple<PauliString, Qubits>;
 using MeasurementOutcome = std::tuple<Eigen::MatrixXcd, double, bool>;
 
 class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
@@ -360,11 +358,9 @@ class Statevector : public QuantumState {
 
     MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits);
     bool measure(const PauliString& p, const Qubits& qubits);
-    std::vector<bool> measure(const std::vector<MeasurementData>& measurements);
 
     MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta);
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
-    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
 		double norm() const;
 		void normalize();
@@ -476,10 +472,8 @@ class MatrixProductState : public QuantumState {
 		virtual bool mzr(uint32_t q) override;
 
     bool measure(const PauliString& p, const Qubits& qubits);
-    std::vector<bool> measure(const std::vector<MeasurementData>& measurements);
 
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
-    std::vector<bool> weak_measure(const std::vector<WeakMeasurementData>& measurements);
 
     std::vector<double> get_logged_truncerr();
 
@@ -501,3 +495,5 @@ std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmpli
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};
 }
+
+bool test_svd();
