@@ -642,31 +642,37 @@ class MatrixProductStateImpl {
     }
 
     void left_orthogonalize(uint32_t q) {
-      std::cout << fmt::format("Called left_orthogonalize({})\n", q);
+      std::cout << fmt::format("Called left_orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       while (left_ortho_lim < q) {
         svd_bond(left_ortho_lim++, nullptr);
+        if (left_ortho_lim > right_ortho_lim) {
+          right_ortho_lim++;
+        }
       }
     }
 
     void right_orthogonalize(uint32_t q) {
-      std::cout << fmt::format("Called right_orthogonalize({})\n", q);
+      std::cout << fmt::format("Called right_orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       while (right_ortho_lim > q) {
         svd_bond(--right_ortho_lim, nullptr);
+        if (right_ortho_lim < left_ortho_lim) {
+          left_ortho_lim--;
+        }
       }
     }
 
     void orthogonalize(size_t q) {
-      std::cout << "Called orthogonalize()\n";
+      std::cout << fmt::format("Called orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       if (q > num_qubits - 1 || q < 0) {
         throw std::runtime_error(fmt::format("Cannot move orthogonality center of state with {} qubits to site {}\n", num_qubits, q));
       }
 
-      left_orthogonalize(num_qubits - 1);
-      right_orthogonalize(0);
+      left_orthogonalize(q);
+      right_orthogonalize(q + 1);
     }
 
     void orthogonalize(size_t i1, size_t i2) {
-      std::cout << fmt::format("Called orthogonalize({}, {})\n", i1 ,i2);
+      std::cout << fmt::format("Called orthogonalize({}, {}), lims = ({}, {})\n", i1 ,i2, left_ortho_lim, right_ortho_lim);
       size_t j1 = i1;
       while (!qubit_map.contains(j1) && j1 < num_blocks()) {
         j1++;
@@ -686,7 +692,7 @@ class MatrixProductStateImpl {
 
 
     bool is_orthogonal() const {
-      return left_ortho_lim == right_ortho_lim;
+      return left_ortho_lim >= right_ortho_lim;
     }
 
     std::vector<double> singular_values_to_vector(size_t i) const {
@@ -1264,7 +1270,7 @@ class MatrixProductStateImpl {
     }
 
     void svd_bond(uint32_t q, ITensor* T=nullptr) {
-      std::cout << fmt::format("svd_bond({}), print_all = {}\n", q, print_all);
+      std::cout << fmt::format("svd_bond({}), lims = ({}, {}), print_all = {}\n", q, left_ortho_lim, right_ortho_lim, print_all);
       size_t j1 = qubit_indices[q];
       size_t j2 = qubit_indices[q+1];
 
@@ -1329,7 +1335,6 @@ class MatrixProductStateImpl {
       }
 
       double truncerr = sqr(norm(U*S*V - theta)/norm(theta));
-      std::cout << fmt::format(" = = = = = = = = TRUNCATED {:.5f} = = = = = = = = =\n", truncerr);
       log.push_back(truncerr);
 
       // Renormalize singular values
@@ -1719,13 +1724,14 @@ class MatrixProductStateImpl {
       auto proj = std::get<0>(outcome);
       auto [q1, q2] = support_range(qubits).value();
 
+      // TODO revisit this logic
       if (qubits.size() == 1) {
         const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
         if (q1 == 0) { // PI
-          auto proj_ = Eigen::kroneckerProduct(proj, id);
+          auto proj_ = Eigen::kroneckerProduct(id, proj);
           evolve(proj_, {q1, q1 + 1});
         } else { // IP
-          auto proj_ = Eigen::kroneckerProduct(id, proj);
+          auto proj_ = Eigen::kroneckerProduct(proj, id);
           evolve(proj_, {q1 - 1, q1});
         }
       } else {

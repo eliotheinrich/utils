@@ -184,10 +184,10 @@ MeasurementOutcome Statevector::measurement_outcome(const PauliString& p, const 
 
   bool b;
   if (outcome.index() == 0) {
-    b = std::get<bool>(outcome);
-  } else {
     double r = std::get<double>(outcome);
     b = (r >= prob_zero);
+  } else {
+    b = std::get<bool>(outcome);
   }
 
   proj0 = proj0/std::sqrt(prob_zero);
@@ -232,10 +232,10 @@ MeasurementOutcome Statevector::weak_measurement_outcome(const PauliString& p, c
 
   bool b;
   if (outcome.index() == 0) {
-    b = std::get<bool>(outcome);
-  } else {
     double r = std::get<double>(outcome);
     b = (r >= prob_zero);
+  } else {
+    b = std::get<bool>(outcome);
   }
 
   Eigen::MatrixXcd t = pm;
