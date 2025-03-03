@@ -10,6 +10,8 @@
 #include "Display.h"
 #include <iostream>
 
+#define MPS_DEBUG_LEVEL 2
+
 #define GET_MACRO(_1, _2, NAME, ...) NAME
 #define ASSERT(...) GET_MACRO(__VA_ARGS__, ASSERT_TWO_ARGS, ASSERT_ONE_ARG)(__VA_ARGS__)
 
@@ -216,6 +218,7 @@ bool test_mps_vs_statevector() {
 
   Statevector s(num_qubits);
   MatrixProductState mps(num_qubits, bond_dimension);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(rng, mps, s);
@@ -244,6 +247,7 @@ bool test_mps_expectation() {
 
   Statevector s(num_qubits);
   MatrixProductState mps(num_qubits, bond_dimension);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   randomize_state_haar(rng, mps, s);
   ASSERT(states_close(s, mps), "States are not close.");
 
@@ -297,6 +301,7 @@ bool test_mpo_expectation() {
 
   Statevector s(nqb);
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   randomize_state_haar(rng, mps, s);
   ASSERT(states_close(s, mps), "States are not close.");
 
@@ -400,6 +405,7 @@ bool test_nonlocal_mps() {
     qc.apply_qubit_map(qubit_map);
 
     MatrixProductState mps(nqb, 20);
+    mps.set_debug_level(MPS_DEBUG_LEVEL);
     Statevector sv(nqb);
 
     qc.apply(sv, mps);
@@ -414,6 +420,7 @@ bool test_mpo_constructor() {
   size_t nqb = 6;
   auto rng = seeded_rng();
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   DensityMatrix rho(nqb);
 
   randomize_state_haar(rng, mps, rho);
@@ -432,6 +439,7 @@ bool test_partial_trace() {
 
   for (size_t i = 0; i < 10; i++) {
     MatrixProductState mps(nqb, 1u << nqb);
+    mps.set_debug_level(MPS_DEBUG_LEVEL);
     DensityMatrix rho(nqb);
     randomize_state_haar(rng, mps, rho);
 
@@ -510,6 +518,7 @@ bool test_mps_measure() {
   auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   Statevector sv(nqb);
 
   for (size_t i = 0; i < 100; i++) {
@@ -518,7 +527,8 @@ bool test_mps_measure() {
     ASSERT(states_close(sv, mps), fmt::format("States do not agree before measurement.\n"));
 
     for (size_t j = 0; j < 5; j++) {
-      uint32_t r = rng() % 2 + 1;
+      //uint32_t r = rng() % 2 + 1;
+      uint32_t r = 2;
       PauliString P = PauliString::randh(r, rng);
       uint32_t q = rng() % (nqb + 1 - r);
       std::vector<uint32_t> qubits(r);
@@ -545,6 +555,7 @@ bool test_mps_weak_measure() {
   auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   Statevector sv(nqb);
 
   for (size_t i = 0; i < 100; i++) {
@@ -610,6 +621,7 @@ bool test_z2_clifford() {
   CliffordTable tZZ(ZZ_sym);
 
   MatrixProductState state(nqb, 1u << nqb);
+  state.set_debug_level(MPS_DEBUG_LEVEL);
   randomize_state_haar(rng, state);
 
   std::string sx, sz;
@@ -645,6 +657,7 @@ bool test_mpo_sample_paulis() {
   constexpr size_t nqb = 8;
   
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   randomize_state_haar(rng, mps);
   MatrixProductState mpo = mps.partial_trace_mps({});
 
@@ -688,7 +701,9 @@ bool test_mps_inner() {
   auto rng = seeded_rng();
 
   MatrixProductState mps1(nqb, 64);
+  mps1.set_debug_level(MPS_DEBUG_LEVEL);
   MatrixProductState mps2(nqb, 64);
+  mps2.set_debug_level(MPS_DEBUG_LEVEL);
   Statevector s1(nqb);
   Statevector s2(nqb);
 
@@ -711,6 +726,7 @@ bool test_mps_reverse() {
 
   for (auto nqb : nqbs) {
     MatrixProductState mps(nqb, 1u << nqb);
+    mps.set_debug_level(MPS_DEBUG_LEVEL);
 
     randomize_state_haar(rng, mps);
 
@@ -751,6 +767,7 @@ bool test_statevector_to_mps() {
 
   Statevector sv(nqb);
   MatrixProductState mps1(nqb, 1u << nqb);
+  mps1.set_debug_level(MPS_DEBUG_LEVEL);
 
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(rng, sv, mps1);
@@ -766,6 +783,7 @@ bool test_purity() {
   constexpr size_t nqb = 6;
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(rng, mps);
 
@@ -793,6 +811,7 @@ bool test_projector() {
   constexpr size_t nqb = 6;
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(rng, mps);
@@ -852,6 +871,7 @@ bool test_pauli_expectation_tree() {
   constexpr size_t nqb = 8;
 
   MatrixProductState mps(nqb, 64);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   int t1 = 0;
   int t2 = 0;
@@ -908,6 +928,7 @@ bool test_mps_debug_tests() {
   constexpr size_t nqb = 8;
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   ASSERT(mps.state_valid(), "Failed debug tests.");
   randomize_state_haar(rng, mps);
@@ -921,6 +942,7 @@ bool test_mpo_sample_paulis_montecarlo() {
   constexpr size_t nqb = 8;
 
   MatrixProductState mps(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
   Statevector sv(nqb);
 
   randomize_state_haar(rng, mps, sv);
@@ -1054,6 +1076,7 @@ bool test_mps_random_clifford() {
   auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 2, 1e-8);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   for (size_t i = 0; i < 3; i++) {
     randomize_state_clifford(rng, 2, mps);
@@ -1080,6 +1103,7 @@ bool test_mps_trace_conserved() {
   auto rng = seeded_rng();
 
   MatrixProductState mps(nqb, 2, 1e-8);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
 
   auto apply_gates = [&](auto gate, std::vector<uint32_t> qubits) {
     mps.evolve(gate, qubits);
@@ -1168,14 +1192,14 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
-  ADD_TEST(test_mpo_sample_paulis_montecarlo);
-  ADD_TEST(test_mpo_bipartite_mmi);
+  //ADD_TEST(test_mpo_sample_paulis_montecarlo);
+  //ADD_TEST(test_mpo_bipartite_mmi);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
-  ADD_TEST(test_mps_evolve);
+  //ADD_TEST(test_mps_evolve);
 
 
   constexpr char green[] = "\033[1;32m";

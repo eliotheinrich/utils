@@ -642,7 +642,6 @@ class MatrixProductStateImpl {
     }
 
     void left_orthogonalize(uint32_t q) {
-      std::cout << fmt::format("Called left_orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       while (left_ortho_lim < q) {
         svd_bond(left_ortho_lim++, nullptr);
         if (left_ortho_lim > right_ortho_lim) {
@@ -652,7 +651,6 @@ class MatrixProductStateImpl {
     }
 
     void right_orthogonalize(uint32_t q) {
-      std::cout << fmt::format("Called right_orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       while (right_ortho_lim > q) {
         svd_bond(--right_ortho_lim, nullptr);
         if (right_ortho_lim < left_ortho_lim) {
@@ -662,7 +660,6 @@ class MatrixProductStateImpl {
     }
 
     void orthogonalize(size_t q) {
-      std::cout << fmt::format("Called orthogonalize({}), lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       if (q > num_qubits - 1 || q < 0) {
         throw std::runtime_error(fmt::format("Cannot move orthogonality center of state with {} qubits to site {}\n", num_qubits, q));
       }
@@ -672,7 +669,6 @@ class MatrixProductStateImpl {
     }
 
     void orthogonalize(size_t i1, size_t i2) {
-      std::cout << fmt::format("Called orthogonalize({}, {}), lims = ({}, {})\n", i1 ,i2, left_ortho_lim, right_ortho_lim);
       size_t j1 = i1;
       while (!qubit_map.contains(j1) && j1 < num_blocks()) {
         j1++;
@@ -718,13 +714,6 @@ class MatrixProductStateImpl {
 
       if (q == 0 || q == num_qubits) {
         return 0.0;
-      }
-
-      std::cout << fmt::format("Called entropy({})\n", q);
-      if (q == 1) {
-        print_all = true;
-      } else {
-        print_all = false;
       }
 
       orthogonalize(q);
@@ -1270,7 +1259,6 @@ class MatrixProductStateImpl {
     }
 
     void svd_bond(uint32_t q, ITensor* T=nullptr) {
-      std::cout << fmt::format("svd_bond({}), lims = ({}, {}), print_all = {}\n", q, left_ortho_lim, right_ortho_lim, print_all);
       size_t j1 = qubit_indices[q];
       size_t j2 = qubit_indices[q+1];
 
@@ -1313,7 +1301,8 @@ class MatrixProductStateImpl {
              "LeftTags=",fmt::format("Internal,Left,n={}", q),
              "RightTags=",fmt::format("Internal,Right,n={}", q)});
       } catch (const std::runtime_error& e) {
-        std:: cout << "\n\n ============================================================================= \n";
+        std::cout << "There was a LAPACK error!\n";
+        std::cout << "\n\n ============================================================================= \n";
         if (T) {
           PrintData(*T);
         }
@@ -1368,23 +1357,9 @@ class MatrixProductStateImpl {
       tensors[q] = U;
       tensors[q+1] = V;
       singular_values[j1] = S;
-      if (print_all) {
-        std::cout << "after: \n";
-        std::cout << print_orthogonal_sites();
-      }
-
-      auto orth_l = orthogonality_tensor_l(q);
-      if (distance_from_identity(orth_l) > 1e-5) {
-        throw std::runtime_error("Error in left orthogonalized!");
-      }
-      auto orth_r = orthogonality_tensor_r(q+1);
-      if (distance_from_identity(orth_r) > 1e-5) {
-        throw std::runtime_error("Error in right orthogonalized!");
-      }
     }
 
     void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
-      std::cout << fmt::format("Evolving on {}.\n", qubit);
       auto i = external_indices[qubit];
       auto ip = prime(i);
       ITensor tensor = matrix_to_tensor(gate, {ip}, {i});
@@ -1396,7 +1371,6 @@ class MatrixProductStateImpl {
     }
 
     void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
-      std::cout << fmt::format("Evolving on {}.\n", qubits);
       assert_gate_shape(gate, qubits);
 
       if (qubits.size() == 1) {
@@ -1720,7 +1694,6 @@ class MatrixProductStateImpl {
     }
 
     void apply_measure(const MeasurementOutcome& outcome, const Qubits& qubits) {
-      std::cout << fmt::format("Applying measure to {}\n", qubits);
       auto proj = std::get<0>(outcome);
       auto [q1, q2] = support_range(qubits).value();
 
@@ -1977,8 +1950,12 @@ class MatrixProductStateImpl {
         state_checks(error_message);
       } else {
         // Throw error and print state
-        // print_mps();
-        state_checks(error_message);
+        try {
+          state_checks(error_message);
+        } catch (const std::runtime_error& e) {
+          print_mps();
+          throw e;
+        }
       }
     }
     // ======================================= DEBUG FUNCTIONS ======================================= //
