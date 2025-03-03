@@ -8,6 +8,7 @@
 #include <itensor/all.h>
 #include <stdexcept>
 #include <unsupported/Eigen/MatrixFunctions>
+#include <unsupported/Eigen/KroneckerProduct>
 
 using namespace itensor;
 
@@ -218,6 +219,7 @@ class MatrixProductStateImpl {
   friend class PauliExpectationTreeImpl;
 
   private:
+    bool print_all;
 		std::vector<ITensor> tensors;
 		std::vector<ITensor> singular_values;
     std::vector<ITensor> blocks;
@@ -252,7 +254,7 @@ class MatrixProductStateImpl {
     ~MatrixProductStateImpl()=default;
 
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
-    : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(num_qubits - 1), right_ortho_lim(0) {
+    : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(0), right_ortho_lim(num_qubits - 1) {
       if (sv_threshold < 1e-15) {
         throw std::runtime_error("sv_threshold must be finite ( > 0) or else the MPS may be numerically unstable.");
       }
@@ -264,6 +266,8 @@ class MatrixProductStateImpl {
       if (num_qubits < 1) {
         throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
       }
+
+      print_all = false;
 
       log = {};
 
@@ -417,9 +421,8 @@ class MatrixProductStateImpl {
       debug_level = i;
     }
 
+    // TODO check on orthogonality properties
     MatrixProductStateImpl partial_trace(const Qubits& qubits) {
-      orthogonalize();
-
       std::set<uint32_t> traced(qubits.begin(), qubits.end());
 
       std::vector<ITensor> tensors_;
@@ -554,8 +557,8 @@ class MatrixProductStateImpl {
       mps.external_indices = external_indices_;
       mps.internal_indices = internal_indices_;
 
-      mps.left_ortho_lim = mps.num_qubits - 1;
-      mps.right_ortho_lim = 0;
+      mps.left_ortho_lim = 0;
+      mps.right_ortho_lim = mps.num_qubits - 1;
       mps.debug_level = debug_level;
 
       return mps;
@@ -638,27 +641,21 @@ class MatrixProductStateImpl {
     }
 
     void left_orthogonalize(uint32_t q) {
+      std::cout << fmt::format("Called left_orthogonalize({})\n", q);
       while (left_ortho_lim < q) {
-        svd_bond(left_ortho_lim++, nullptr);
+        svd_bond(++left_ortho_lim, nullptr);
       }
     }
 
     void right_orthogonalize(uint32_t q) {
+      std::cout << fmt::format("Called right_orthogonalize({})\n", q);
       while (right_ortho_lim > q) {
-        svd_bond(--right_ortho_lim, nullptr);
+        svd_bond(--right_ortho_lim - 1, nullptr);
       }
     }
 
-    void orthogonalize() {
-      left_orthogonalize(num_qubits - 1);
-      right_orthogonalize(0);
-    }
-
-    bool is_orthogonal() const {
-      return (left_ortho_lim == (num_qubits - 1)) && (right_ortho_lim == 0);
-    }
-
     void orthogonalize(size_t i1, size_t i2) {
+      std::cout << fmt::format("Called orthogonalize({}, {})\n", i1 ,i2);
       size_t j1 = i1;
       while (!qubit_map.contains(j1) && j1 < num_blocks()) {
         j1++;
@@ -673,17 +670,36 @@ class MatrixProductStateImpl {
       }
 
       size_t q2 = qubit_map.at(j2);
-      right_orthogonalize(q2 - 1);
+      right_orthogonalize(q2 - 2);
     }
+
 
     void move_orthogonality_center(uint32_t q) {
       if (q > num_qubits - 1 || q < 0) {
         throw std::runtime_error(fmt::format("Cannot move orthogonality center of state with {} qubits to site {}\n", num_qubits, q));
       }
 
+      std::cout << fmt::format("Called move_orthogonality_center({})\n", q);
+
       left_orthogonalize(q);
-      right_orthogonalize(q);
+      right_orthogonalize(q + 1);
     }
+
+    std::vector<double> singular_values_to_vector(size_t i) const {
+      if (i >= singular_values.size()) {
+        throw std::runtime_error(fmt::format("Cannot retrieve singular values in index {} for MPS with {} blocks.", i, num_blocks()));
+      }
+
+      std::vector<double> sv(bond_dimension, 0.0);
+      uint32_t N = dim(inds(singular_values[i])[0]);
+      for (uint32_t j = 0; j < N; j++) {
+        std::vector<uint32_t> assignments{j + 1, j + 1};
+        sv[j] = elt(singular_values[i], assignments);
+      }
+
+      return sv;
+    }
+
 
     double entropy(uint32_t q, uint32_t index) {
       if (q < 0 || q > num_qubits) {
@@ -694,7 +710,14 @@ class MatrixProductStateImpl {
         return 0.0;
       }
 
+      std::cout << fmt::format("Called entropy({})\n", q);
+      if (q == 1) {
+        print_all = true;
+      } else {
+        print_all = false;
+      }
       move_orthogonality_center(q);
+      assert_state_valid(fmt::format("State invalid after applying entropy({})\n", q));
 
       auto singular_vals = singular_values[q-1];
       int d = dim(inds(singular_vals)[0]);
@@ -746,7 +769,6 @@ class MatrixProductStateImpl {
       return left_boundary_tensor(i);
     }
 
-    // Do not assume normalization holds; this is temporarily the case when performing batch measurements.
     ITensor left_environment_tensor(size_t i, const std::vector<ITensor>& external_tensors) {
       ITensor L = left_boundary_tensor(0);
       extend_left_environment_tensor(L, 0, i, external_tensors);
@@ -1040,6 +1062,8 @@ class MatrixProductStateImpl {
     }
 
     std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples, std::minstd_rand& rng) {
+      move_orthogonality_center(0);
+
       std::vector<PauliAmplitudes> samples(num_samples);
 
       for (size_t k = 0; k < num_samples; k++) {
@@ -1104,9 +1128,8 @@ class MatrixProductStateImpl {
       return samples;
     }
 
+    // TODO check on orthogonality properties
     std::vector<double> process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& pauli_samples) {
-      orthogonalize();
-
       size_t N = num_qubits/2 - 1;
       size_t num_samples = pauli_samples.size();
       std::vector<std::vector<double>> samplesA(N, std::vector<double>(num_samples));
@@ -1203,8 +1226,6 @@ class MatrixProductStateImpl {
       if (!is_pure_state()) {
         throw std::runtime_error("Cannot calculate coefficients for mixed MatrixProductState.");
       }
-      
-      orthogonalize();
 
       ITensor C = tensors[0];
 
@@ -1236,6 +1257,7 @@ class MatrixProductStateImpl {
     }
 
     void svd_bond(uint32_t q, ITensor* T=nullptr) {
+      std::cout << fmt::format("svd_bond({}), print_all = {}\n", q, print_all);
       size_t j1 = qubit_indices[q];
       size_t j2 = qubit_indices[q+1];
 
@@ -1247,9 +1269,8 @@ class MatrixProductStateImpl {
       theta *= singular_values[j1];
       theta *= tensors[q+1];
       if (T) {
-        theta *= (*T);
+        theta = noPrime(theta * (*T));
       }
-      theta = noPrime(theta);
 
       std::vector<Index> u_inds{external_idx(q)};
       std::vector<Index> v_inds{external_idx(q+1)};
@@ -1301,6 +1322,7 @@ class MatrixProductStateImpl {
       }
 
       double truncerr = sqr(norm(U*S*V - theta)/norm(theta));
+      std::cout << fmt::format(" = = = = = = = = TRUNCATED {:.5f} = = = = = = = = =\n", truncerr);
       log.push_back(truncerr);
 
       // Renormalize singular values
@@ -1334,20 +1356,35 @@ class MatrixProductStateImpl {
       tensors[q] = U;
       tensors[q+1] = V;
       singular_values[j1] = S;
+      if (print_all) {
+        std::cout << "after: \n";
+        std::cout << print_orthogonal_sites();
+      }
+
+      auto orth_l = orthogonality_tensor_l(q);
+      if (distance_from_identity(orth_l) > 1e-5) {
+        throw std::runtime_error("Error in left orthogonalized!");
+      }
+      auto orth_r = orthogonality_tensor_r(q+1);
+      if (distance_from_identity(orth_r) > 1e-5) {
+        throw std::runtime_error("Error in right orthogonalized!");
+      }
     }
 
     void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
+      std::cout << fmt::format("Evolving on {}.\n", qubit);
       auto i = external_indices[qubit];
       auto ip = prime(i);
       ITensor tensor = matrix_to_tensor(gate, {ip}, {i});
       tensors[qubit] = noPrime(tensors[qubit]*tensor);
 
       std::stringstream stream;
-      stream << "Error after applying gate \n" << gate << fmt::format(" to qubit {}.", qubit);
+      stream << "Error after applying gate \n" << gate << fmt::format("\n to qubit {}.", qubit);
       assert_state_valid(stream.str());
     }
 
     void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+      std::cout << fmt::format("Evolving on {}.\n", qubits);
       assert_gate_shape(gate, qubits);
 
       if (qubits.size() == 1) {
@@ -1397,7 +1434,7 @@ class MatrixProductStateImpl {
       set_right_ortho_lim(q1);
 
       std::stringstream stream;
-      stream << "Error after applying gate \n" << gate << fmt::format(" to qubits {}.", qubits);
+      stream << "Error after applying gate \n" << gate << fmt::format("\n to qubits {}.", qubits);
       assert_state_valid(stream.str());
     }
 
@@ -1436,11 +1473,6 @@ class MatrixProductStateImpl {
       }
 
       tensors[num_qubits - 1] = c;
-    }
-
-    double orthogonalize_and_trace() {
-      orthogonalize();
-      return trace();
     }
 
     double trace() const {
@@ -1676,17 +1708,21 @@ class MatrixProductStateImpl {
     }
 
     void apply_measure(const MeasurementOutcome& outcome, const Qubits& qubits) {
+      std::cout << fmt::format("Applying measure to {}\n", qubits);
       auto proj = std::get<0>(outcome);
       auto [q1, q2] = support_range(qubits).value();
 
-      evolve(proj, qubits);
       if (qubits.size() == 1) {
-        if (q1 != 0) {
-          set_left_ortho_lim(q1 - 1);
-        } else {
-          set_left_ortho_lim(0);
+        const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
+        if (q1 == 0) { // PI
+          auto proj_ = Eigen::kroneckerProduct(proj, id);
+          evolve(proj_, {q1, q1 + 1});
+        } else { // IP
+          auto proj_ = Eigen::kroneckerProduct(id, proj);
+          evolve(proj_, {q1 - 1, q1});
         }
-        set_right_ortho_lim(q1);
+      } else {
+        evolve(proj, qubits);
       }
 
       assert_state_valid(fmt::format("Error after applying measurement on {}.", qubits));
@@ -1853,7 +1889,8 @@ class MatrixProductStateImpl {
       return sums;
     }
 
-    void print_orthogonal_sites() const {
+    std::string print_orthogonal_sites() const {
+      std::stringstream stream;
       std::vector<double> ortho_l;
       for (size_t i = 0; i < num_qubits; i++) {
         auto I = orthogonality_tensor_l(i);
@@ -1868,9 +1905,10 @@ class MatrixProductStateImpl {
 
       Qubits sites(num_qubits);
       std::iota(sites.begin(), sites.end(), 0);
-      std::cout << fmt::format("ortho lims = {}, {}, tr = {:.4f}\n", left_ortho_lim, right_ortho_lim, trace());
-      std::cout << fmt::format("          {::7}\n", sites);
-      std::cout << fmt::format("ortho_l = {::.5f}\northo_r = {::.5f}\n", ortho_l, ortho_r);
+      stream << fmt::format("ortho lims = {}, {}, tr = {:.4f}\n", left_ortho_lim, right_ortho_lim, trace());
+      stream << fmt::format("          {::7}\n", sites);
+      stream << fmt::format("ortho_l = {::.5f}\northo_r = {::.5f}\n", ortho_l, ortho_r);
+      return stream.str();
     }
 
     bool check_orthonormality() const {
@@ -1893,8 +1931,8 @@ class MatrixProductStateImpl {
       return true;
     }
 
-    bool state_valid() const {
-      for (size_t i = 0; i < num_qubits - 1; i++) {
+    void state_checks(const std::string& error_message) const {
+      for (size_t i = 0; i < num_blocks() - 1; i++) {
         size_t d = dim(inds(singular_values[i])[0]);
         double s = 0.0;
         for (int j = 1; j <= d; j++) {
@@ -1902,22 +1940,20 @@ class MatrixProductStateImpl {
           s += v*v;
           // Valid singular values (between 0 and 1)
           if (v > 1.0 + 1e-8 || v < 0.0 || std::isnan(v)) {
-            return false;
+            throw std::runtime_error(fmt::format("{}\nError in singular_values[{}]: {::.5f}\n", error_message, i, singular_values_to_vector(i)));
           }
         }
 
         // Singular values sum to 1
         if (std::abs(s - 1.0) > 1e-5) {
-          return false;
+          throw std::runtime_error(fmt::format("{}\nsingular_values[{}] not normalized: {::.5f}\n", error_message, i, singular_values_to_vector(i)));
         }
       }
 
       // Orthonormal
       if (!check_orthonormality()) {
-        return false;
+        throw std::runtime_error(fmt::format("{}\nError in orthogonality: \n{}\n", error_message, print_orthogonal_sites()));
       }
-
-      return true;
     }
 
     void assert_state_valid(const std::string& error_message) const {
@@ -1925,15 +1961,11 @@ class MatrixProductStateImpl {
         return;
       } else if (debug_level == 1) {
         // Throw error but do not print state
-        if (!state_valid()) {
-          throw std::runtime_error(fmt::format("State is in an invalid state somehow: \n{}", error_message));
-        }
+        state_checks(error_message);
       } else {
         // Throw error and print state
-        if (!state_valid()) {
-          print_mps(true);
-          throw std::runtime_error(fmt::format("State is in an invalid state somehow: \n{}", error_message));
-        }
+        // print_mps();
+        state_checks(error_message);
       }
     }
     // ======================================= DEBUG FUNCTIONS ======================================= //
@@ -1962,10 +1994,6 @@ class PauliExpectationTreeImpl {
     PauliExpectationTreeImpl(MatrixProductStateImpl& state, const PauliString& p, size_t min, size_t max)
     : state(state), phase(p.get_r()), min(min), max(max) {
       size_t num_qubits = state.num_qubits;
-      if (!state.is_orthogonal()) {
-        throw std::runtime_error("Cannot generate a PauliExpectationTree from a non-orthogonalized mps. Call mps.orthogonalize() first.");
-      }
-
       if (num_qubits != p.num_qubits) {
         throw std::runtime_error(fmt::format("Can't create PauliExpectationTreeImpl; number of qubits does not match: {} and {}.", state.num_qubits, p.num_qubits));
       }
@@ -2158,9 +2186,7 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   impl->bond_dimension = bond_dimension;
   impl->sv_threshold = sv_threshold;
 
-  impl->set_left_ortho_lim(0);
-  impl->set_right_ortho_lim(num_qubits - 1);
-  impl->orthogonalize();
+  impl->move_orthogonality_center(0);
 
   MatrixProductState mps(num_qubits, bond_dimension, sv_threshold);
   mps.impl = std::move(impl);
@@ -2194,18 +2220,7 @@ double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t
 }
 
 std::vector<double> MatrixProductState::singular_values(uint32_t i) const {
-  if (i >= impl->singular_values.size()) {
-    throw std::runtime_error(fmt::format("Cannot retrieve singular values in index {} for MPS with {} blocks.", i, impl->num_blocks()));
-  }
-
-  std::vector<double> singular_values(impl->bond_dimension, 0.0);
-  uint32_t N = dim(inds(impl->singular_values[i])[0]);
-  for (uint32_t j = 0; j < N; j++) {
-    std::vector<uint32_t> assignments{j + 1, j + 1};
-    singular_values[j] = elt(impl->singular_values[i], assignments);
-  }
-
-  return singular_values;
+  return impl->singular_values_to_vector(i);
 }
 
 double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) {
@@ -2263,7 +2278,7 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
-  impl->orthogonalize();
+  impl->move_orthogonality_center(0);
 
   if (use_parent) {
     return QuantumState::sample_paulis(supports, num_samples);
@@ -2290,8 +2305,6 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& supports, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
-  impl->orthogonalize();
-
   if (use_parent) {
     return QuantumState::sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
   }
@@ -2372,6 +2385,10 @@ void MatrixProductState::reverse() {
   impl->reverse();
 }
 
+void MatrixProductState::orthogonalize(uint32_t q) {
+  impl->move_orthogonality_center(q);
+}
+
 std::complex<double> MatrixProductState::inner(const MatrixProductState& other) const {
   return impl->inner(*other.impl.get());
 }
@@ -2424,7 +2441,12 @@ void MatrixProductState::set_debug_level(int i) {
 }
 
 bool MatrixProductState::state_valid() {
-  return impl->state_valid();
+  try {
+    impl->state_checks("Checking state externally.");
+    return true;
+  } catch (const std::runtime_error& error) {
+    return false;
+  }
 }
 
 // ----------------------------------------------------------------------- //

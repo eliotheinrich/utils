@@ -454,6 +454,7 @@ class MatrixProductState : public QuantumState {
     size_t bond_dimension(size_t i) const;
 
     void reverse();
+    void orthogonalize(uint32_t q);
 
     std::complex<double> inner(const MatrixProductState& other) const;
 
