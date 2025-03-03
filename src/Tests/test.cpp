@@ -1139,15 +1139,25 @@ bool test_mps_trace_conserved() {
   return true;
 }
 
-bool test_mps_evolve() {
-  size_t nqb = 4;
-  MatrixProductState mps(nqb, 4);
-  Eigen::Matrix4cd g = Eigen::Matrix4cd::Identity();
+bool test_mps_serialize() {
+  constexpr size_t nqb = 32;
+  auto rng = seeded_rng();
 
-  Qubits qubits = {0};
-  mps.evolve(g, qubits);
+  MatrixProductState mps(nqb, 16, 1e-8);
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(rng, mps);
+
+    auto data = mps.serialize();
+
+    MatrixProductState mps_(1, 1, 1e-15);
+    mps_.deserialize(data);
+
+    ASSERT(is_close(mps.inner(mps_), 1.0), "States were not equal after (de)serialization.");
+  }
+  
   return true;
 }
+
 
 using TestResult = std::tuple<bool, int>;
 
@@ -1192,14 +1202,14 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
-  //ADD_TEST(test_mpo_sample_paulis_montecarlo);
+  ADD_TEST(test_mpo_sample_paulis_montecarlo);
   //ADD_TEST(test_mpo_bipartite_mmi);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
-  //ADD_TEST(test_mps_evolve);
+  ADD_TEST(test_mps_serialize);
 
 
   constexpr char green[] = "\033[1;32m";

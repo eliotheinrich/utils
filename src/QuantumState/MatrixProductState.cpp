@@ -10,7 +10,55 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/KroneckerProduct>
 
+#include <glaze/glaze.hpp>
+
 using namespace itensor;
+
+namespace glz::detail {
+   template <>
+   struct from<BEVE, ITensor> {
+      template <auto Opts>
+      static void op(ITensor& value, auto&&... args) {
+        std::string str;
+        read<BEVE>::op<Opts>(str, args...);
+        std::istringstream stream(str);
+        itensor::read(stream, value);
+      }
+   };
+
+   template <>
+   struct to<BEVE, ITensor> {
+      template <auto Opts>
+      static void op(ITensor& value, auto&&... args) noexcept {
+        std::stringstream data;
+        itensor::write(data, value);
+        write<BEVE>::op<Opts>(data.str(), args...);
+      }
+   };
+
+   template <>
+   struct from<BEVE, Index> {
+      template <auto Opts>
+      static void op(Index& value, auto&&... args) {
+        std::string str;
+        read<BEVE>::op<Opts>(str, args...);
+        std::istringstream stream(str);
+        itensor::read(stream, value);
+      }
+   };
+
+   template <>
+   struct to<BEVE, Index> {
+      template <auto Opts>
+      static void op(Index& value, auto&&... args) noexcept {
+        std::stringstream data;
+        itensor::write(data, value);
+        write<BEVE>::op<Opts>(data.str(), args...);
+      }
+   };
+}
+
+
 
 ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
   size_t num_qubits = idxs.size();
@@ -219,7 +267,6 @@ class MatrixProductStateImpl {
   friend class PauliExpectationTreeImpl;
 
   private:
-    bool print_all;
 		std::vector<ITensor> tensors;
 		std::vector<ITensor> singular_values;
     std::vector<ITensor> blocks;
@@ -250,84 +297,104 @@ class MatrixProductStateImpl {
     uint32_t bond_dimension;
     double sv_threshold;
 
+    struct glaze {
+      using T = MatrixProductStateImpl;
+      static constexpr auto value = glz::object(
+        &T::num_qubits,
+        &T::sv_threshold,
+        &T::tensors,
+        &T::singular_values,
+        &T::blocks,
+        &T::internal_indices,
+        &T::external_indices,
+        &T::left_boundary_index,
+        &T::right_boundary_index,
+        &T::qubit_map,
+        &T::qubit_indices,
+        &T::block_map,
+        &T::block_indices,
+        &T::left_ortho_lim,
+        &T::right_ortho_lim,
+        &T::log
+      );
+    };
+
     MatrixProductStateImpl()=default;
     ~MatrixProductStateImpl()=default;
 
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
-    : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(num_qubits - 1), right_ortho_lim(0) {
-      if (sv_threshold < 1e-15) {
-        throw std::runtime_error("sv_threshold must be finite ( > 0) or else the MPS may be numerically unstable.");
-      }
+      : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(num_qubits - 1), right_ortho_lim(0) {
+        if (sv_threshold < 1e-15) {
+          throw std::runtime_error("sv_threshold must be finite ( > 0) or else the MPS may be numerically unstable.");
+        }
 
-      if ((bond_dimension > 1u << num_qubits) && (num_qubits < 32)) {
-        bond_dimension = 1u << num_qubits;
-      }
+        if ((bond_dimension > 1u << num_qubits) && (num_qubits < 32)) {
+          bond_dimension = 1u << num_qubits;
+        }
 
-      if (num_qubits < 1) {
-        throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
-      }
+        if (num_qubits < 1) {
+          throw std::invalid_argument("Number of qubits must be > 1 for MPS simulator.");
+        }
 
-      print_all = false;
+        log = {};
 
-      log = {};
+        blocks = {};
+        block_indices = {};
 
-      blocks = {};
-      block_indices = {};
+        block_map = {};
+        qubit_indices = std::vector<uint32_t>(num_qubits);
+        std::iota(qubit_indices.begin(), qubit_indices.end(), 0);
+        for (size_t i = 0; i < num_qubits; i++) {
+          qubit_map[i] = i;
+          qubit_indices[i] = i;
+        }
 
-      block_map = {};
-      qubit_indices = std::vector<uint32_t>(num_qubits);
-      std::iota(qubit_indices.begin(), qubit_indices.end(), 0);
-      for (size_t i = 0; i < num_qubits; i++) {
-        qubit_map[i] = i;
-        qubit_indices[i] = i;
-      }
+        left_boundary_index = Index(1, "Internal,LEdge");
+        right_boundary_index = Index(1, "Internal,REdge");
 
-      left_boundary_index = Index(1, "Internal,LEdge");
-      right_boundary_index = Index(1, "Internal,REdge");
+        for (uint32_t i = 0; i < num_qubits - 1; i++) {
+          internal_indices.push_back(Index(1, fmt::format("Internal,Left,n={}", i)));
+          internal_indices.push_back(Index(1, fmt::format("Internal,Right,n={}", i)));
+        }
 
-      for (uint32_t i = 0; i < num_qubits - 1; i++) {
-        internal_indices.push_back(Index(1, fmt::format("Internal,Left,n={}", i)));
-        internal_indices.push_back(Index(1, fmt::format("Internal,Right,n={}", i)));
-      }
+        for (uint32_t i = 0; i < num_qubits; i++) {
+          qubit_map[i] = i;
+          external_indices.push_back(Index(2, fmt::format("External,i={}", i)));
+        }
 
-      for (uint32_t i = 0; i < num_qubits; i++) {
-        qubit_map[i] = i;
-        external_indices.push_back(Index(2, fmt::format("External,i={}", i)));
-      }
+        ITensor tensor;
 
-      ITensor tensor;
+        if (num_qubits == 1) {
+          tensor = ITensor(left_boundary_index, right_boundary_index, external_idx(0));
+          tensor.set(1, 1, 1, 1.0);
+          tensors.push_back(tensor);
+          return;
+        }
 
-      if (num_qubits == 1) {
-        tensor = ITensor(left_boundary_index, right_boundary_index, external_idx(0));
+        // Setting singular values
+        for (uint32_t q = 0; q < num_qubits - 1; q++) {
+          tensor = ITensor(internal_idx(q, InternalDir::Left), internal_idx(q, InternalDir::Right));
+          tensor.set(1, 1, 1.0);
+          singular_values.push_back(tensor);
+        }
+
+        // Setting left boundary tensor
+        tensor = ITensor(left_boundary_index, internal_idx(0, InternalDir::Left), external_idx(0));
         tensor.set(1, 1, 1, 1.0);
         tensors.push_back(tensor);
-        return;
-      }
 
-      // Setting singular values
-      for (uint32_t q = 0; q < num_qubits - 1; q++) {
-        tensor = ITensor(internal_idx(q, InternalDir::Left), internal_idx(q, InternalDir::Right));
-        tensor.set(1, 1, 1.0);
-        singular_values.push_back(tensor);
-      }
+        // Setting bulk tensors
+        for (uint32_t q = 1; q < num_qubits - 1; q++) {
+          tensor = ITensor(internal_idx(q - 1, InternalDir::Right), internal_idx(q, InternalDir::Left), external_idx(q));
+          tensor.set(1, 1, 1, 1.0);
+          tensors.push_back(tensor);
+        }
 
-      // Setting left boundary tensor
-      tensor = ITensor(left_boundary_index, internal_idx(0, InternalDir::Left), external_idx(0));
-      tensor.set(1, 1, 1, 1.0);
-      tensors.push_back(tensor);
-
-      // Setting bulk tensors
-      for (uint32_t q = 1; q < num_qubits - 1; q++) {
-        tensor = ITensor(internal_idx(q - 1, InternalDir::Right), internal_idx(q, InternalDir::Left), external_idx(q));
+        // Setting right boundary tensor
+        tensor = ITensor(internal_idx(num_qubits - 2, InternalDir::Right), right_boundary_index, external_idx(num_qubits - 1));
         tensor.set(1, 1, 1, 1.0);
         tensors.push_back(tensor);
       }
-
-      // Setting right boundary tensor
-      tensor = ITensor(internal_idx(num_qubits - 2, InternalDir::Right), right_boundary_index, external_idx(num_qubits - 1));
-      tensor.set(1, 1, 1, 1.0);
-      tensors.push_back(tensor);
-    }
 
     MatrixProductStateImpl(const MatrixProductStateImpl& other) : MatrixProductStateImpl(other.num_qubits, other.bond_dimension, other.sv_threshold) {
       tensors = other.tensors;
@@ -377,8 +444,8 @@ class MatrixProductStateImpl {
 
         std::tie(U, S, V) = svd(M, u_inds, v_inds,
             {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-             "LeftTags=",fmt::format("n={},Internal,Left",i-1),
-             "RightTags=",fmt::format("n={},Internal,Right",i-1)});
+            "LeftTags=",fmt::format("n={},Internal,Left",i-1),
+            "RightTags=",fmt::format("n={},Internal,Right",i-1)});
 
         auto ext = siteIndex(mps, i);
         U.replaceTags(ext.tags(), vidal_mps.external_idx(i - 1).tags());
@@ -2443,6 +2510,29 @@ bool MatrixProductState::state_valid() {
   }
 }
 
+struct MatrixProductState::glaze {
+  using T = MatrixProductState;
+  static constexpr auto value = glz::object(
+    &T::impl
+  );
+};
+
+std::vector<char> MatrixProductState::serialize() const {
+  std::vector<char> bytes;
+  auto write_error = glz::write_beve(*this, bytes);
+  if (write_error) {
+    throw std::runtime_error(fmt::format("Error writing MatrixProductState to binary: \n{}", glz::format_error(write_error, bytes)));
+  }
+  return bytes;
+}
+
+void MatrixProductState::deserialize(const std::vector<char>& bytes) {
+  auto parse_error = glz::read_beve(*this, bytes);
+  if (parse_error) {
+    throw std::runtime_error(fmt::format("Error reading MatrixProductState from binary: \n{}", glz::format_error(parse_error, bytes)));
+  }
+}
+
 // ----------------------------------------------------------------------- //
 // --------------- PauliExpectationTree implementation ------------------- //
 // ----------------------------------------------------------------------- //
@@ -2476,43 +2566,3 @@ std::string PauliExpectationTree::to_string() const {
 PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
 }
-
-//#include <glaze/glaze.hpp>
-//
-//template<>
-//struct glz::meta<MatrixProductStateImpl> {
-//  static constexpr auto value = glz::object(
-//    "num_qubits", &MatrixProductStateImpl::num_qubits,
-//    "sv_threshold", &MatrixProductStateImpl::sv_threshold,
-//    "tensors", &MatrixProductStateImpl::tensors,
-//    "singular_values", &MatrixProductStateImpl::singular_values,
-//    "blocks", &MatrixProductStateImpl::blocks,
-//    "internal_indices", &MatrixProductStateImpl::internal_indices,
-//    "external_indices", &MatrixProductStateImpl::external_indices,
-//    "left_boundary_index", &MatrixProductStateImpl::left_boundary_index,
-//    "right_boundary_index", &MatrixProductStateImpl::right_boundary_index,
-//    "qubit_map", &MatrixProductStateImpl::qubit_map,
-//    "qubit_indices", &MatrixProductStateImpl::qubit_indices,
-//    "block_map", &MatrixProductStateImpl::block_map,
-//    "block_indices", &MatrixProductStateImpl::block_indices,
-//    "left_ortho_lim", &MatrixProductStateImpl::left_ortho_lim,
-//    "right_ortho_lim", &MatrixProductStateImpl::right_ortho_lim,
-//    "log", MatrixProductState::log
-//  );
-//};
-//
-//std::vector<char> MatrixProductState::serialize() const {
-//      std::vector<char> bytes;
-//      auto write_error = glz::write_beve(*this, bytes);
-//      if (write_error) {
-//        throw std::runtime_error(fmt::format("Error writing MatrixProductState to binary: \n{}", glz::format_error(write_error, bytes)));
-//      }
-//      return bytes;
-//    }
-//
-//void MatrixProductState::deserialize(const std::vector<char>& bytes) {
-//  auto parse_error = glz::read_beve(*this, bytes);
-//  if (parse_error) {
-//    throw std::runtime_error(fmt::format("Error reading MatrixProductState from binary: \n{}", glz::format_error(parse_error, bytes)));
-//  }
-//}

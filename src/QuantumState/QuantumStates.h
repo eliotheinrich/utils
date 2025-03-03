@@ -481,12 +481,19 @@ class MatrixProductState : public QuantumState {
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
     void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
 
+    std::vector<char> serialize() const;
+    void deserialize(const std::vector<char>& bytes);
+
     std::vector<double> get_logged_truncerr();
 
 		void print_mps(bool print_data=false) const;
 
     bool state_valid();
     void set_debug_level(int i);
+
+    void test_serialize();
+
+    struct glaze;
 };
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
