@@ -414,6 +414,9 @@ class MatrixProductStateImpl {
       one.set(1, 1.0);
       vidal_mps.tensors[num_qubits - 1] *= one;
 
+      vidal_mps.set_left_ortho_lim(0);
+      vidal_mps.set_right_ortho_lim(num_qubits - 1);
+
       return vidal_mps;
     }
 
@@ -643,7 +646,7 @@ class MatrixProductStateImpl {
 
     void left_orthogonalize(uint32_t q) {
       while (left_ortho_lim < q) {
-        svd_bond(left_ortho_lim++, nullptr);
+        svd_bond(left_ortho_lim++, nullptr, false);
         if (left_ortho_lim > right_ortho_lim) {
           right_ortho_lim++;
         }
@@ -652,7 +655,7 @@ class MatrixProductStateImpl {
 
     void right_orthogonalize(uint32_t q) {
       while (right_ortho_lim > q) {
-        svd_bond(--right_ortho_lim, nullptr);
+        svd_bond(--right_ortho_lim, nullptr, false);
         if (right_ortho_lim < left_ortho_lim) {
           left_ortho_lim--;
         }
@@ -685,7 +688,6 @@ class MatrixProductStateImpl {
       size_t q2 = qubit_map.at(j2);
       right_orthogonalize(q2 - 1);
     }
-
 
     bool is_orthogonal() const {
       return left_ortho_lim >= right_ortho_lim;
@@ -1258,7 +1260,7 @@ class MatrixProductStateImpl {
       evolve(quantumstate_utils::SWAP::value, {q1, q2});
     }
 
-    void svd_bond(uint32_t q, ITensor* T=nullptr) {
+    void svd_bond(uint32_t q, ITensor* T=nullptr, bool truncate=true) {
       size_t j1 = qubit_indices[q];
       size_t j2 = qubit_indices[q+1];
 
@@ -1294,10 +1296,12 @@ class MatrixProductStateImpl {
       }
       v_inds.push_back(right);
 
+      double threshold = truncate ? sv_threshold : 1e-15;
+
       ITensor U, S, V;
       try {
         std::tie(U, S, V) = svd(theta, u_inds, v_inds, 
-            {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
+            {"Cutoff=",threshold,"MaxDim=",bond_dimension,
              "LeftTags=",fmt::format("Internal,Left,n={}", q),
              "RightTags=",fmt::format("Internal,Right,n={}", q)});
       } catch (const std::runtime_error& e) {
@@ -1984,10 +1988,6 @@ class PauliExpectationTreeImpl {
     PauliExpectationTreeImpl(MatrixProductStateImpl& state, const PauliString& p, size_t min, size_t max)
     : state(state), phase(p.get_r()), min(min), max(max) {
       size_t num_qubits = state.num_qubits;
-      if (!state.is_orthogonal()) {
-        throw std::runtime_error("Cannot generate a PauliExpectationTree from a non-orthogonalized mps. Call mps.orthogonalize() first.");
-      }
-
       if (num_qubits != p.num_qubits) {
         throw std::runtime_error(fmt::format("Can't create PauliExpectationTreeImpl; number of qubits does not match: {} and {}.", state.num_qubits, p.num_qubits));
       }
@@ -2272,8 +2272,6 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
-  impl->orthogonalize(0);
-
   if (use_parent) {
     return QuantumState::sample_paulis(supports, num_samples);
   }
@@ -2299,7 +2297,7 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const std::vector<QubitSupport>& supports, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt) {
-  impl->orthogonalize(0);
+  //impl->orthogonalize(0);
 
   if (use_parent) {
     return QuantumState::sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
