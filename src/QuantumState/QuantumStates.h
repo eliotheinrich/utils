@@ -53,7 +53,6 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       return gen();
     }
 
-
 		uint32_t num_qubits;
 		uint32_t basis;
 
@@ -197,6 +196,9 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
 
+    virtual std::vector<char> serialize() const=0;
+    virtual void deserialize(const std::vector<char>& bytes)=0;
+
     //                                                                                                          //
     // ---------------------------- STABILIZER RENYI ENTROPY FUNCTIONS ---------------------------------------- //
     //                                                                                                          //
@@ -303,6 +305,10 @@ class DensityMatrix : public QuantumState {
 
     }
 		std::map<uint32_t, double> probabilities_map() const;
+
+    struct glaze;
+    virtual std::vector<char> serialize() const override;
+    virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
 class Statevector : public QuantumState {
@@ -379,6 +385,10 @@ class Statevector : public QuantumState {
 		std::complex<double> inner(const Statevector& other) const;
 
 		Eigen::VectorXd svd(const Qubits& qubits) const;
+
+    struct glaze;
+    virtual std::vector<char> serialize() const override;
+    virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
 class PauliExpectationTree;
@@ -416,7 +426,7 @@ class MatrixProductState : public QuantumState {
     std::unique_ptr<MatrixProductStateImpl> impl;
 
 	public:
-    MatrixProductState()=default;
+    MatrixProductState();
     ~MatrixProductState();
 
 		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-8);
@@ -481,9 +491,6 @@ class MatrixProductState : public QuantumState {
     bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
     void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
 
-    std::vector<char> serialize() const;
-    void deserialize(const std::vector<char>& bytes);
-
     std::vector<double> get_logged_truncerr();
 
 		void print_mps(bool print_data=false) const;
@@ -491,9 +498,9 @@ class MatrixProductState : public QuantumState {
     bool state_valid();
     void set_debug_level(int i);
 
-    void test_serialize();
-
     struct glaze;
+    virtual std::vector<char> serialize() const override;
+    virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);

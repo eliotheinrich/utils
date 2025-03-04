@@ -1139,20 +1139,36 @@ bool test_mps_trace_conserved() {
   return true;
 }
 
-bool test_mps_serialize() {
-  constexpr size_t nqb = 32;
+bool test_serialize() {
   auto rng = seeded_rng();
 
-  MatrixProductState mps(nqb, 16, 1e-8);
+  MatrixProductState mps(32, 16, 1e-8);
+  Statevector sv(8);
+  DensityMatrix rho(4);
+
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(rng, mps);
-
     auto data = mps.serialize();
 
-    MatrixProductState mps_(1, 1, 1e-15);
+    MatrixProductState mps_;
     mps_.deserialize(data);
 
-    ASSERT(is_close(mps.inner(mps_), 1.0), "States were not equal after (de)serialization.");
+    ASSERT(is_close(mps.inner(mps_), 1.0), "MatrixProductStates were not equal after (de)serialization.");
+
+    randomize_state_haar(rng, sv);
+    data = sv.serialize();
+
+    Statevector sv_;
+    sv_.deserialize(data);
+    ASSERT(is_close(sv.inner(sv_), 1.0), "Statevectors were not equal after (de)serialization.");
+
+    randomize_state_haar(rng, rho);
+    data = rho.serialize();
+
+    DensityMatrix rho_;
+    rho_.deserialize(data);
+
+    ASSERT(states_close(rho, rho_), "DensityMatrices were not equal after (de)serialization.");
   }
   
   return true;
@@ -1209,7 +1225,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
-  ADD_TEST(test_mps_serialize);
+  ADD_TEST(test_serialize);
 
 
   constexpr char green[] = "\033[1;32m";

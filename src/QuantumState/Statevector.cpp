@@ -2,11 +2,12 @@
 
 #include <unsupported/Eigen/MatrixFunctions>
 
+#include <glaze/glaze.hpp>
+
 Statevector::Statevector(uint32_t num_qubits, uint32_t qregister) : QuantumState(num_qubits) {
   data = Eigen::VectorXcd::Zero(1u << num_qubits);
   data(qregister) = 1.;
 }
-
 
 Statevector::Statevector(uint32_t num_qubits) : Statevector(num_qubits, 0) {}
 
@@ -426,4 +427,68 @@ Eigen::VectorXd Statevector::svd(const Qubits& qubits) const {
 
   Eigen::JacobiSVD<Eigen::MatrixXcd> svd(matrix, Eigen::ComputeThinU | Eigen::ComputeThinV);
   return svd.singularValues();
+}
+
+namespace glz::detail {
+   template <>
+   struct from<BEVE, Eigen::VectorXcd> {
+      template <auto Opts>
+      static void op(Eigen::VectorXcd& value, auto&&... args) {
+        std::string str;
+        read<BEVE>::op<Opts>(str, args...);
+        std::vector<char> buffer(str.begin(), str.end());
+
+        const size_t header_size = sizeof(size_t);
+        size_t size;
+        memcpy(&size, buffer.data(), sizeof(size_t));
+
+        Eigen::VectorXcd vector(size);
+        memcpy(vector.data(), buffer.data() + header_size, size * sizeof(std::complex<double>));
+
+        value = vector; 
+      }
+   };
+
+   template <>
+   struct to<BEVE, Eigen::VectorXcd> {
+      template <auto Opts>
+      static void op(const Eigen::VectorXcd& value, auto&&... args) noexcept {
+        const size_t size = value.size();
+        const size_t header_size = sizeof(size_t);
+        const size_t data_size = size * sizeof(std::complex<double>);
+        std::vector<char> buffer(header_size + data_size);
+
+        memcpy(buffer.data(), &size, sizeof(size_t));
+        memcpy(buffer.data() + header_size, value.data(), data_size);
+
+        std::string data(buffer.begin(), buffer.end());
+        write<BEVE>::op<Opts>(data, args...);
+      }
+   };
+}
+
+struct Statevector::glaze {
+  using T = Statevector;
+  static constexpr auto value = glz::object(
+    &T::data,
+    &T::use_parent,
+    &T::num_qubits,
+    &T::basis
+  );
+};
+
+std::vector<char> Statevector::serialize() const {
+  std::vector<char> bytes;
+  auto write_error = glz::write_beve(*this, bytes);
+  if (write_error) {
+    throw std::runtime_error(fmt::format("Error writing Statevector to binary: \n{}", glz::format_error(write_error, bytes)));
+  }
+  return bytes;
+}
+
+void Statevector::deserialize(const std::vector<char>& bytes) {
+  auto parse_error = glz::read_beve(*this, bytes);
+  if (parse_error) {
+    throw std::runtime_error(fmt::format("Error reading Statevector from binary: \n{}", glz::format_error(parse_error, bytes)));
+  }
 }

@@ -2212,6 +2212,8 @@ MatrixProductState::MatrixProductState(const Statevector& other, uint32_t bond_d
   impl->reset_from_tensor(coefficients);
 }
 
+MatrixProductState::MatrixProductState()=default;
+
 MatrixProductState::~MatrixProductState()=default;
 
 MatrixProductState& MatrixProductState::operator=(const MatrixProductState& other) {
@@ -2513,7 +2515,10 @@ bool MatrixProductState::state_valid() {
 struct MatrixProductState::glaze {
   using T = MatrixProductState;
   static constexpr auto value = glz::object(
-    &T::impl
+    &T::impl,
+    &T::use_parent,
+    &T::num_qubits,
+    &T::basis
   );
 };
 

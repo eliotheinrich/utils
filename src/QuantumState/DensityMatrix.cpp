@@ -1,6 +1,8 @@
 #include "QuantumStates.h"
 #include <unsupported/Eigen/KroneckerProduct>
 
+#include <glaze/glaze.hpp>
+
 DensityMatrix::DensityMatrix(uint32_t num_qubits) : QuantumState(num_qubits) {
 	data = Eigen::MatrixXcd::Zero(basis, basis);
 	data(0, 0) = 1;
@@ -292,4 +294,72 @@ std::vector<double> DensityMatrix::probabilities() const {
 	}
 
 	return probs;
+}
+
+namespace glz::detail {
+   template <>
+   struct from<BEVE, Eigen::MatrixXcd> {
+      template <auto Opts>
+      static void op(Eigen::MatrixXcd& value, auto&&... args) {
+        std::string str;
+        read<BEVE>::op<Opts>(str, args...);
+        std::vector<char> buffer(str.begin(), str.end());
+
+        const size_t header_size = 2 * sizeof(size_t);
+        size_t rows, cols;
+        memcpy(&rows, buffer.data(), sizeof(size_t));
+        memcpy(&cols, buffer.data() + sizeof(size_t), sizeof(size_t));
+        
+        Eigen::MatrixXcd matrix(rows, cols);
+        memcpy(matrix.data(), buffer.data() + header_size, rows * cols * sizeof(std::complex<double>));
+
+        value = matrix; 
+      }
+   };
+
+   template <>
+   struct to<BEVE, Eigen::MatrixXcd> {
+      template <auto Opts>
+      static void op(const Eigen::MatrixXcd& value, auto&&... args) noexcept {
+        const size_t header_size = 2 * sizeof(size_t);
+        const size_t rows = value.rows();
+        const size_t cols = value.cols();
+    
+        const size_t data_size = rows * cols * sizeof(std::complex<double>);
+        std::vector<char> buffer(header_size + data_size);
+    
+        memcpy(buffer.data(), &rows, sizeof(size_t));
+        memcpy(buffer.data() + sizeof(size_t), &cols, sizeof(size_t));
+        memcpy(buffer.data() + header_size, value.data(), data_size);
+
+        std::string data(buffer.begin(), buffer.end());
+        write<BEVE>::op<Opts>(data, args...);
+      }
+   };
+}
+
+struct DensityMatrix::glaze {
+  using T = DensityMatrix;
+  static constexpr auto value = glz::object(
+    &T::data,
+    &T::use_parent,
+    &T::num_qubits,
+    &T::basis
+  );
+};
+
+std::vector<char> DensityMatrix::serialize() const {
+  std::vector<char> bytes;
+  auto write_error = glz::write_beve(*this, bytes);
+  if (write_error) {
+    throw std::runtime_error(fmt::format("Error writing DensityMatrix to binary: \n{}", glz::format_error(write_error, bytes)));
+  }
+  return bytes;
+}
+
+void DensityMatrix::deserialize(const std::vector<char>& bytes) {
+  auto parse_error = glz::read_beve(*this, bytes);
+  if (parse_error) {
+    throw std::runtime_error(fmt::format("Error reading DensityMatrix from binary: \n{}", glz::format_error(parse_error, bytes)));
+  }
 }
