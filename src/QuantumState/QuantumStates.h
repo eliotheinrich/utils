@@ -497,6 +497,7 @@ class MatrixProductState : public QuantumState {
 
     bool state_valid();
     void set_debug_level(int i);
+    void set_orthogonality_level(int i);
 
     struct glaze;
     virtual std::vector<char> serialize() const override;

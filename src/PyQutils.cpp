@@ -192,6 +192,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("__str__", &MatrixProductState::to_string)
     .def("print_mps", &MatrixProductState::print_mps)
     .def("set_debug_level", &MatrixProductState::set_debug_level)
+    .def("set_orthogonality_level", &MatrixProductState::set_orthogonality_level)
     .def("singular_values", &MatrixProductState::singular_values)
     .def("get_logged_truncerr", &MatrixProductState::get_logged_truncerr)
     .def("trace", &MatrixProductState::trace)
