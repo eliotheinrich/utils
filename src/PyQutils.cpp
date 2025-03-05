@@ -116,6 +116,7 @@ NB_MODULE(qutils_bindings, m) {
   m.def("haar_unitary", [](uint32_t num_qubits) { return haar_unitary(num_qubits); });
 
   nanobind::class_<QuantumState>(m, "QuantumState")
+    .def_ro("num_qubits", &QuantumState::num_qubits)
     .def("__str__", &QuantumState::to_string)
     .def("h", &QuantumState::h)
     .def("x", &QuantumState::x)
@@ -167,12 +168,13 @@ NB_MODULE(qutils_bindings, m) {
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
     .def(nanobind::init<MatrixProductState>())
+    .def_ro("data", &Statevector::data)
     .def("normalize", &Statevector::normalize)
     .def("mzr_forced", [](Statevector& self, uint32_t q, bool outcome) { return self.mzr(q, outcome); })
     .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
     .def("weak_measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
     .def("inner", &Statevector::inner)
-    .def("expectation", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("expectation_matrix", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -180,7 +182,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<DensityMatrix, QuantumState>(m, "DensityMatrix")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
-    .def("expectation", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("expectation_matrix", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -197,7 +199,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
     .def("forced_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, bool outcome) { return self.measure(p, qubits, outcome); })
     .def("forced_weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta, bool outcome) { return self.weak_measure(p, qubits, beta, outcome); })
-    .def("expectation_of_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
     .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
