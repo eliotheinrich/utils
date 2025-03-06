@@ -31,9 +31,6 @@ if (gfortran)
     set(ITENSOR_DEPS gfortran $ITENSOR_DEPS)
 endif()
 
-#set(ITENSOR_DIR $ENV{ITENSOR_DIR})
-#set(EXTERNAL_DIRS ${LAPACK_DIR} ${BLAS_DIR} ${ITENSOR_DIR}/lib)
-
 # -------------------------------- #
 # ------ Fetching externals ------ #
 # -------------------------------- #
@@ -65,7 +62,7 @@ list(APPEND EXTERNALS glaze)
 FetchContent_Declare(
     eigen
     GIT_REPOSITORY https://gitlab.com/libeigen/eigen
-    GIT_TAG master
+    GIT_TAG 3.4
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
