@@ -128,6 +128,9 @@ class QuantumStateSampler {
       double O = 0.0;
 
       char basis = spin_glass_order_basis;
+
+      // Returns a PauliString with P at each specified site, where P = X, Y, Z depending on
+      // the spin_glass_order_basis.
       auto make_pauli = [num_qubits, basis](const std::vector<size_t>& sites) {
         PauliString P(num_qubits);
         if (basis == 'X') {
@@ -159,8 +162,6 @@ class QuantumStateSampler {
           PauliString Pij = make_pauli({i, j});
 
           auto cij = std::pow(std::abs(state->expectation(Pij)), 2.0);
-
-          std::cout << fmt::format("<{}> = {:.5f}, {:.5f}, {:.5f}\n", Pij, cij, c[i], c[j]);
 
           O += cij - c[i]*c[j];
         }
