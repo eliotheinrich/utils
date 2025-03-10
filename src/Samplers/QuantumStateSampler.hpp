@@ -44,6 +44,7 @@ class QuantumStateSampler {
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
         spin_glass_order_basis = dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z")[0];
+        spin_glass_order_assume_symmetry = dataframe::utils::get<int>(params, "spin_glass_assume_symmetry", false);
         if (!(spin_glass_order_basis == 'X' || spin_glass_order_basis == 'Y' || spin_glass_order_basis == 'Z')) {
           throw std::runtime_error(fmt::format("Could not compute spin glass order for provided basis: {}", spin_glass_order_basis));
         }
@@ -153,8 +154,12 @@ class QuantumStateSampler {
 
       std::vector<double> c(num_qubits);
       for (size_t i = 0; i < num_qubits; i++) {
-        PauliString Pi = make_pauli({i});
-        c[i] = std::pow(std::abs(state->expectation(Pi)), 2.0);
+        if (spin_glass_order_assume_symmetry) {
+          c[i] = 0.0;
+        } else {
+          PauliString Pi = make_pauli({i});
+          c[i] = std::pow(std::abs(state->expectation(Pi)), 2.0);
+        }
       }
 
       for (size_t i = 0; i < num_qubits; i++) {
@@ -355,6 +360,7 @@ class QuantumStateSampler {
 
     bool sample_spin_glass_order;
     char spin_glass_order_basis;
+    bool spin_glass_order_assume_symmetry;
 
     bool sre_use_parent_methods;
 
