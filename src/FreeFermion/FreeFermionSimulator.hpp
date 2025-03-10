@@ -15,14 +15,26 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+static inline bool is_hermitian(const Eigen::MatrixXcd& H) {
+  return H.isApprox(H.adjoint());
+}
+
+static inline bool is_antisymmetric(const Eigen::MatrixXcd& A) {
+  return A.isApprox(-A.transpose());
+}
+
+static inline bool is_unitary(const Eigen::MatrixXcd& U) {
+  Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(U.rows(), U.cols());
+  return (U.adjoint() * U).isApprox(I);
+}
+
 class FreeFermionState : public EntropyState {
   private:
-    bool particles_conserved;
     size_t L;
 
   public:
     Eigen::MatrixXcd amplitudes;
-    FreeFermionState(size_t L, bool particles_conserved) : L(L), particles_conserved(particles_conserved), EntropyState(L) {
+    FreeFermionState(size_t L) : L(L), EntropyState(L) {
       particles_at({});
     }
 
@@ -31,31 +43,23 @@ class FreeFermionState : public EntropyState {
     }
 
     void particles_at(const std::vector<size_t>& sites) {
-      //std::cout << fmt::format("PARTICLES AT {}\n", sites);
       for (auto i : sites) {
         if (i > L) {
           throw std::invalid_argument(fmt::format("Invalid site. Must be within 0 < i < {}", L));
         }
       }
 
-      if (particles_conserved) {
-        amplitudes = Eigen::MatrixXcd::Zero(L, L);
-        for (auto i : sites) {
-          amplitudes(i, i) = 1.0;
-        }
-      } else {
-        amplitudes = Eigen::MatrixXcd::Zero(2*L, L);
-        std::vector<bool> included(L, false);
-        for (auto i : sites) {
-          included[i] = true;
-        }
+      amplitudes = Eigen::MatrixXcd::Zero(2*L, L);
+      std::vector<bool> included(L, false);
+      for (auto i : sites) {
+        included[i] = true;
+      }
 
-        for (size_t i = 0; i < L; i++) {
-          if (included[i]) {
-            amplitudes(i + L, i) = 1.0;
-          } else {
-            amplitudes(i, i) = 1.0;
-          }
+      for (size_t i = 0; i < L; i++) {
+        if (included[i]) {
+          amplitudes(i + L, i) = 1.0;
+        } else {
+          amplitudes(i, i) = 1.0;
         }
       }
     }
@@ -79,11 +83,8 @@ class FreeFermionState : public EntropyState {
     }
 
     void swap(size_t i, size_t j) {
-      //std::cout << "calling swap\n";
       amplitudes.row(i).swap(amplitudes.row(j));
-      if (!particles_conserved) {
-        amplitudes.row(i + L).swap(amplitudes.row(j + L));
-      }
+      amplitudes.row(i + L).swap(amplitudes.row(j + L));
     }
 
 		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override {
@@ -111,19 +112,12 @@ class FreeFermionState : public EntropyState {
       auto C = correlation_matrix();
 
       std::vector<int> _sites(sites.begin(), sites.end());
-      if (!particles_conserved) {
-        for (size_t i = 0; i < N; i++) {
-          _sites.push_back(sites[i] + N);
-        }
+      for (size_t i = 0; i < N; i++) {
+        _sites.push_back(sites[i] + L);
       }
       Eigen::VectorXi indices = Eigen::Map<Eigen::VectorXi, Eigen::Unaligned>(_sites.data(), _sites.size());
       Eigen::MatrixXcd CA1 = C(indices, indices);
-
-      Eigen::MatrixXcd CA2 = -CA1;
-
-      for (size_t i = 0; i < CA2.rows(); i++) {
-        CA2(i, i) = CA2.coeff(i, i) + 1.0;
-      }
+      Eigen::MatrixXcd CA2 = Eigen::MatrixXcd::Identity(CA1.rows(), CA1.cols()) - CA1;
 
       if (index == 1) {
         Eigen::MatrixXcd Cn = Eigen::MatrixXcd::Zero(indices.size(), indices.size());
@@ -138,58 +132,74 @@ class FreeFermionState : public EntropyState {
         return -Cn.trace().real();
       } else {
         Eigen::MatrixXcd Cn = (CA1.pow(index) + CA2.pow(index)).log();
-        return Cn.trace().real()/static_cast<double>(1.0 - index);
+        return Cn.trace().real()/(2.0*static_cast<double>(1.0 - index));
       }
+    }
+
+    bool is_identity(const Eigen::MatrixXcd& A) const {
+      size_t r = A.rows();
+      size_t c = A.cols();
+
+      if (r != c) {
+        throw std::runtime_error("Non-square matrix passed to is_identity.");
+      }
+
+      Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(r, c);
+
+      return (A - I).norm() < 1e-4;
     }
 
     bool check_orthogonality() const {
-      auto A = amplitudes.adjoint()*amplitudes;
-
-      for (size_t i = 0; i < A.rows(); i++) {
-        for (size_t j = 0; j < A.cols(); j++) {
-          if (i == j) {
-            auto a = A(i, i);
-            if (std::abs(a - 1.0) > 1e-6 && std::abs(a) > 1e-6) {
-              return false;
-            }
-          } else {
-            auto a = A(i, j);
-            if (std::abs(a) > 1e-6) {
-              return false;
-            }
-          }
-        }
-      }
-
-      return true;
+      auto A = amplitudes.adjoint() * amplitudes;
+      return is_identity(A);
     }
 
     void orthogonalize() {
-      Eigen::JacobiSVD<Eigen::MatrixXcd> svd(amplitudes, Eigen::ComputeThinU);
-      auto U = svd.matrixU();
-      auto D = svd.singularValues();
+      size_t r = amplitudes.rows();
+      size_t c = amplitudes.cols();
+      Eigen::MatrixXcd Q(r, c);
+      for (int i = 0; i < c; i++) {
+        Eigen::VectorXcd q = amplitudes.col(i);
 
-      size_t j = 0;
-      for (size_t i = 0; i < L; i++) {
-        if (std::abs(D(i)) > 1e-6) {
-          for (size_t k = 0; k < amplitudes.rows(); k++) {
-            amplitudes(k, j) = U(k, i);
-          }
-          j++;
+        for (int j = 0; j < i; ++j) {
+          q -= Q.col(j).adjoint() * amplitudes.col(i) * Q.col(j);
         }
+
+        q.normalize();
+        Q.col(i) = q;
       }
 
-      for (size_t i = j; i < L; i++) {
-        for (size_t k = 0; k < amplitudes.rows(); k++) {
-          amplitudes(k, i) = 0.0;
-        }
-      }
+      amplitudes = Q;
+
+      //Eigen::JacobiSVD<Eigen::MatrixXcd> svd(amplitudes, Eigen::ComputeThinU);
+      //auto U = svd.matrixU();
+      //auto D = svd.singularValues();
+
+      //size_t j = 0;
+      //for (size_t i = 0; i < L; i++) {
+      //  if (std::abs(D(i)) > 1e-6) {
+      //    for (size_t k = 0; k < amplitudes.rows(); k++) {
+      //      amplitudes(k, j) = U(k, i);
+      //    }
+      //    j++;
+      //  }
+      //}
+
+      //for (size_t i = j; i < L; i++) {
+      //  for (size_t k = 0; k < amplitudes.rows(); k++) {
+      //    amplitudes(k, i) = 0.0;
+      //  }
+      //}
     }
 
     Eigen::MatrixXcd prepare_hamiltonian(const Eigen::MatrixXcd& H) const {
-      if (!particles_conserved && H.rows() == L && H.cols() == L) {
+      if (H.rows() == L && H.cols() == L) {
         Eigen::MatrixXcd zeros = Eigen::MatrixXcd::Zero(L, L);
         return prepare_hamiltonian(H, zeros);
+      }
+
+      if (!is_hermitian(H)) {
+        throw std::runtime_error("Passed non-hermitian matrix to prepare_hamiltonian.");
       }
 
       size_t K = amplitudes.rows();
@@ -206,6 +216,10 @@ class FreeFermionState : public EntropyState {
         throw std::invalid_argument("Dimension mismatch of provided Hamiltonian.");
       }
 
+      if (!is_hermitian(A) || !is_antisymmetric(B)) {
+        throw std::runtime_error("Passed invalid matrices to prepare_hamiltonian.");
+      }
+
       Eigen::MatrixXcd hamiltonian(2*L, 2*L);
       hamiltonian  << A, B,
                       B.adjoint(), -A.transpose();
@@ -220,14 +234,21 @@ class FreeFermionState : public EntropyState {
     }
 
     void evolve(const Eigen::MatrixXcd& U) {
+      if (!is_unitary(U)) {
+        throw std::runtime_error("Non-unitary matrix passed to evolve.");
+      }
+
       amplitudes = U * amplitudes;
     }
 
-    void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
-      if (particles_conserved) {
-        throw std::invalid_argument("Cannot call evolve(A, B) for particle-conserving simulation.");
+    void assert_ortho() const {
+      bool ortho = check_orthogonality();
+      if (!ortho) {
+        throw std::runtime_error("Not orthogonal!");
       }
+    }
 
+    void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
       auto hamiltonian = prepare_hamiltonian(A, B);
       evolve_hamiltonian(hamiltonian, t);
     }
@@ -244,10 +265,6 @@ class FreeFermionState : public EntropyState {
     }
 
     void weak_measurement_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) {
-      if (particles_conserved) {
-        throw std::invalid_argument("Cannot call weak_measurement(A, B) for particle-conserving simulation.");
-      }
-
       auto hamiltonian = prepare_hamiltonian(A, B);
       weak_measurement_hamiltonian(hamiltonian, beta);
     }
@@ -257,7 +274,8 @@ class FreeFermionState : public EntropyState {
         throw std::invalid_argument(fmt::format("Invalid qubit measured: {}, L = {}", i, L));
       }
 
-      size_t k = outcome ? i + L : i;
+      size_t k = outcome ? (i + L) : i;
+      size_t k_ = outcome ? i : (i + L);
 
       size_t i0;
       double d = 0.0;
@@ -270,6 +288,7 @@ class FreeFermionState : public EntropyState {
       }
 
       if (!(d > 0)) {
+        std::cout << fmt::format("d = {:.5f}\n", d);
         throw std::runtime_error("Found no positive amplitudes to determine i0.");
       }
 
@@ -279,7 +298,7 @@ class FreeFermionState : public EntropyState {
         }
 
         amplitudes(Eigen::indexing::all, j) = amplitudes(Eigen::indexing::all, j) - amplitudes(k, j)/amplitudes(k, i0) * amplitudes(Eigen::indexing::all, i0);
-        amplitudes(i, j) = 0.0;
+        amplitudes(k_, j) = 0.0;
       }
 
       for (size_t j = 0; j < amplitudes.rows(); j++) {
@@ -294,7 +313,6 @@ class FreeFermionState : public EntropyState {
     bool projective_measurement(size_t i, double r) {
       double c = occupation(i);
       bool outcome = r < c;
-
       forced_projective_measurement(i, outcome);
       return outcome;
     }
@@ -304,14 +322,20 @@ class FreeFermionState : public EntropyState {
       return C.trace().real();
     }
 
+    double num_real_particles() const {
+      auto C = correlation_matrix().block(L, L, L, L);
+      return C.trace().real();
+    }
+
     Eigen::MatrixXcd correlation_matrix() const {
       return amplitudes * amplitudes.adjoint();
     }
 
     double occupation(size_t i) const {
       double d = 0.0;
-      for (size_t k = 0; k < amplitudes.cols(); k++) {
-        auto c = std::abs(amplitudes(i, k));
+
+      for (size_t j = 0; j < L; j++) {
+        auto c = std::abs(amplitudes(i + L, j));
         d += c*c;
       }
 
@@ -320,12 +344,10 @@ class FreeFermionState : public EntropyState {
 
     std::vector<double> occupation() const {
       auto C = correlation_matrix();
-      //std::cout << "C = \n" << C << "\n";
       std::vector<double> n(L);
 
-      int d = particles_conserved ? 0 : L;
       for (size_t i = 0; i < L; i++) {
-        n[i] = std::abs(C(i + d, i + d));
+        n[i] = std::abs(C(i + L, i + L));
       }
 
       return n;
@@ -352,10 +374,7 @@ class FreeFermionSimulator : public Simulator {
     FreeFermionSimulator(dataframe::ExperimentParams& params, uint32_t num_threads) : Simulator(params), sampler(params) {
       L = dataframe::utils::get<int>(params, "system_size");
       sample_correlations = dataframe::utils::get<int>(params, "sample_correlations", 0);
-    }
-
-    void init_fermion_state(bool particles_conserved) {
-      state = std::make_shared<FreeFermionState>(L, particles_conserved);
+      state = std::make_shared<FreeFermionState>(L);
     }
 
     virtual Texture get_texture() const override {
@@ -412,6 +431,9 @@ class FreeFermionSimulator : public Simulator {
       if (sample_correlations) {
         add_correlation_samples(samples);
       }
+
+      dataframe::utils::emplace(samples, "num_particles", state->num_particles());
+      dataframe::utils::emplace(samples, "num_real_particles", state->num_real_particles());
 
       return samples;
     }
