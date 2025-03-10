@@ -90,14 +90,17 @@ class Simulator {
       return double(rng())/double(RAND_MAX); 
     }
 
+    void seed(int i) {
+      rng.seed(i);
+    }
+
     Simulator(dataframe::ExperimentParams &params) {
-      seed = dataframe::utils::get<int>(params, "seed", -1);
-      if (seed == -1) {
+      s = dataframe::utils::get<int>(params, "seed", -1);
+      if (s == -1) {
         thread_local std::random_device rd;
-        int s = rd();
-        rng.seed(s);
+        seed(rd());
       } else {
-        rng.seed(seed);
+        seed(s);
       }
     }
 
@@ -137,7 +140,7 @@ class Simulator {
     }
 
   private:
-    int seed;
+    int s;
 
   protected:
     std::minstd_rand rng;
