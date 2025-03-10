@@ -29,7 +29,7 @@ namespace glz::detail {
    template <>
    struct to<BEVE, ITensor> {
       template <auto Opts>
-      static void op(ITensor& value, auto&&... args) noexcept {
+      static void op(const ITensor& value, auto&&... args) noexcept {
         std::stringstream data;
         itensor::write(data, value);
         write<BEVE>::op<Opts>(data.str(), args...);
@@ -50,15 +50,13 @@ namespace glz::detail {
    template <>
    struct to<BEVE, Index> {
       template <auto Opts>
-      static void op(Index& value, auto&&... args) noexcept {
+      static void op(const Index& value, auto&&... args) noexcept {
         std::stringstream data;
         itensor::write(data, value);
         write<BEVE>::op<Opts>(data.str(), args...);
       }
    };
 }
-
-
 
 ITensor vector_to_tensor(const Eigen::VectorXcd& v, const std::vector<Index>& idxs) {
   size_t num_qubits = idxs.size();
@@ -294,6 +292,77 @@ class MatrixProductStateImpl {
     }
 
   public:
+    struct svd_error {
+      unsigned int seed;
+      std::optional<ITensor> T;
+      std::vector<char> mps_bytes;
+      uint32_t q;
+      bool truncate;
+    };
+
+    static void write_svd_error(const std::string& filename, const svd_error& e) {
+      std::vector<char> bytes;
+      auto write_error = glz::write_beve(e, bytes);
+      if (write_error) {
+        throw std::runtime_error(fmt::format("Error writing svd_error to binary: \n{}", glz::format_error(write_error, bytes)));
+      }
+
+      std::ofstream output_file(filename, std::ios::out | std::ios::binary);
+      if (!output_file) {
+        throw std::runtime_error(fmt::format("Failed to open file for writing: {}", filename));
+      }
+      output_file.write(reinterpret_cast<const char*>(&bytes[0]), bytes.size());
+      output_file.close();
+    }
+
+    static svd_error read_svd_error(const std::string& filename) {
+      std::ifstream input_file(filename, std::ios::in | std::ios::binary);
+      if (!input_file) {
+        throw std::runtime_error(fmt::format("Failed to open file for reading: {}", filename));
+      }
+
+      std::vector<char> bytes((std::istreambuf_iterator<char>(input_file)), std::istreambuf_iterator<char>());
+      input_file.close();
+
+      svd_error e;
+      auto parse_error = glz::read_beve(e, bytes);
+      if (parse_error) {
+        throw std::runtime_error(fmt::format("Error reading svd_error from binary: \n{}", glz::format_error(parse_error, bytes)));
+      }
+
+      return e;
+    }
+
+    static void inspect_svd_error() {
+      std::string filename = "svd_error60440.eve";
+      svd_error e = read_svd_error(filename);    
+
+
+      auto bytes = e.mps_bytes;
+      MatrixProductStateImpl mps;
+      glz::read_beve(mps, bytes);
+      mps.set_debug_level(2);
+      size_t nqb = mps.num_qubits;
+      std::cout << fmt::format("crashed when applying operation to {} (truncate = {}). initial seed = {}, chi = {}\n", e.q, e.truncate, e.seed, mps.bond_dimension);
+      if (e.T) {
+        std::cout << "T = \n";
+        print(e.T.value());
+      } else {
+        std::cout << "T = nullopt\n";
+      }
+
+      //for (size_t i = 0; i < mps.num_qubits - 1; i++) {
+      //  print(mps.singular_values[i]);
+      //}
+
+      size_t q = e.q;
+
+      print(mps.tensors[q]);
+      print(mps.tensors[q+1]);
+      std::cout << mps.print_orthogonal_sites();
+      mps.assert_state_valid("Failed!");
+    }
+
     uint32_t num_qubits;
     uint32_t bond_dimension;
     double sv_threshold;
@@ -302,6 +371,7 @@ class MatrixProductStateImpl {
       using T = MatrixProductStateImpl;
       static constexpr auto value = glz::object(
         &T::num_qubits,
+        &T::bond_dimension,
         &T::sv_threshold,
         &T::tensors,
         &T::singular_values,
@@ -902,7 +972,6 @@ class MatrixProductStateImpl {
 
     ITensor right_environment_tensor(size_t i) const {
       std::vector<ITensor> external_tensors = get_deltas_between(i, num_blocks());
-      external_tensors.begin(), external_tensors.end();
       return right_environment_tensor(i, external_tensors);
     }
 
@@ -914,7 +983,6 @@ class MatrixProductStateImpl {
 
     void extend_right_environment_tensor(ITensor& R, uint32_t i1, uint32_t i2) const {
       std::vector<ITensor> external_tensors = get_deltas_between(i2, i1);
-      external_tensors.begin(), external_tensors.end();
       extend_right_environment_tensor(R, i1, i2, external_tensors);
     }
 
@@ -1398,6 +1466,17 @@ class MatrixProductStateImpl {
              "LeftTags=",fmt::format("Internal,Left,n={}", q),
              "RightTags=",fmt::format("Internal,Right,n={}", q)});
       } catch (const std::runtime_error& e) {
+        std::optional<ITensor> t = std::nullopt;
+        if (T) {
+          t = *T;
+        }
+        svd_error error{QuantumState::initial_seed, t, to_bytes(), q, truncate};
+        thread_local std::random_device gen;
+        std::minstd_rand rng(gen());
+        uint16_t r = rng();
+
+        write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
+
         std::cout << "There was a LAPACK error!\n";
         std::cout << "\n\n ============================================================================= \n";
         if (T) {
@@ -2005,25 +2084,31 @@ class MatrixProductStateImpl {
     }
 
     bool check_orthonormality() const {
+      std::cout << fmt::format("Called check_ortho. lims = ({}, {}) orthogonality_level = {}\n", left_ortho_lim, right_ortho_lim, orthogonality_level);
       if (orthogonality_level == 0) {
         return true;
       }
 
+      std::cout << fmt::format("left lims:\n");
       for (size_t i = 0; i < left_ortho_lim; i++) {
         auto I = orthogonality_tensor_l(i);
         auto d = distance_from_identity(I);
+        std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
+        if (d > 1e-5) {
+          return false;
+        }
+      }
+      std::cout << fmt::format("right lims:\n");
+      for (size_t i = right_ortho_lim + 1; i < num_qubits - 1; i++) {
+        auto I = orthogonality_tensor_r(i);
+        auto d = distance_from_identity(I);
+        std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
         if (d > 1e-5) {
           return false;
         }
       }
 
-      for (size_t i = right_ortho_lim + 1; i < num_qubits - 1; i++) {
-        auto I = orthogonality_tensor_r(i);
-        auto d = distance_from_identity(I);
-        if (d > 1e-5) {
-          return false;
-        }
-      }
+      std::cout << "All good!\n";
 
       return true;
     }
@@ -2053,7 +2138,7 @@ class MatrixProductStateImpl {
       }
     }
 
-    void assert_state_valid(const std::string& error_message) const {
+    void assert_state_valid(const std::string& error_message = "") const {
       if (debug_level == 0) {
         return;
       } else if (debug_level == 1) {
@@ -2067,6 +2152,22 @@ class MatrixProductStateImpl {
           print_mps();
           throw e;
         }
+      }
+    }
+
+    std::vector<char> to_bytes() const {
+      std::vector<char> bytes;
+      auto write_error = glz::write_beve(*this, bytes);
+      if (write_error) {
+        throw std::runtime_error(fmt::format("Error writing MatrixProductStateImpl to binary: \n{}", glz::format_error(write_error, bytes)));
+      }
+      return bytes;
+    }
+
+    void from_bytes(const std::vector<char>& bytes) {
+      auto parse_error = glz::read_beve(*this, bytes);
+      if (parse_error) {
+        throw std::runtime_error(fmt::format("Error reading MatrixProductStateImpl from binary: \n{}", glz::format_error(parse_error, bytes)));
       }
     }
     // ======================================= DEBUG FUNCTIONS ======================================= //
@@ -2626,4 +2727,16 @@ std::string PauliExpectationTree::to_string() const {
 
 PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
+}
+
+
+bool inspect_svd_error() {
+  MatrixProductStateImpl::inspect_svd_error();
+
+  return true;
+}
+
+int load_seed(const std::string& filename) {
+  auto e = MatrixProductStateImpl::read_svd_error(filename);
+  return e.seed;
 }

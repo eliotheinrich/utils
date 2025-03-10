@@ -45,6 +45,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     using outcome_t = std::variant<double, bool>;
 
 		static void seed(int s) {
+      QuantumState::initial_seed = s;
       QuantumState::rng.seed(s);
 		}
 
@@ -52,6 +53,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       thread_local std::random_device gen;
       return gen();
     }
+
+    static unsigned int initial_seed;
 
 		uint32_t num_qubits;
 		uint32_t basis;
@@ -524,3 +527,6 @@ inline void assert_gate_shape(const Eigen::MatrixXcd& gate, const Qubits& qubits
     throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
   }
 }
+
+bool inspect_svd_error();
+int load_seed(const std::string& filename);

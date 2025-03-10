@@ -41,6 +41,8 @@ class QuantumStateSampler {
 
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", false);
 
+      sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
+
       sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
 
       sample_stabilizer_renyi_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_renyi_entropy", false);
@@ -115,6 +117,29 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "bitstring_distribution", probabilities);
     }
 
+    void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
+      size_t num_qubits = state->num_qubits;
+      double O = 0.0;
+      for (size_t i = 0; i < num_qubits; i++) {
+        for (size_t j = 0; j < num_qubits; j++) {
+          PauliString Zi(num_qubits);
+          Zi.set_z(i, 1);
+
+          PauliString Zj(num_qubits);
+          Zj.set_z(j, 1);
+
+          PauliString Zij(num_qubits);
+          Zij.set_z(i, 1);
+          Zij.set_z(j, 1);
+
+          O += std::abs(std::pow(state->expectation(Zij), 2.0))
+             - std::abs(std::pow(state->expectation(Zi) * state->expectation(Zj), 2.0));
+        }
+      }
+
+      dataframe::utils::emplace(samples, "spin_glass_order", O/num_qubits);
+    }
+
     void add_mmi_samples(dataframe::SampleMap &samples, const std::vector<MutualMagicData>& data) const {
       std::vector<std::vector<double>> tA2;
       std::vector<std::vector<double>> tB2;
@@ -144,13 +169,17 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "magic_mutual_information_tAB4", tAB4);
     }
 
-    void add_samples(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
       if (sample_probabilities) {
         add_probability_samples(samples, state);
       }
 
       if (sample_bitstring_distribution) {
         add_bitstring_distribution(samples, state);
+      }
+      
+      if (sample_spin_glass_order) {
+        add_spin_glass_order_samples(samples, state);
       }
 
       auto compute_sre_montecarlo = [&](std::shared_ptr<QuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
@@ -293,6 +322,8 @@ class QuantumStateSampler {
     bool sample_probabilities;
 
     bool sample_bitstring_distribution;
+
+    bool sample_spin_glass_order;
 
     bool sre_use_parent_methods;
 

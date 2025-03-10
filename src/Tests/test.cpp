@@ -1227,6 +1227,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
 
+  ADD_TEST(inspect_svd_error);
+
 
   constexpr char green[] = "\033[1;32m";
   constexpr char black[] = "\033[0m";

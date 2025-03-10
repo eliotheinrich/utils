@@ -1,7 +1,15 @@
 #include "QuantumStates.h"
 #include <stdexcept>
 
-thread_local std::minstd_rand QuantumState::rng{QuantumState::random_seed()};
+unsigned int QuantumState::initial_seed = 0;
+
+static unsigned int get_random_seed() {
+  unsigned int r = QuantumState::random_seed();
+  QuantumState::initial_seed = r;
+  return r;
+}
+
+thread_local std::minstd_rand QuantumState::rng{get_random_seed()};
 
 void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
   size_t j = rng() % p.num_qubits;

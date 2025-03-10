@@ -20,13 +20,11 @@ find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
 add_compile_definitions(PFFFT_ENABLE_DOUBLE FMT_HEADER_ONLY)
 
 find_package(fmt)
-find_package(openblas)
-find_package(lapack)
 
-link_directories("$ENV{ITENSOR_DIR}/lib" $ENV{BLAS_DIR})
+link_directories("$ENV{ITENSOR_DIR}/lib" "/scratch/heinriea/Builds/spack/var/spack/environments/pysims/.spack-env/view/lib")
 include_directories("$ENV{ITENSOR_DIR}")
 
-set(ITENSOR_DEPS lapack openblas itensor)
+set(ITENSOR_DEPS openblas itensor)
 if (gfortran)
     set(ITENSOR_DEPS gfortran $ITENSOR_DEPS)
 endif()
