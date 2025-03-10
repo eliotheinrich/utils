@@ -42,6 +42,12 @@ class QuantumStateSampler {
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", false);
 
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
+      if (sample_spin_glass_order) {
+        spin_glass_order_basis = dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z")[0];
+        if (!(spin_glass_order_basis == 'X' || spin_glass_order_basis == 'Y' || spin_glass_order_basis == 'Z')) {
+          throw std::runtime_error(fmt::format("Could not compute spin glass order for provided basis: {}", spin_glass_order_basis));
+        }
+      }
 
       sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
 
@@ -120,20 +126,43 @@ class QuantumStateSampler {
     void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
       size_t num_qubits = state->num_qubits;
       double O = 0.0;
+
+      char basis = spin_glass_order_basis;
+      auto make_pauli = [num_qubits, basis](const std::vector<size_t>& sites) {
+        PauliString P(num_qubits);
+        if (basis == 'X') {
+          for (const auto q : sites) {
+            P.set_x(q, 1);
+          }
+        } else if (basis == 'Y') {
+          for (const auto q : sites) {
+            P.set_x(q, 1);
+            P.set_z(q, 1);
+          }
+        } else {
+          for (const auto q : sites) {
+            P.set_z(q, 1);
+          }
+        }
+
+        return P;
+      };
+
+      std::vector<double> c(num_qubits);
+      for (size_t i = 0; i < num_qubits; i++) {
+        PauliString Pi = make_pauli({i});
+        c[i] = std::pow(std::abs(state->expectation(Pi)), 2.0);
+      }
+
       for (size_t i = 0; i < num_qubits; i++) {
         for (size_t j = 0; j < num_qubits; j++) {
-          PauliString Zi(num_qubits);
-          Zi.set_z(i, 1);
+          PauliString Pij = make_pauli({i, j});
 
-          PauliString Zj(num_qubits);
-          Zj.set_z(j, 1);
+          auto cij = std::pow(std::abs(state->expectation(Pij)), 2.0);
 
-          PauliString Zij(num_qubits);
-          Zij.set_z(i, 1);
-          Zij.set_z(j, 1);
+          std::cout << fmt::format("<{}> = {:.5f}, {:.5f}, {:.5f}\n", Pij, cij, c[i], c[j]);
 
-          O += std::abs(std::pow(state->expectation(Zij), 2.0))
-             - std::abs(std::pow(state->expectation(Zi) * state->expectation(Zj), 2.0));
+          O += cij - c[i]*c[j];
         }
       }
 
@@ -324,6 +353,7 @@ class QuantumStateSampler {
     bool sample_bitstring_distribution;
 
     bool sample_spin_glass_order;
+    char spin_glass_order_basis;
 
     bool sre_use_parent_methods;
 
