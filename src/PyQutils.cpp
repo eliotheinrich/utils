@@ -340,9 +340,7 @@ NB_MODULE(qutils_bindings, m) {
     });
 
   nanobind::class_<FreeFermionState, EntropyState>(m, "FreeFermionState")
-    .def("__init__", [](FreeFermionState *s, size_t system_size, bool particles_conserved) {
-      new (s) FreeFermionState(system_size, particles_conserved);
-    }, "system_size"_a, "particles_conserved"_a = true)
+    .def(nanobind::init<size_t>())
     .def("system_size", &FreeFermionState::system_size)
     .def("__str__", &FreeFermionState::to_string)
     .def("particles_at", &FreeFermionState::particles_at)
@@ -364,20 +362,6 @@ NB_MODULE(qutils_bindings, m) {
     })
     .def("num_particles", &FreeFermionState::num_particles)
     .def("correlation_matrix", &FreeFermionState::correlation_matrix)
-    .def("correlation_samples", [](FreeFermionState& self) {
-      auto C = self.correlation_matrix();
-      std::vector<std::vector<double>> correlations(self.system_size(), std::vector<double>(self.system_size()));
-
-      for (size_t r = 0; r < self.system_size(); r++) {
-        // Average over space
-        for (size_t i = 0; i < self.system_size(); i++) {
-          double c = std::abs(C(i, (i + r) % self.system_size()));
-          correlations[r][i] = c*c;
-        }
-      }
-
-      return correlations;
-    })
     .def("occupation", [](FreeFermionState& self, size_t i) { return self.occupation(i); });
 
 
