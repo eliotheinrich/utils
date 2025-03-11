@@ -10,6 +10,18 @@ set_target_properties(quantum_state PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-target_link_libraries(quantum_state PRIVATE quantum_circuit ${ITENSOR_DEPS} itensor)
-target_include_directories(quantum_state PUBLIC ${ITENSOR_DIR})
-target_link_directories(quantum_state PUBLIC ${ITENSOR_DIR}/lib ${BLAS_DIR} ${LAPACK_DIR})
+find_package(OpenBLAS CONFIG REQUIRED)
+find_library(ITENSOR NAMES itensor STATIC)
+
+find_library(ITENSOR
+    NAMES itensor
+    HINTS "$ENV{ITENSOR_DIR}/lib"
+)
+include_directories("$ENV{ITENSOR_DIR}")
+
+set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
+if (gfortran)
+    set(ITENSOR_DEPS gfortran ${ITENSOR_DEPS})
+endif()
+
+target_link_libraries(quantum_state PRIVATE quantum_circuit ${ITENSOR_DEPS})

@@ -14,7 +14,7 @@ if (DEFINED QUTILS_BUILDING_TEST)
     )
 
     target_link_libraries(qutils_test PRIVATE ${qutils_test_libs})
-    target_include_directories(qutils_test PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
+    #target_include_directories(qutils_test PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
 
     add_executable(qutils_benchmark
         benchmark.cpp
@@ -26,5 +26,5 @@ if (DEFINED QUTILS_BUILDING_TEST)
     )
 
     target_link_libraries(qutils_benchmark PRIVATE ${qutils_test_libs})
-    target_include_directories(qutils_benchmark PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
+    #target_include_directories(qutils_benchmark PRIVATE ${SAMPLERS_DIR} ${QUANTUMSTATE_DIR} ${CLIFFORDSTATE_DIR} ${MONTECARLO_DIR} ${MISC_DIR} ${GLAD_PATH}/include)
 endif()
