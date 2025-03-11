@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include <unsupported/Eigen/FFT>
+
 class InterfaceSampler {
   private:	
     uint32_t system_size;
@@ -155,11 +157,34 @@ class InterfaceSampler {
       avalanche_sizes = std::vector<uint32_t>(num_bins, 0);
     }
 
-
-    std::vector<double> structure_function(const std::vector<int>& surface) const;
-  
     void add_structure_function_samples(dataframe::SampleMap &samples, const std::vector<int> &surface) const {
-      std::vector<double> sk = structure_function(surface);
+      size_t N = surface.size();
+      double Ns = std::sqrt(N);
+
+      std::vector<double> data(N);
+      if (transform_fluctuations) {
+        double hb = surface_avg(surface);
+        for (size_t i = 0; i < N; i++) {
+          data[i] = static_cast<double>(surface[i] - hb)/Ns;
+        }
+      } else {
+        for (uint32_t i = 0; i < N; i++) {
+          data[i] = static_cast<double>(surface[i])/Ns;
+        }
+      }
+
+      std::vector<std::complex<double>> result;
+
+      Eigen::FFT<double> fft;
+      fft.fwd(result, data);
+
+      size_t spectrum_size = N/2 + 1;
+      std::vector<double> sk(spectrum_size);
+      for (size_t i = 0; i < spectrum_size; i++) {
+        auto c = result[i];
+        sk[i] = std::pow(std::abs(c), 2.0);
+      }
+
       dataframe::utils::emplace(samples, "structure", sk);
     }
 
@@ -251,7 +276,7 @@ class InterfaceSampler {
     }
 
 
-    void add_samples(dataframe::SampleMap &samples, const std::vector<int>& surface) {
+    void add_samples(dataframe::SampleMap& samples, const std::vector<int>& surface) {
       if (sample_surface) {
         add_surface_samples(samples, surface);
       }

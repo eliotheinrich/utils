@@ -15,16 +15,15 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # -- Manually installed libraries -- #
 # ---------------------------------- #
 
-set(PFFFT_DIR $ENV{PFFFT_DIR})
-find_library(PFFFT_LIB pffft HINTS ${PFFFT_DIR}/lib)
-add_compile_definitions(PFFFT_ENABLE_DOUBLE FMT_HEADER_ONLY)
+add_definitions(-DFMT_HEADER_ONLY=On)
 
-find_package(fmt)
+find_package(fmt REQUIRED)
+find_package(OpenBLAS CONFIG REQUIRED)
 
-link_directories("$ENV{ITENSOR_DIR}/lib" "/scratch/heinriea/Builds/spack/var/spack/environments/pysims/.spack-env/view/lib")
-include_directories("$ENV{ITENSOR_DIR}")
+link_directories("$ENV{ITENSOR_DIR}/lib")
+include_directories("$ENV{ITENSOR_DIR}" "${CMAKE_PREFIX_PATH}/include")
 
-set(ITENSOR_DEPS openblas itensor)
+set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} itensor)
 if (gfortran)
     set(ITENSOR_DEPS gfortran $ITENSOR_DEPS)
 endif()

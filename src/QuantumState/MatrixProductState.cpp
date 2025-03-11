@@ -2084,31 +2084,31 @@ class MatrixProductStateImpl {
     }
 
     bool check_orthonormality() const {
-      std::cout << fmt::format("Called check_ortho. lims = ({}, {}) orthogonality_level = {}\n", left_ortho_lim, right_ortho_lim, orthogonality_level);
+      //std::cout << fmt::format("Called check_ortho. lims = ({}, {}) orthogonality_level = {}\n", left_ortho_lim, right_ortho_lim, orthogonality_level);
       if (orthogonality_level == 0) {
         return true;
       }
 
-      std::cout << fmt::format("left lims:\n");
+      //std::cout << fmt::format("left lims:\n");
       for (size_t i = 0; i < left_ortho_lim; i++) {
         auto I = orthogonality_tensor_l(i);
         auto d = distance_from_identity(I);
-        std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
+        //std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
         if (d > 1e-5) {
           return false;
         }
       }
-      std::cout << fmt::format("right lims:\n");
+      //std::cout << fmt::format("right lims:\n");
       for (size_t i = right_ortho_lim + 1; i < num_qubits - 1; i++) {
         auto I = orthogonality_tensor_r(i);
         auto d = distance_from_identity(I);
-        std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
+        //std::cout << fmt::format("i = {}, d = {:.5f}\n", i, d);
         if (d > 1e-5) {
           return false;
         }
       }
 
-      std::cout << "All good!\n";
+      //std::cout << "All good!\n";
 
       return true;
     }

@@ -2,10 +2,10 @@
 
 #include "QuantumCircuit.h"
 
+#include "EntropyState.hpp"
+
 #include <algorithm>
 #include <format>
-
-#include <Samplers.h>
 
 enum CliffordType { CHP, GraphSim };
 

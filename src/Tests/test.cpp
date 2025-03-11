@@ -1174,7 +1174,6 @@ bool test_serialize() {
   return true;
 }
 
-
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
