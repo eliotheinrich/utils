@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Frame.h>
-#include "BinaryPolynomial.h"
+#include "LinearCode.h"
 
 class LinearCodeSampler {
   private:	

@@ -1,6 +1,5 @@
 #include <PyQutils.hpp>
 
-
 using PyMutationFunc = std::function<PauliString(PauliString)>;
 inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
   return [func](PauliString& p, std::minstd_rand&) { p = func(p); };

@@ -9,29 +9,19 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_PREFIX_PATH $ENV{CMAKE_PREFIX_PATH})
-
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# ---------------------------------- #
-# -- Manually installed libraries -- #
-# ---------------------------------- #
-
-add_definitions(-DFMT_HEADER_ONLY=On)
-
-find_package(fmt REQUIRED)
-find_package(OpenBLAS CONFIG REQUIRED)
-
-link_directories("$ENV{ITENSOR_DIR}/lib")
-include_directories("$ENV{ITENSOR_DIR}" "${CMAKE_PREFIX_PATH}/include")
-
-set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} itensor)
-if (gfortran)
-    set(ITENSOR_DEPS gfortran $ITENSOR_DEPS)
-endif()
 
 # -------------------------------- #
 # ------ Fetching externals ------ #
 # -------------------------------- #
+
+foreach(PATH IN LISTS CMAKE_PREFIX_PATH)
+    include_directories("${PATH}/include")
+endforeach()
+
+find_package(fmt REQUIRED)
+add_definitions(-DFMT_HEADER_ONLY=On)
 
 include(FetchContent)
 
@@ -72,6 +62,10 @@ list(APPEND EXTERNALS eigen)
 
 FetchContent_MakeAvailable(${EXTERNALS})
 
+# -------------------------------- #
+# -------- Adding code ----------- #
+# -------------------------------- #
+
 include_directories(
     ${dataframe_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
@@ -79,28 +73,17 @@ include_directories(
     ${glaze_SOURCE_DIR}/include
 )
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-set(CLIFFORD_DIR ${PROJECT_SOURCE_DIR}/src/CliffordState)
-set(QUANTUMSTATE_DIR ${PROJECT_SOURCE_DIR}/src/QuantumState)
-set(QUANTUMCIRCUIT_DIR ${PROJECT_SOURCE_DIR}/src/QuantumCircuit)
-set(SAMPLERS_DIR ${PROJECT_SOURCE_DIR}/src/Samplers)
-set(MONTECARLO_DIR ${PROJECT_SOURCE_DIR}/src/MonteCarlo)
-set(MISC_DIR ${PROJECT_SOURCE_DIR}/src/Misc)
-set(TEST_DIR ${PROJECT_SOURCE_DIR}/src/Tests)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumCircuit)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumState)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/CliffordState)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
 if (DEFINED BUILD_GLFW)
     add_compile_definitions(BUILD_GLFW)
     set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
     add_subdirectory(${DISPLAY_DIR})
 endif()
-
-add_subdirectory(${QUANTUMCIRCUIT_DIR})
-add_subdirectory(${QUANTUMSTATE_DIR})
-add_subdirectory(${CLIFFORD_DIR})
-add_subdirectory(${MONTECARLO_DIR})
-add_subdirectory(${MISC_DIR})
-add_subdirectory(${SAMPLERS_DIR})
-add_subdirectory(${TEST_DIR})
 
 if (BUILDING_PYQUTILS)
     find_package(Python 3.10 
@@ -124,7 +107,7 @@ if (BUILDING_PYQUTILS)
         src/PyQutils.cpp
     )
 
-    set(qutils_libs quantum_state quantum_circuit clifford_state linear_code ${ITENSOR_DEPS} dataframe)
+    set(qutils_libs clifford_state linear_code dataframe)
     if (DEFINED BUILD_GLFW)
       list(APPEND qutils_libs simulator_display)
     endif()

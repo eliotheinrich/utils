@@ -74,7 +74,6 @@ class Tableau {
       Eigen::VectorXcd vec = solver.eigenvectors().block(0,N-1,N,1).rowwise().reverse();
 
       return Statevector(vec);
-
     }
 
     bool operator==(Tableau& other) {
