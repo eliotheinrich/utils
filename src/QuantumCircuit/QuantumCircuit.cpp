@@ -16,12 +16,29 @@ std::string QuantumCircuit::to_string() const {
 
 				return gate_str;
 			},
-			[](Measurement m) -> std::string {
-				std::string meas_str = "mzr ";
+			[](const Measurement& m) -> std::string {
+        if (m.is_basis()) {
+          return fmt::format("mzr {}{}", m.qubits[0], m.is_forced() ? fmt::format(" -> {}", m.get_outcome()) : "");
+        }
+				std::string meas_str = fmt::format("measure({}) ", m.get_pauli());
 				for (auto const &q : m.qubits) {
 					meas_str += fmt::format("{} ", q);
 				}
 
+        if (m.outcome) {
+          meas_str += fmt::format("-> {}", m.outcome.value());
+        }
+				return meas_str;
+			},
+			[](const WeakMeasurement& m) -> std::string {
+				std::string meas_str = fmt::format("weak_measure({}, {:.5f}) ", m.get_pauli(), m.beta);
+				for (auto const &q : m.qubits) {
+					meas_str += fmt::format("{} ", q);
+				}
+
+        if (m.outcome) {
+          meas_str += fmt::format("-> {}", m.outcome.value());
+        }
 				return meas_str;
 			}
 		}, inst) + "\n";
@@ -35,7 +52,8 @@ uint32_t QuantumCircuit::num_params() const {
 	for (auto const &inst : instructions) {
 		n += std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> uint32_t { return gate->num_params(); },
-			[](Measurement m) -> uint32_t { return 0u; }
+			[](const Measurement& m) -> uint32_t { return 0u; },
+			[](const WeakMeasurement& m) -> uint32_t { return 0u; }
 		}, inst);
 	}
 	
@@ -46,7 +64,8 @@ bool QuantumCircuit::is_clifford() const {
   for (auto const& inst : instructions) {
     bool valid = std::visit(quantumcircuit_utils::overloaded {
 			[](std::shared_ptr<Gate> gate) -> uint32_t { return gate->is_clifford(); },
-			[](Measurement m) -> uint32_t { return true; }
+			[](const Measurement &m) -> uint32_t { return true; },
+			[](const WeakMeasurement& m) -> uint32_t { return false; }
 		}, inst);
     
     if (!valid) {
@@ -82,7 +101,15 @@ void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
 
         gate->qubits = _qubits;
 			},
-			[&qubits](Measurement m) { 
+			[&qubits](Measurement& m) { 
+        Qubits _qubits(m.qubits.size());
+        for (size_t q = 0; q < m.qubits.size(); q++) {
+          _qubits[q] = qubits[m.qubits[q]];
+        }
+
+        m.qubits = _qubits;
+      },
+      [&qubits](WeakMeasurement& m) {
         Qubits _qubits(m.qubits.size());
         for (size_t q = 0; q < m.qubits.size(); q++) {
           _qubits[q] = qubits[m.qubits[q]];
@@ -94,26 +121,44 @@ void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
   }
 }
 
+void QuantumCircuit::validate_instruction(const Instruction& inst) const {
+  size_t num_qubits = this->num_qubits;
+  auto validate_qubits = [num_qubits](const Qubits& qubits) {
+    for (const auto q : qubits) {
+      if (q >= num_qubits) {
+        throw std::runtime_error(fmt::format("Invalid qubit {} passed to QuantumCircuit with {} qubits.", q, num_qubits));
+      }
+    }
+  };
+
+  std::visit(quantumcircuit_utils::overloaded {
+    [&](std::shared_ptr<Gate> gate) {
+      validate_qubits(gate->qubits);
+    },
+    [&](const Measurement& m) { 
+      validate_qubits(m.qubits);
+    },
+    [&](const WeakMeasurement& m) {
+      validate_qubits(m.qubits);
+    }
+  }, inst);
+}
 
 void QuantumCircuit::add_instruction(const Instruction& inst) {
-	instructions.push_back(inst);
-}
-
-void QuantumCircuit::add_measurement(uint32_t qubit) {
-	Qubits qubits{qubit};
-	add_measurement(qubits);
-}
-
-void QuantumCircuit::add_measurement(const Qubits& qubits) {
-	add_measurement(Measurement(qubits));
+  validate_instruction(inst);
+  instructions.push_back(inst);
 }
 
 void QuantumCircuit::add_measurement(const Measurement& m) {
-	add_instruction(m);
+  add_instruction(m);
+}
+
+void QuantumCircuit::add_weak_measurement(const WeakMeasurement& m) {
+  add_instruction(m);
 }
 
 void QuantumCircuit::add_gate(const std::shared_ptr<Gate> &gate) {
-	add_instruction(gate);
+  add_instruction(gate);
 }
 
 void QuantumCircuit::add_gate(const std::string& name, const Qubits& qubits) {
@@ -121,25 +166,25 @@ void QuantumCircuit::add_gate(const std::string& name, const Qubits& qubits) {
 }
 
 void QuantumCircuit::add_gate(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
-	if (!(gate.rows() == (1u << qubits.size()) && gate.cols() == (1u << qubits.size()))) {
-		throw std::invalid_argument("Provided matrix does not have proper dimensions for number of qubits in circuit.");
-	}
+  if (!(gate.rows() == (1u << qubits.size()) && gate.cols() == (1u << qubits.size()))) {
+    throw std::invalid_argument("Provided matrix does not have proper dimensions for number of qubits in circuit.");
+  }
 
-	add_gate(std::make_shared<MatrixGate>(gate, qubits));
+  add_gate(std::make_shared<MatrixGate>(gate, qubits));
 }
 
 void QuantumCircuit::add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit) {
-	Qubits qubits{qubit};
-	add_gate(gate, qubits);
+  Qubits qubits{qubit};
+  add_gate(gate, qubits);
 }
 
 void QuantumCircuit::append(const QuantumCircuit& other) {
   if (num_qubits != other.num_qubits) {
     throw std::invalid_argument("Cannot append QuantumCircuits; numbers of qubits do not match.");
   }
-	for (auto const &inst : other.instructions) {
-		add_instruction(copy_instruction(inst));
-	}
+  for (auto const &inst : other.instructions) {
+    add_instruction(copy_instruction(inst));
+  }
 }
 
 void QuantumCircuit::append(const QuantumCircuit& other, const Qubits& qubits) {
@@ -159,30 +204,31 @@ void QuantumCircuit::append(const Instruction& inst) {
 }
 
 QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) const {
-	if (params.size() != num_params()) {
-		throw std::invalid_argument("Invalid number of parameters passed to bind_params.");
-	}
+  if (params.size() != num_params()) {
+    throw std::invalid_argument("Invalid number of parameters passed to bind_params.");
+  }
 
-	QuantumCircuit qc(num_qubits);
+  QuantumCircuit qc(num_qubits);
 
-	uint32_t n = 0;
-	for (auto const &inst : instructions) {
+  uint32_t n = 0;
+  for (auto const &inst : instructions) {
 		std::visit(quantumcircuit_utils::overloaded {
-			[&qc, &n, &params](std::shared_ptr<Gate> gate) {
-				std::vector<double> gate_params(gate->num_params());
+      [&qc, &n, &params](std::shared_ptr<Gate> gate) {
+        std::vector<double> gate_params(gate->num_params());
 
-				for (uint32_t i = 0; i < gate->num_params(); i++) {
-					gate_params[i] = params[i + n];
-				}
+        for (uint32_t i = 0; i < gate->num_params(); i++) {
+          gate_params[i] = params[i + n];
+        }
 			
-				n += gate->num_params();
-				qc.add_gate(gate->define(gate_params), gate->qubits);
-			},
-			[&qc](Measurement m) { qc.add_measurement(m); }
-		}, inst);
-	}
+        n += gate->num_params();
+        qc.add_gate(gate->define(gate_params), gate->qubits);
+      },
+      [&qc](const Measurement& m) { qc.add_measurement(m); },
+      [&qc](const WeakMeasurement& m) { qc.add_weak_measurement(m); }
+    }, inst);
+  }
 
-	return qc;
+  return qc;
 }
 
 void QuantumCircuit::random_clifford(const Qubits& qubits, std::minstd_rand& rng) {
@@ -190,38 +236,40 @@ void QuantumCircuit::random_clifford(const Qubits& qubits, std::minstd_rand& rng
 }
 
 QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>& params_opt) const {
-	bool params_passed = params_opt.has_value() && params_opt.value().size() != 0;
+  bool params_passed = params_opt.has_value() && params_opt.value().size() != 0;
 
-	if (params_passed) { // Params passed; check that they are valid and then perform adjoint.
-		auto params = params_opt.value();
-		if (params.size() != num_params()) {
-			throw std::invalid_argument("Unbound parameters; adjoint cannot be defined.");
-		}
+  if (params_passed) { // Params passed; check that they are valid and then perform adjoint.
+    auto params = params_opt.value();
+    if (params.size() != num_params()) {
+      throw std::invalid_argument("Unbound parameters; adjoint cannot be defined.");
+    }
 
-		QuantumCircuit qc = bind_params(params);
-		return qc.adjoint();
-	} else if (!params_passed && num_params() == 0) { // No parameters to bind; go ahead and build adjoint
-		QuantumCircuit qc(num_qubits);
+    QuantumCircuit qc = bind_params(params);
+    return qc.adjoint();
+  } else if (!params_passed && num_params() == 0) { // No parameters to bind; go ahead and build adjoint
+    QuantumCircuit qc(num_qubits);
 
-		for (uint32_t i = 0; i < instructions.size(); i++) {
-			std::visit(quantumcircuit_utils::overloaded {
-				[&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate->adjoint()); },
-				[&qc](Measurement m) { qc.add_measurement(m); }
-			}, instructions[instructions.size() - i - 1]);
-		}
+    for (uint32_t i = 0; i < instructions.size(); i++) {
+      std::visit(quantumcircuit_utils::overloaded {
+        [&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate->adjoint()); },
+        [&qc](const Measurement& m) { qc.add_measurement(m); },
+        [&qc](const WeakMeasurement& m) { qc.add_weak_measurement(m); }
+      }, instructions[instructions.size() - i - 1]);
+    }
 
-		return qc;
-	} else {
-		throw std::invalid_argument("Params passed but nothing to bind.");
-	}
+    return qc;
+  } else {
+    throw std::invalid_argument("Params passed but nothing to bind.");
+  }
 }
 
 QuantumCircuit QuantumCircuit::reverse() const {
   QuantumCircuit qc(num_qubits);
-	for (uint32_t i = 0; i < instructions.size(); i++) {
+  for (uint32_t i = 0; i < instructions.size(); i++) {
     std::visit(quantumcircuit_utils::overloaded {
       [&qc](std::shared_ptr<Gate> gate) { qc.add_gate(gate); },
-      [&qc](Measurement m) { qc.add_measurement(m); }
+      [&qc](const Measurement& m) { qc.add_measurement(m); },
+      [&qc](const WeakMeasurement& m) { qc.add_weak_measurement(m); }
     }, instructions[instructions.size() - i - 1]);
   }
   return qc;
@@ -231,7 +279,7 @@ QuantumCircuit QuantumCircuit::conjugate(const QuantumCircuit& other) const {
   if (num_qubits != other.num_qubits) {
     throw std::runtime_error("Mismatch in number of qubits in QuantumCircuit.conjugate.");
   }
-  
+
   if (num_params() != 0 || other.num_params() != 0) {
     throw std::runtime_error("Unbound parameters, cannot performon QuantumCircuit.conjugate.");
   }
@@ -245,120 +293,127 @@ QuantumCircuit QuantumCircuit::conjugate(const QuantumCircuit& other) const {
 
 Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<double>>& params_opt) const {
   size_t nparams = num_params();
-	if (params_opt) { 
-		auto params = params_opt.value();
-		if (params.size() < nparams) {
-			throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
-		} else if (params.size() > nparams) {
+  if (params_opt) { 
+    auto params = params_opt.value();
+    if (params.size() < nparams) {
+      throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
+    } else if (params.size() > nparams) {
       throw std::invalid_argument("Too many parameters passed; cannot convert circuit to matrix.");
     }
 
-		QuantumCircuit qc = bind_params(params);
-		return qc.to_matrix();
-	} else {
+    QuantumCircuit qc = bind_params(params);
+    return qc.to_matrix();
+  } else {
     if (nparams > 0) {
-			throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
+      throw std::invalid_argument("Unbound parameters; cannot convert circuit to matrix.");
     }
 
     if (num_qubits > 15) {
       throw std::runtime_error("Cannot convert QuantumCircuit with n > 15 qubits to matrix.");
     }
 
-		Eigen::MatrixXcd Q = Eigen::MatrixXcd::Zero(1u << num_qubits, 1u << num_qubits);
-		Q.setIdentity();
+    Eigen::MatrixXcd Q = Eigen::MatrixXcd::Zero(1u << num_qubits, 1u << num_qubits);
+    Q.setIdentity();
 
-		uint32_t p = num_qubits;
+    uint32_t p = num_qubits;
 
-		for (uint32_t i = 0; i < instructions.size(); i++) {
+    for (uint32_t i = 0; i < instructions.size(); i++) {
 			std::visit(quantumcircuit_utils::overloaded {
-				[&Q, p](std::shared_ptr<Gate> gate) { Q = full_circuit_unitary(gate->define(), gate->qubits, p) * Q; },
-				[](Measurement m) { throw std::invalid_argument("Cannot convert measurement to matrix."); }
-			}, instructions[i]);
-		}
+        [&Q, p](std::shared_ptr<Gate> gate) { Q = full_circuit_unitary(gate->define(), gate->qubits, p) * Q; },
+        [](const Measurement& m) { throw std::invalid_argument("Cannot convert measurement to matrix."); },
+        [](const WeakMeasurement& m) { throw std::invalid_argument("Cannot convert weak measurement to matrix."); }
+      }, instructions[i]);
+    }
 
-		return Q;
-	}
+    return Q;
+  }
 }
 
 // --- Library for building common circuits --- //
 QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc, std::optional<int> seed) {
-	std::minstd_rand rng;
-	if (seed.has_value()) {
-		rng.seed(seed.value());
-	} else {
+  std::minstd_rand rng;
+  if (seed.has_value()) {
+    rng.seed(seed.value());
+  } else {
     thread_local std::random_device rd;
-		rng.seed(rd());
-	}
+    rng.seed(rd());
+  }
 
-	QuantumCircuit circuit(num_qubits);
+  QuantumCircuit circuit(num_qubits);
 
-	for (uint32_t i = 0; i < depth; i++) {
-		for (uint32_t q = 0; q < num_qubits/2; q++) {
-			auto [q1, q2] = get_targets(i, q, num_qubits);
-			if (!pbc) {
-				if (std::abs(int(q1) - int(q2)) > 1) {
-					continue;
-				}
-			}
+  for (uint32_t i = 0; i < depth; i++) {
+    for (uint32_t q = 0; q < num_qubits/2; q++) {
+      auto [q1, q2] = get_targets(i, q, num_qubits);
+      if (!pbc) {
+        if (std::abs(int(q1) - int(q2)) > 1) {
+          continue;
+        }
+      }
 
-			circuit.add_gate(haar_unitary(2, rng), {q1, q2});
-		}
-	}
+      circuit.add_gate(haar_unitary(2, rng), {q1, q2});
+    }
+  }
 
-	return circuit;
+  return circuit;
 }
 
 QuantumCircuit hardware_efficient_ansatz(
-		uint32_t num_qubits, 
-		uint32_t depth, 
-		const std::vector<std::string>& rotation_gates,
-		const std::string& entangling_gate,
-		bool final_layer
-	) {
+    uint32_t num_qubits, 
+    uint32_t depth, 
+    const std::vector<std::string>& rotation_gates,
+    const std::string& entangling_gate,
+    bool final_layer
+  ) {
 
-	QuantumCircuit circuit(num_qubits);
+  QuantumCircuit circuit(num_qubits);
 
-	for (uint32_t i = 0; i < depth; i++) {
-		for (uint32_t q = 0; q < num_qubits/2; q++) {
-			auto [q1, q2] = get_targets(i, q, num_qubits);
+  for (uint32_t i = 0; i < depth; i++) {
+    for (uint32_t q = 0; q < num_qubits/2; q++) {
+      auto [q1, q2] = get_targets(i, q, num_qubits);
 
-			for (auto const &s : rotation_gates) {
-				auto gate = parse_gate(s, Qubits{q1});
-				assert(gate->num_qubits == 1);
-				circuit.add_gate(gate);
-				gate = parse_gate(s, Qubits{q2});
-				circuit.add_gate(gate);
-			}
+      for (auto const &s : rotation_gates) {
+        auto gate = parse_gate(s, Qubits{q1});
+        if (gate->num_qubits != 1) {
+          throw std::runtime_error("Rotational gate must be one-qubit.");
+        }
+        circuit.add_gate(gate);
+        gate = parse_gate(s, Qubits{q2});
+        circuit.add_gate(gate);
+      }
 
-			auto entangler = parse_gate(entangling_gate, Qubits{q1, q2});
-			assert(entangler->num_qubits == 2);
-			circuit.add_gate(entangler);
-		}
-	}
+      auto entangler = parse_gate(entangling_gate, Qubits{q1, q2});
+      if (entangler->num_qubits != 1) {
+        throw std::runtime_error("Entangler gate must be two-qubit.");
+      }
+      circuit.add_gate(entangler);
+    }
+  }
 
-	if (final_layer) {
-		for (uint32_t q = 0; q < num_qubits; q++) {
-			for (auto const &s : rotation_gates) {
-				auto gate = parse_gate(s, Qubits{q});
-				assert(gate->num_qubits == 1);
-				circuit.add_gate(gate);
-			}
-		}
-	}
+  if (final_layer) {
+    for (uint32_t q = 0; q < num_qubits; q++) {
+      for (auto const &s : rotation_gates) {
+        auto gate = parse_gate(s, Qubits{q});
+        if (gate->num_qubits != 1) {
+          throw std::runtime_error("Rotational gate must be one-qubit.");
+        }
+        circuit.add_gate(gate);
+      }
+    }
+  }
 
-	return circuit;
+  return circuit;
 }
 
 QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<Qubits>& qubits_opt) {
-	auto qubits = parse_qargs_opt(qubits_opt, num_qubits);
+  auto qubits = parse_qargs_opt(qubits_opt, num_qubits);
 
-	QuantumCircuit circuit(num_qubits);
-	
-	for (auto const& q : qubits) {
-		circuit.add_gate(std::make_shared<RxRotationGate>(Qubits{q}));
-	}
-	
-	return circuit;
+  QuantumCircuit circuit(num_qubits);
+
+  for (auto const& q : qubits) {
+    circuit.add_gate(std::make_shared<RxRotationGate>(Qubits{q}));
+  }
+
+  return circuit;
 }
 
 QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng) {
@@ -370,4 +425,3 @@ QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng) {
 
   return qc;
 }
-

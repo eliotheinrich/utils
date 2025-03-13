@@ -2,7 +2,7 @@
 
 #include <random>
 #include "CircuitUtils.h"
-#include "Gates.hpp"
+#include "Instructions.hpp"
 
 #include <iostream>
 
@@ -41,18 +41,34 @@ class QuantumCircuit {
 
     template <typename... QuantumStates>
     void apply(QuantumStates&... states) const {
-      (states.evolve(*this), ...);
+      ([&] {
+       if constexpr (std::is_same_v<std::decay_t<QuantumStates>, QuantumCircuit>) {
+         states.append(*this);
+       } else {
+         states.evolve(*this);
+       }
+      }(), ...);
     }
 
-    void apply_qubit_map(const std::vector<uint32_t>& qubits);
+    void apply_qubit_map(const Qubits& qubits);
+
+    void validate_instruction(const Instruction& inst) const;
 
     void add_instruction(const Instruction& inst);
-    void add_measurement(uint32_t qubit);
-    void add_measurement(const std::vector<uint32_t>& qargs);
     void add_measurement(const Measurement& m);
-    void add_gate(const std::string& name, const std::vector<uint32_t>& qbits);
+    void add_measurement(const Qubits& qubits, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt) {
+      Measurement m(qubits, pauli, outcome);
+      add_measurement(m);
+    }
+    void add_weak_measurement(const WeakMeasurement& m);
+    void add_weak_measurement(const Qubits& qubits, double beta, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt) {
+      WeakMeasurement m(qubits, beta, pauli, outcome);
+      add_weak_measurement(m);
+    }
+
+    void add_gate(const std::string& name, const Qubits& qubits);
     void add_gate(const std::shared_ptr<Gate> &gate);
-    void add_gate(const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qbits);
+    void add_gate(const Eigen::MatrixXcd& gate, const Qubits& qubits);
     void add_gate(const Eigen::Matrix2cd& gate, uint32_t qubit);
 
     void h(uint32_t q) {
@@ -127,14 +143,10 @@ class QuantumCircuit {
       add_gate("swap", {q1, q2});
     }
 
-    void mzr(uint32_t q) {
-      add_measurement(q);
-    }
-
-    void random_clifford(const std::vector<uint32_t>& qubits, std::minstd_rand& rng);
+    void random_clifford(const Qubits& qubits, std::minstd_rand& rng);
 
     void append(const QuantumCircuit& other);
-    void append(const QuantumCircuit& other, const std::vector<uint32_t>& qbits);
+    void append(const QuantumCircuit& other, const Qubits& qubits);
     void append(const Instruction& inst);
 
     QuantumCircuit bind_params(const std::vector<double>& params) const;
@@ -162,5 +174,5 @@ struct fmt::formatter<QuantumCircuit> {
 
 QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc=true, std::optional<int> seed = std::nullopt);
 QuantumCircuit hardware_efficient_ansatz(uint32_t num_qubits, uint32_t depth, const std::vector<std::string>& rotation_gates, const std::string& entangling_gate = "cz", bool final_layer = true);
-QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<std::vector<uint32_t>>& qargs_opt = std::nullopt);
+QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<Qubits>& qargs_opt = std::nullopt);
 QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng);

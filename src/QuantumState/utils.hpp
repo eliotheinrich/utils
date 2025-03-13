@@ -4,38 +4,6 @@
 #include <bitset>
 
 namespace quantumstate_utils {
-  constexpr double sqrt2i_ = 0.707106781186547524400844362104849;
-  constexpr std::complex<double> i_ = std::complex<double>(0.0, 1.0);
-
-  struct H { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << sqrt2i_, sqrt2i_, sqrt2i_, -sqrt2i_).finished(); };
-
-  struct I { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, 1.0).finished(); };
-  struct X { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, 1.0, 1.0, 0.0).finished(); };
-  struct Y { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, -i_, i_, 0.0).finished(); };
-  struct Z { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -1.0).finished(); };
-
-  struct sqrtX { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (1.0 - i_)/2.0, (1.0 - i_)/2.0, (1.0 + i_)/2.0).finished(); };
-  struct sqrtY { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (-1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0).finished(); };
-  struct sqrtZ { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, i_).finished(); };
-
-  struct sqrtXd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
-  struct sqrtYd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 - i_)/2.0, (-1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
-  struct sqrtZd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -i_).finished(); };
-
-  struct T { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 + i_)).finished(); };
-  struct Td { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 - i_)).finished(); };
-
-  struct CX { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
-                                                                                  0, 0, 0, 1, 
-                                                                                  0, 0, 1, 0, 
-                                                                                  0, 1, 0, 0).finished(); };
-  struct CY { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
-                                                                                  0, 0, 0, -i_, 
-                                                                                  0, 0, 1, 0, 
-                                                                                  0, i_, 0, 0).finished(); };
-  struct CZ { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1).finished(); };
-  struct SWAP { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1).finished(); };
-
 	static inline bool print_congruence(uint32_t z1, uint32_t z2, const std::vector<uint32_t>& pos, bool outcome) {
 		std::bitset<8> b1(z1);
 		std::bitset<8> b2(z2);

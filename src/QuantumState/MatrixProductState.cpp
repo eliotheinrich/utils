@@ -162,13 +162,13 @@ std::complex<double> tensor_to_scalar(const ITensor& A) {
 
 ITensor pauli_tensor(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
-    return matrix_to_tensor(quantumstate_utils::I::value, {i1}, {i2});
+    return matrix_to_tensor(gates::I::value, {i1}, {i2});
   } else if (p == Pauli::X) {
-    return matrix_to_tensor(quantumstate_utils::X::value, {i1}, {i2});
+    return matrix_to_tensor(gates::X::value, {i1}, {i2});
   } else if (p == Pauli::Y) {
-    return matrix_to_tensor(quantumstate_utils::Y::value, {i1}, {i2});
+    return matrix_to_tensor(gates::Y::value, {i1}, {i2});
   } else if (p == Pauli::Z) {
-    return matrix_to_tensor(quantumstate_utils::Z::value, {i1}, {i2});
+    return matrix_to_tensor(gates::Z::value, {i1}, {i2});
   }
 
   throw std::runtime_error("Invalid Pauli index.");
@@ -577,8 +577,6 @@ class MatrixProductStateImpl {
     }
 
     MatrixProductStateImpl partial_trace(const Qubits& qubits) {
-      orthogonalize(0);
-
       std::set<uint32_t> traced(qubits.begin(), qubits.end());
 
       std::vector<ITensor> tensors_;
@@ -713,9 +711,11 @@ class MatrixProductStateImpl {
       mps.external_indices = external_indices_;
       mps.internal_indices = internal_indices_;
 
-      mps.left_ortho_lim = mps.num_qubits - 1;
+      // TODO Need to find a better way to do this than just turning off orthogonalization
+      mps.left_ortho_lim = 0;
       mps.right_ortho_lim = 0;
       mps.debug_level = debug_level;
+      mps.orthogonality_level = 0; 
 
       return mps;
     }
@@ -928,11 +928,7 @@ class MatrixProductStateImpl {
     }
 
     ITensor left_environment_tensor(size_t i) const {
-      std::vector<ITensor> external_tensors;
-      for (size_t j = 0; j < i; j++) {
-        Index idx = external_idx(j);
-        external_tensors.push_back(delta(idx, prime(idx)));
-      }
+      std::vector<ITensor> external_tensors = get_deltas_between(0, i);
       return left_environment_tensor(i, external_tensors);
     }
 
@@ -1418,7 +1414,7 @@ class MatrixProductStateImpl {
     }
 
     void swap(uint32_t q1, uint32_t q2) {
-      evolve(quantumstate_utils::SWAP::value, {q1, q2});
+      evolve(gates::SWAP::value, {q1, q2});
     }
 
     void svd_bond(uint32_t q, ITensor* T=nullptr, bool truncate=true) {
@@ -1570,7 +1566,7 @@ class MatrixProductStateImpl {
 
         Qubits qbits{q2 - 1, q2};
         if (qubits[0] > qubits[1]) {
-          Eigen::Matrix4cd SWAP = quantumstate_utils::SWAP::value;
+          Eigen::Matrix4cd SWAP = gates::SWAP::value;
           evolve(SWAP * gate * SWAP, qbits);
         } else {
           evolve(gate, qbits);
@@ -1869,39 +1865,29 @@ class MatrixProductStateImpl {
       return next_qubit;
     }
 
-    void apply_measure(const MeasurementOutcome& outcome, const Qubits& qubits) {
-      auto proj = std::get<0>(outcome);
+    void apply_measure(const MeasurementResult& result, const Qubits& qubits) {
       auto [q1, q2] = support_range(qubits).value();
 
       // TODO revisit this logic
       if (qubits.size() == 1) {
         const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
         if (q1 == 0) { // PI
-          auto proj_ = Eigen::kroneckerProduct(id, proj);
+          auto proj_ = Eigen::kroneckerProduct(id, result.proj);
           evolve(proj_, {q1, q1 + 1});
         } else { // IP
-          auto proj_ = Eigen::kroneckerProduct(proj, id);
+          auto proj_ = Eigen::kroneckerProduct(result.proj, id);
           evolve(proj_, {q1 - 1, q1});
         }
       } else {
-        evolve(proj, qubits);
+        evolve(result.proj, qubits);
       }
 
       assert_state_valid(fmt::format("Error after applying measurement on {}.", qubits));
     }
 
-    MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits, QuantumState::outcome_t outcome) {
-      if (!p.hermitian()) {
-        throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
-      }
-
-      if (qubits.size() == 0) {
-        throw std::runtime_error("Must perform measurement on nonzero qubits.");
-      }
-
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
-      }
+    MeasurementResult measurement_result(const Measurement& m, double r) {
+      PauliString pauli = m.get_pauli();
+      Qubits qubits = m.qubits;
 
       auto [q1, q2] = to_interval(qubits).value();
       size_t i1 = qubit_indices[q1];
@@ -1917,49 +1903,34 @@ class MatrixProductStateImpl {
         R = right_boundary_tensor(i2);
       }
 
-      auto pm = p.to_matrix();
-      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+      auto pm = pauli.to_matrix();
+      auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
       Eigen::MatrixXcd proj1 = (id - pm)/2.0;
 
-      double prob_zero = (1.0 + partial_expectation(p, i1, i2, L, R).real())/2.0;
+      double prob_zero = (1.0 + partial_expectation(pauli, i1, i2, L, R).real())/2.0;
 
       bool b;
-      if (outcome.index() == 0) {
-        double r = std::get<double>(outcome);
-        b = r > prob_zero;
+      if (m.is_forced()) {
+        b = m.get_outcome();
       } else {
-        b = std::get<bool>(outcome);
+        b = r > prob_zero;
       }
 
       auto proj = b ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
 
-      return {proj, prob_zero, b};
+      return MeasurementResult(proj, prob_zero, b);
     }
 
-    bool measure(const PauliString& p, const Qubits& qubits, double r) {
-      auto outcome = measurement_outcome(p, qubits, r);
-      apply_measure(outcome, qubits);
-      return std::get<2>(outcome);
+    bool measure(const Measurement& m, double r) {
+      auto result = measurement_result(m, r);
+      apply_measure(result, m.qubits);
+      return result.outcome;
     }
 
-    void measure(const PauliString& p, const Qubits& qubits, bool b) {
-      auto outcome = measurement_outcome(p, qubits, b);
-      apply_measure(outcome, qubits);
-    }
-
-    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta, QuantumState::outcome_t outcome) {
-      if (!p.hermitian()) {
-        throw std::runtime_error(fmt::format("Cannot perform measurement on non-Hermitian Pauli string {}.", p));
-      }
-
-      if (qubits.size() == 0) {
-        throw std::runtime_error("Must perform measurement on nonzero qubits.");
-      }
-
-      if (qubits.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("PauliString {} has {} qubits, but {} qubits provided to measure.", p, p.num_qubits, qubits.size()));
-      }
+    MeasurementResult weak_measurement_result(const WeakMeasurement& m, double r) {
+      PauliString pauli = m.get_pauli();
+      Qubits qubits = m.qubits;
 
       auto [q1, q2] = to_interval(qubits).value();
       size_t i1 = qubit_indices[q1];
@@ -1975,18 +1946,17 @@ class MatrixProductStateImpl {
         R = right_boundary_tensor(i2);
       }
 
-      auto pm = p.to_matrix();
-      auto id = Eigen::MatrixXcd::Identity(1u << p.num_qubits, 1u << p.num_qubits);
+      auto pm = pauli.to_matrix();
+      auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      double prob_zero = (1.0 + partial_expectation(p, i1, i2, L, R).real())/2.0;
+      double prob_zero = (1.0 + partial_expectation(pauli, i1, i2, L, R).real())/2.0;
 
       bool b;
-      if (outcome.index() == 0) {
-        double r = std::get<double>(outcome);
-        b = r > prob_zero;
+      if (m.is_forced()) {
+        b = m.get_outcome();
       } else {
-        b = std::get<bool>(outcome);
+        b = r > prob_zero;
       }
 
       Eigen::MatrixXcd t = pm;
@@ -1994,24 +1964,19 @@ class MatrixProductStateImpl {
         t = -t;
       }
 
-      Eigen::MatrixXcd proj = (beta*t).exp();
+      Eigen::MatrixXcd proj = (m.beta*t).exp();
       Eigen::MatrixXcd P = proj.pow(2);
       double norm = std::sqrt(std::abs(partial_expectation(P, i1, i2, L, R)));
 
       proj = proj / norm;
 
-      return {proj, prob_zero, b};
+      return MeasurementResult(proj, prob_zero, b);
     }
 
-    void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool b) {
-      auto outcome = weak_measurement_outcome(p, qubits, beta, b);
-      apply_measure(outcome, qubits);
-    }
-
-    bool weak_measure(const PauliString& p, const Qubits& qubits, double beta, double r) {
-      auto outcome = weak_measurement_outcome(p, qubits, beta, r);
-      apply_measure(outcome, qubits);
-      return std::get<2>(outcome);
+    bool weak_measure(const WeakMeasurement& m, double r) {
+      auto result = weak_measurement_result(m, r);
+      apply_measure(result, m.qubits);
+      return result.outcome;
     }
 
     // ======================================= DEBUG FUNCTIONS ======================================= //
@@ -2621,24 +2586,20 @@ double MatrixProductState::purity() const {
   return impl->purity();
 }
 
-bool MatrixProductState::mzr(uint32_t q) {
-  return impl->measure(PauliString("Z"), {q}, QuantumState::randf());
+bool MatrixProductState::measure(const Measurement& m) {
+  if (m.is_forced()) {
+    return impl->measure(m, 0.0);
+  } else {
+    return impl->measure(m, QuantumState::randf()); // Unforced measurement needs a source of randomness
+  }
 }
 
-bool MatrixProductState::measure(const PauliString& p, const Qubits& qubits) {
-  return impl->measure(p, qubits, QuantumState::randf());
-}
-
-void MatrixProductState::measure(const PauliString& p, const Qubits& qubits, bool outcome) {
-  return impl->measure(p, qubits, outcome);
-}
-
-bool MatrixProductState::weak_measure(const PauliString& p, const Qubits& qubits, double beta) {
-  return impl->weak_measure(p, qubits, beta, QuantumState::randf());
-}
-
-void MatrixProductState::weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome) {
-  return impl->weak_measure(p, qubits, beta, outcome);
+bool MatrixProductState::weak_measure(const WeakMeasurement& m) {
+  if (m.is_forced()) {
+    return impl->weak_measure(m, 0.0);
+  } else {
+    return impl->weak_measure(m, QuantumState::randf()); // Unforced measurement needs a source of randomness
+  }
 }
 
 std::vector<double> MatrixProductState::get_logged_truncerr() {

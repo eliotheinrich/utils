@@ -99,11 +99,16 @@ class CliffordState : public EntropyState {
             throw std::runtime_error(std::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
           }
 				},
-				[this](Measurement m) { 
-					for (auto const &q : m.qubits) {
-						mzr(q);
-					}
+				[this](const Measurement& m) { 
+          if (!m.is_basis()) {
+            throw std::runtime_error("Currently, can only perform measurements in computational basis on Clifford states.");
+          }
+
+          mzr(m.qubits[0]);
 				},
+        [this](const WeakMeasurement& m) {
+          throw std::runtime_error("Cannot perform weak measurements on Clifford states.");
+        }
 			}, inst);
 		}
 

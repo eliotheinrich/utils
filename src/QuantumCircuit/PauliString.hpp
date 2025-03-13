@@ -7,7 +7,7 @@
 #include <fmt/ranges.h>
 #include <ranges>
 
-#include "QuantumCircuit.h"
+#include "CircuitUtils.h"
 
 template <typename T>
 static void remove_even_indices(std::vector<T> &v) {
@@ -95,6 +95,8 @@ constexpr static std::complex<double> sign_from_bits(uint8_t phase) {
     return -i;
   }
 }
+
+class QuantumCircuit;
 
 // TODO fix segfault when gate is applied to 0-qubit PauliString
 class PauliString {
@@ -509,66 +511,9 @@ class PauliString {
       return s;
     }
 
-    void evolve(const QuantumCircuit& qc) {
-      if (!qc.is_clifford()) {
-        throw std::runtime_error("Provided circuit is not Clifford.");
-      }
+    void evolve(const QuantumCircuit& qc);
 
-      if (qc.num_qubits != num_qubits) {
-        throw std::runtime_error(fmt::format("Cannot evolve a Paulistring with {} qubits with a QuantumCircuit with {} qubits.", num_qubits, qc.num_qubits));
-      }
-
-			for (auto const &inst : qc.instructions) {
-				evolve(inst);
-			}
-    }
-
-		void evolve(const Instruction& inst) {
-			std::visit(quantumcircuit_utils::overloaded{
-				[this](std::shared_ptr<Gate> gate) { 
-          std::string name = gate->label();
-
-          if (name == "H") {
-            h(gate->qubits[0]);
-          } else if (name == "S") {
-            s(gate->qubits[0]);
-          } else if (name == "Sd") {
-            sd(gate->qubits[0]);
-          } else if (name == "X") {
-            x(gate->qubits[0]);
-          } else if (name == "Y") {
-            y(gate->qubits[0]);
-          } else if (name == "Z") {
-            z(gate->qubits[0]);
-          } else if (name == "sqrtX") {
-            sqrtX(gate->qubits[0]);
-          } else if (name == "sqrtY") {
-            sqrtY(gate->qubits[0]);
-          } else if (name == "sqrtZ") {
-            sqrtZ(gate->qubits[0]);
-          } else if (name == "sqrtXd") {
-            sqrtXd(gate->qubits[0]);
-          } else if (name == "sqrtYd") {
-            sqrtYd(gate->qubits[0]);
-          } else if (name == "sqrtZd") {
-            sqrtZd(gate->qubits[0]);
-          } else if (name == "CX") {
-            cx(gate->qubits[0], gate->qubits[1]);
-          } else if (name == "CY") {
-            cy(gate->qubits[0], gate->qubits[1]);
-          } else if (name == "CZ") {
-            cz(gate->qubits[0], gate->qubits[1]);
-          } else if (name == "SWAP") {
-            swap(gate->qubits[0], gate->qubits[1]);
-          } else {
-            throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to PauliString.evolve.", name));
-          }
-				},
-				[](Measurement m) { 
-          throw std::runtime_error(fmt::format("Cannot mzr a single PauliString."));
-				},
-			}, inst);
-		}
+		//void evolve(const Instruction& inst);
 
     void s(uint32_t a) {
       uint8_t xza = get_xz(a);
@@ -791,20 +736,7 @@ class PauliString {
     }
 
     // Returns the circuit which maps this PauliString onto p
-    QuantumCircuit transform(PauliString const &p) const {
-      Qubits qubits(p.num_qubits);
-      std::iota(qubits.begin(), qubits.end(), 0);
-
-      QuantumCircuit qc1(p.num_qubits);
-      reduce(true, std::make_pair(&qc1, qubits));
-
-      QuantumCircuit qc2(p.num_qubits);
-      p.reduce(true, std::make_pair(&qc2, qubits));
-
-      qc1.append(qc2.adjoint());
-
-      return qc1;
-    }
+    QuantumCircuit transform(PauliString const &p) const;
 
     // It is slightly faster (~20-30%) to query both the x and z bits at a given site
     // at the same time, storing them in the first two bits of the return value.
@@ -1084,82 +1016,3 @@ void random_clifford_impl(const Qubits& qubits, std::minstd_rand& rng, Args&... 
     qubits_.pop_back();
   }
 }
-
-class CliffordTable {
-  private:
-    using TableauBasis = std::tuple<PauliString, PauliString, size_t>;
-    std::vector<TableauBasis> circuits;
-
-  public:
-    CliffordTable()=default;
-
-    CliffordTable(std::function<bool(const QuantumCircuit&)> filter) : circuits() {
-      std::vector<std::pair<PauliString, PauliString>> basis;
-
-      for (size_t s1 = 1; s1 < 16; s1++) {
-        PauliString X, Z;
-        X = PauliString::from_bitstring(2, s1);
-        for (size_t s2 = 1; s2 < 16; s2++) {
-          Z = PauliString::from_bitstring(2, s2);
-          
-          // Z should anticommute with X
-          if (Z.commutes(X)) {
-            continue;
-          }
-
-          basis.push_back({ X,  Z });
-          basis.push_back({ X, -Z });
-          basis.push_back({-X,  Z });
-          basis.push_back({-X, -Z });
-        }
-      }
-
-      Qubits qubits{0, 1};
-      for (const auto& [X, Z] : basis) {
-        for (size_t r = 0; r < 24; r++) {
-          QuantumCircuit qc(2);
-          reduce_paulis(X, Z, qubits, qc);
-          single_qubit_clifford_impl(qc, 0, r);
-          if (filter(qc)) {
-            circuits.push_back(std::make_tuple(X, Z, r));
-          }
-        }
-      }
-    }
-
-    CliffordTable(const CliffordTable& other) : circuits(other.circuits) {}
-
-    size_t num_elements() const {
-      return circuits.size();
-    }
-
-    QuantumCircuit get_circuit(uint32_t r) const {
-      QuantumCircuit qc(2);
-      auto [X, Z, r2] = circuits[r];
-
-      reduce_paulis(X, Z, {0, 1}, qc);
-      single_qubit_clifford_impl(qc, 0, r2);
-
-      return qc;
-    }
-
-    std::vector<QuantumCircuit> get_circuits() const {
-      std::vector<QuantumCircuit> circuits(num_elements());
-      size_t r = 0;
-      std::generate(circuits.begin(), circuits.end(), [&r, this]() { return get_circuit(r++); });
-      return circuits;
-    }
-
-    template <typename... Args>
-    void apply_random(std::minstd_rand& rng, const Qubits& qubits, Args&... args) {
-      size_t r1 = rng() % circuits.size();
-
-      auto [X, Z, r2] = circuits[r1];
-
-      reduce_paulis(X, Z, qubits, args...);
-      (single_qubit_clifford_impl(args, qubits[0], r2), ...);
-    } 
-};
-
-
-

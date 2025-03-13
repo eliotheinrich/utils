@@ -64,6 +64,14 @@ QubitSupport support_complement(const QubitSupport& support, size_t n) {
   return QubitSupport{qubits_};
 }
 
+void QuantumState::validate_qubits(const Qubits& qubits) const {
+  for (const auto q : qubits) {
+    if (q > num_qubits) {
+      throw std::runtime_error(fmt::format("Instruction called on qubit {}, which is not valid for a state with {} qubits.", q, num_qubits));
+    }
+  }
+}
+
 std::vector<PartialState> QuantumState::get_partial_states(const std::vector<QubitSupport>& supports) const {
   std::vector<PartialState> states;
   for (const auto& support : supports) {

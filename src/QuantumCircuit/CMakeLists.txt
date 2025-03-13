@@ -1,6 +1,8 @@
 add_library(quantum_circuit
     CircuitUtils.cpp
     Instructions.hpp
-    Gates.hpp
+    Instructions.cpp
+    #Gates.hpp
     QuantumCircuit.cpp
+    PauliString.cpp
 )

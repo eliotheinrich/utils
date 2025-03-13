@@ -248,10 +248,15 @@ class Tableau {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to Tableau.evolve.", name));
           }
 				},
-				[this, &rng](Measurement m) { 
-					for (auto const &q : m.qubits) {
-						mzr(q, rng);
-					}
+				[this, &rng](const Measurement& m) { 
+          if (!m.is_basis()) {
+            throw std::runtime_error("Currently, can only perform measurements in computational basis on Clifford states.");
+          }
+
+          mzr(m.qubits[0], rng);
+				},
+        [this](const WeakMeasurement& m) {
+          throw std::runtime_error("Cannot perform weak measurements on Clifford states.");
 				},
 			}, inst);
 		}

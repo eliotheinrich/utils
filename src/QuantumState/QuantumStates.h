@@ -25,7 +25,14 @@ using ProbabilityFunc = std::function<double(double)>;
 using MutualMagicAmplitudes = std::vector<std::vector<double>>; // tA, tB, tAB
 using MutualMagicData = std::pair<MutualMagicAmplitudes, MutualMagicAmplitudes>; // t2, t4
 
-using MeasurementOutcome = std::tuple<Eigen::MatrixXcd, double, bool>;
+struct MeasurementResult {
+  Eigen::MatrixXcd proj;
+  double prob_zero;
+  bool outcome;
+  
+  MeasurementResult(const Eigen::MatrixXcd& proj, double prob_zero, bool outcome)
+  : proj(proj), prob_zero(prob_zero), outcome(outcome) {}
+};
 
 class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
 	protected:
@@ -75,16 +82,19 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 
 		virtual std::string to_string() const=0;
 
+    void validate_qubits(const Qubits& qubits) const;
+
 		virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits)=0;
 
     template <typename G>
     void evolve_one_qubit_gate(uint32_t q) {
+      validate_qubits({q});
       evolve(G::value, q);
     }
 
     #define DEFINE_ONE_QUBIT_GATE(name, struct)             \
     void name(uint32_t q) {                                 \
-      evolve_one_qubit_gate<quantumstate_utils::struct>(q); \
+      evolve_one_qubit_gate<gates::struct>(q); \
     }
 
     #define DEFINE_ALL_ONE_QUBIT_GATES     \
@@ -105,12 +115,13 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 
     template <typename G>
     void evolve_two_qubit_gate(uint32_t q1, uint32_t q2) { 
+      validate_qubits({q1, q2});
       evolve(G::value, {q1, q2});
     }
 
     #define DEFINE_TWO_QUBIT_GATE(name, struct)                  \
     void name(uint32_t q1, uint32_t q2) {                        \
-      evolve_two_qubit_gate<quantumstate_utils::struct>(q1, q2); \
+      evolve_two_qubit_gate<gates::struct>(q1, q2); \
     }
 
     #define DEFINE_ALL_TWO_QUBIT_GATES       \
@@ -145,22 +156,17 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 			evolve(Eigen::MatrixXcd(gate.asDiagonal())); 
 		}
 
-		virtual void evolve(const Measurement& measurement) {
-			for (auto q : measurement.qubits) {
-				mzr(q);
-			}
-		}
-
 		virtual void evolve(const Instruction& inst) {
 			std::visit(quantumcircuit_utils::overloaded{
 				[this](std::shared_ptr<Gate> gate) { 
 					evolve(gate->define(), gate->qubits); 
 				},
 				[this](Measurement m) { 
-					for (auto const &q : m.qubits) {
-						mzr(q);
-					}
+          measure(m);
 				},
+        [this](WeakMeasurement m) {
+          weak_measure(m);
+        }
 			}, inst);
 		}
 
@@ -186,15 +192,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       evolve(qc_mapped);
     }
 
-		virtual bool mzr(uint32_t q)=0;
-		
-		virtual std::vector<bool> mzr_all() {
-			std::vector<bool> outcomes(num_qubits);
-			for (uint32_t q = 0; q < num_qubits; q++) {
-				outcomes[q] = mzr(q);
-			}
-			return outcomes;
-		}
+    virtual bool measure(const Measurement& m)=0;
+    virtual bool weak_measure(const WeakMeasurement& m)=0;
 
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
@@ -294,19 +293,23 @@ class DensityMatrix : public QuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
-		virtual bool mzr(uint32_t q) override;
-
-		virtual std::vector<bool> mzr_all() override;
-
-    bool measure(const PauliString& p, const Qubits& qubits);
+		bool mzr(uint32_t q);
+    void forced_mzr(uint32_t q, bool outcome);
+    virtual bool measure(const Measurement& m) override;
+    virtual bool weak_measure(const WeakMeasurement& m) override;
 
 		Eigen::VectorXd diagonal() const;
 
 		virtual std::vector<double> probabilities() const override;
+
     virtual double purity() const override {
       return (data*data).trace().real();
-
     }
+
+    double trace() const {
+      return data.trace().real();
+    }
+
 		std::map<uint32_t, double> probabilities_map() const;
 
     struct glaze;
@@ -360,19 +363,10 @@ class Statevector : public QuantumState {
 
 		double mzr_prob(uint32_t q, bool outcome) const;
 
-		virtual bool mzr(uint32_t q) override;
-
-    bool mzr(uint32_t q, bool outcome);
-
-    void internal_measure(const MeasurementOutcome& outcome, const Qubits& qubits, bool renormalize);
-
-    MeasurementOutcome measurement_outcome(const PauliString& p, const Qubits& qubits, outcome_t outcome);
-    bool measure(const PauliString& p, const Qubits& qubits);
-    void measure(const PauliString& p, const Qubits& qubits, bool outcome);
-
-    MeasurementOutcome weak_measurement_outcome(const PauliString& p, const Qubits& qubits, double beta, outcome_t outcome);
-    bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
-    void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
+		bool mzr(uint32_t q);
+    void forced_mzr(uint32_t q, bool outcome);
+    virtual bool measure(const Measurement& m) override;
+    virtual bool weak_measure(const WeakMeasurement& m) override;
 
 		double norm() const;
 		void normalize();
@@ -486,13 +480,8 @@ class MatrixProductState : public QuantumState {
 
     virtual double purity() const override;
 
-		virtual bool mzr(uint32_t q) override;
-
-    bool measure(const PauliString& p, const Qubits& qubits);
-    void measure(const PauliString& p, const Qubits& qubits, bool outcome);
-
-    bool weak_measure(const PauliString& p, const Qubits& qubits, double beta);
-    void weak_measure(const PauliString& p, const Qubits& qubits, double beta, bool outcome);
+    virtual bool measure(const Measurement& m) override;
+    virtual bool weak_measure(const WeakMeasurement& m) override;
 
     std::vector<double> get_logged_truncerr();
 

@@ -6,18 +6,51 @@
 #include <unordered_set>
 #include <vector>
 #include <variant>
-#include <string>
 #include <complex>
 #include <memory>
-#include <assert.h>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include "PauliString.hpp"
 #include "CircuitUtils.h"
 #include "QuantumState/utils.hpp"
 
 // --- Definitions for gates/measurements --- //
+
+namespace gates {
+  constexpr double sqrt2i_ = 0.707106781186547524400844362104849;
+  constexpr std::complex<double> i_ = std::complex<double>(0.0, 1.0);
+
+  struct H { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << sqrt2i_, sqrt2i_, sqrt2i_, -sqrt2i_).finished(); };
+
+  struct I { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, 1.0).finished(); };
+  struct X { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, 1.0, 1.0, 0.0).finished(); };
+  struct Y { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 0.0, -i_, i_, 0.0).finished(); };
+  struct Z { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -1.0).finished(); };
+
+  struct sqrtX { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (1.0 - i_)/2.0, (1.0 - i_)/2.0, (1.0 + i_)/2.0).finished(); };
+  struct sqrtY { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 + i_)/2.0, (-1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0).finished(); };
+  struct sqrtZ { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, i_).finished(); };
+
+  struct sqrtXd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 + i_)/2.0, (1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
+  struct sqrtYd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << (1.0 - i_)/2.0, (1.0 - i_)/2.0, (-1.0 + i_)/2.0, (1.0 - i_)/2.0).finished(); };
+  struct sqrtZd { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, -i_).finished(); };
+
+  struct T { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 + i_)).finished(); };
+  struct Td { static inline const Eigen::Matrix2cd value = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, sqrt2i_*(1.0 - i_)).finished(); };
+
+  struct CX { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
+                                                                                  0, 0, 0, 1, 
+                                                                                  0, 0, 1, 0, 
+                                                                                  0, 1, 0, 0).finished(); };
+  struct CY { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 
+                                                                                  0, 0, 0, -i_, 
+                                                                                  0, 0, 1, 0, 
+                                                                                  0, i_, 0, 0).finished(); };
+  struct CZ { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1).finished(); };
+  struct SWAP { static inline const Eigen::Matrix4cd value = (Eigen::Matrix4cd() << 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1).finished(); };
+}
 
 class Gate {
   public:
@@ -225,39 +258,39 @@ class SymbolicGate : public Gate {
     Eigen::MatrixXcd to_data(SymbolicGate::GateLabel g) const {
       switch (g) {
         case SymbolicGate::GateLabel::H:
-          return quantumstate_utils::H::value;
+          return gates::H::value;
         case SymbolicGate::GateLabel::X:
-          return quantumstate_utils::X::value;
+          return gates::X::value;
         case SymbolicGate::GateLabel::Y:
-          return quantumstate_utils::Y::value;
+          return gates::Y::value;
         case SymbolicGate::GateLabel::Z:
-          return quantumstate_utils::Z::value;
+          return gates::Z::value;
         case SymbolicGate::GateLabel::sqrtX:
-          return quantumstate_utils::sqrtX::value;
+          return gates::sqrtX::value;
         case SymbolicGate::GateLabel::sqrtY:
-          return quantumstate_utils::sqrtY::value;
+          return gates::sqrtY::value;
         case SymbolicGate::GateLabel::S:
-          return quantumstate_utils::sqrtZ::value;
+          return gates::sqrtZ::value;
         case SymbolicGate::GateLabel::sqrtXd:
-          return quantumstate_utils::sqrtXd::value;
+          return gates::sqrtXd::value;
         case SymbolicGate::GateLabel::sqrtYd:
-          return quantumstate_utils::sqrtYd::value;
+          return gates::sqrtYd::value;
         case SymbolicGate::GateLabel::Sd:
-          return quantumstate_utils::sqrtZd::value;
+          return gates::sqrtZd::value;
         case SymbolicGate::GateLabel::T:
-          return quantumstate_utils::T::value;
+          return gates::T::value;
         case SymbolicGate::GateLabel::Td:
-          return quantumstate_utils::Td::value;
+          return gates::Td::value;
         case SymbolicGate::GateLabel::CX:
-          return quantumstate_utils::CX::value;
+          return gates::CX::value;
         case SymbolicGate::GateLabel::CY:
-          return quantumstate_utils::CY::value;
+          return gates::CY::value;
         case SymbolicGate::GateLabel::CZ:
-          return quantumstate_utils::CZ::value;
+          return gates::CZ::value;
         case SymbolicGate::GateLabel::SWAP:
-          return quantumstate_utils::SWAP::value;
+          return gates::SWAP::value;
         default:
-          return quantumstate_utils::I::value;
+          return gates::I::value;
       }
     }
 
@@ -351,12 +384,309 @@ class MatrixGate : public Gate {
     }
 };
 
-struct Measurement {
-  Qubits qubits;
-  Measurement(const Qubits& qubits) : qubits(qubits) {}
+#define GATECLONE(A) 								                    \
+virtual std::shared_ptr<Gate> clone() override { 	      \
+  return std::shared_ptr<Gate>(new A(this->qubits)); 	  \
+}
+
+#define GATE_PI 3.14159265359
+
+class RxRotationGate : public Gate {
+  private:
+    bool adj;
+
+  public:
+    RxRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Rx gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+    }
+
+    virtual uint32_t num_params() const override { 
+      return 1;
+    }
+
+    virtual std::string label() const override { 
+      return adj ? "Rxd" : "Rx";
+    }
+
+    virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
+      if (params.size() != num_params()) {
+        std::string error_message = "Invalid number of params passed to define(). Expected " 
+                                   + std::to_string(this->num_params()) + ", received " + std::to_string(params.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+
+      Eigen::MatrixXcd gate = Eigen::MatrixXcd::Zero(2, 2);
+
+      double t = params[0];
+      gate << std::complex<double>(std::cos(t/2), 0), std::complex<double>(0, -std::sin(t/2)), 
+              std::complex<double>(0, -std::sin(t/2)), std::complex<double>(std::cos(t/2), 0);
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
+      return gate;
+    }
+
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RxRotationGate(qubits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RxRotationGate(qubits, adj));
+    }
 };
 
-typedef std::variant<std::shared_ptr<Gate>, Measurement> Instruction;
+class RyRotationGate : public Gate {
+  private:
+    bool adj;
+
+  public:
+    RyRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Ry gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+    }
+
+    virtual uint32_t num_params() const override { 
+      return 1; 
+    }
+    
+    virtual std::string label() const override { 
+      return adj ? "Ryd" : "Ry";
+    }
+
+    virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
+      if (params.size() != num_params()) {
+        std::string error_message = "Invalid number of params passed to define(). Expected " 
+                                   + std::to_string(this->num_params()) + ", received " + std::to_string(params.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+
+      Eigen::MatrixXcd gate = Eigen::MatrixXcd::Zero(2, 2);
+
+      double t = params[0];
+      gate << std::complex<double>(std::cos(t/2), 0), std::complex<double>(-std::sin(t/2), 0), 
+              std::complex<double>(std::sin(t/2), 0), std::complex<double>(std::cos(t/2), 0);
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
+      return gate;
+    }
+
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RyRotationGate(qubits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RyRotationGate(qubits, adj));
+    }
+};
+
+class RzRotationGate : public Gate {
+  private:
+    bool adj;
+
+  public:
+    RzRotationGate(const Qubits& qubits, bool adj=false) : Gate(qubits), adj(adj) {
+      if (qubits.size() != 1) {
+        std::string error_message = "Rz gate can only have a single qubit. Passed " + std::to_string(qubits.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+    }
+
+    virtual uint32_t num_params() const override {
+      return 1; 
+    }
+
+    virtual std::string label() const override { 
+      return adj ? "Rzd" : "Rz"; 
+    }
+
+    virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
+      if (params.size() != num_params()) {
+        std::string error_message = "Invalid number of params passed to define(). Expected " 
+                                   + std::to_string(this->num_params()) + ", received " + std::to_string(params.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+
+      Eigen::MatrixXcd gate = Eigen::MatrixXcd::Zero(2, 2);
+
+      double t = params[0];
+      gate << std::complex<double>(std::cos(t/2), -std::sin(t/2)), std::complex<double>(0.0, 0.0), 
+              std::complex<double>(0.0, 0.0), std::complex<double>(std::cos(t/2), std::sin(t/2));
+
+      if (adj) {
+        gate = gate.adjoint();
+      }
+
+      return gate;
+    }
+
+    virtual bool is_clifford() const override {
+      return false;
+    }
+
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new RzRotationGate(qubits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new RzRotationGate(qubits, adj));
+    }
+};
+
+template <class GateType>
+class MemoizedGate : public GateType {
+  private:
+    bool adj;
+
+    static std::vector<Eigen::MatrixXcd> memoized_gates;
+    static bool defined;
+
+    static void generate_memoized_gates(uint32_t res, double min, double max) {
+      MemoizedGate<GateType>::memoized_gates = std::vector<Eigen::MatrixXcd>(res);
+      double bin_width = (max - min)/res;
+      Qubits qubits{0};
+
+      for (uint32_t i = 0; i < res; i++) {
+        double d = min + bin_width*i;
+
+        GateType gate(qubits);
+        std::vector<double> params{d};
+        MemoizedGate<GateType>::memoized_gates[i] = gate.define(params);
+      }
+
+      MemoizedGate<GateType>::defined = true;
+    }
+
+    static uint32_t get_idx(double d, uint32_t res, double min, double max) {
+      double dt = std::fmod(d, 2*GATE_PI);
+
+      double bin_width = static_cast<double>(max - min)/res;
+      return static_cast<uint32_t>((dt - min)/bin_width);
+    }
+
+  public:
+    MemoizedGate(const Qubits& qubits, bool adj=false) : GateType(qubits), adj(adj) {}
+
+    virtual Eigen::MatrixXcd define(const std::vector<double>& params) const override {
+      if (!MemoizedGate<GateType>::defined) {
+        MemoizedGate<GateType>::generate_memoized_gates(200, 0, 2*GATE_PI);
+      }
+
+      if (params.size() != this->num_params()) {
+        std::string error_message = "Invalid number of params passed to define(). Expected " 
+                                   + std::to_string(this->num_params()) + ", received " + std::to_string(params.size()) + ".";
+        throw std::invalid_argument(error_message);
+      }
+
+      double d = params[0];
+      uint32_t idx = MemoizedGate<GateType>::get_idx(d, 200, 0, 2*GATE_PI);
+
+      Eigen::MatrixXcd g = MemoizedGate<GateType>::memoized_gates[idx];
+
+      if (adj) {
+        g = g.adjoint();
+      }
+
+      return g;
+    }
+
+    virtual bool is_clifford() const override {
+      return false;
+    }
+    
+    virtual std::shared_ptr<Gate> adjoint() const override {
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qubits, !adj));
+    }
+
+    virtual std::shared_ptr<Gate> clone() override {
+      return std::shared_ptr<Gate>(new MemoizedGate<GateType>(this->qubits, adj));
+    }
+};
+
+template <class GateType>
+std::vector<Eigen::MatrixXcd> MemoizedGate<GateType>::memoized_gates;
+
+template <class GateType>
+bool MemoizedGate<GateType>::defined = false;
+
+static std::shared_ptr<Gate> parse_gate(const std::string& s, const Qubits& qubits) {
+  if (s == "H" || s == "h") {
+    return std::make_shared<MatrixGate>(gates::H::value, qubits, "h");
+  } else if (s == "X" || s == "x") {
+    return std::make_shared<MatrixGate>(gates::X::value, qubits, "x");
+  } else if (s == "Y" || s == "y") {
+    return std::make_shared<MatrixGate>(gates::Y::value, qubits, "y");
+  } else if (s == "Z" || s == "z") {
+    return std::make_shared<MatrixGate>(gates::Z::value, qubits, "z");
+  } else if (s == "RX" || s == "Rx" || s == "rx") {
+    return std::make_shared<RxRotationGate>(qubits);
+  } else if (s == "RXM" || s == "Rxm" || s == "rxm") {
+    return std::make_shared<MemoizedGate<RxRotationGate>>(qubits);
+  } else if (s == "RY" || s == "Ry" || s == "ry") {
+    return std::make_shared<RyRotationGate>(qubits);
+  } else if (s == "RYM" || s == "Rym" || s == "rym") {
+    return std::make_shared<MemoizedGate<RyRotationGate>>(qubits);
+  } else if (s == "RZ" || s == "Rz" || s == "rz") {
+    return std::make_shared<RzRotationGate>(qubits);
+  } else if (s == "RZM" || s == "Rzm" || s == "rzm") {
+    return std::make_shared<MemoizedGate<RzRotationGate>>(qubits);
+  } else if (s == "CX" || s == "cx") {
+    return std::make_shared<MatrixGate>(gates::CX::value, qubits, "cx");
+  } else if (s == "CY" || s == "cy") {
+    return std::make_shared<MatrixGate>(gates::CY::value, qubits, "cy");
+  } else if (s == "CZ" || s == "cz") {
+    return std::make_shared<MatrixGate>(gates::CZ::value, qubits, "cz");
+  } else if (s == "swap" || s == "SWAP") {
+    return std::make_shared<MatrixGate>(gates::SWAP::value, qubits, "swap");
+  } else {
+    throw std::invalid_argument(fmt::format("Invalid gate type: {}", s));
+  }
+}
+
+class PauliString;
+
+struct Measurement {
+  Qubits qubits;
+  std::optional<PauliString> pauli;
+  std::optional<bool> outcome;
+
+  Measurement(const Qubits& qubits, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt);
+  PauliString get_pauli() const;
+  bool is_basis() const;
+  bool is_forced() const;
+  bool get_outcome() const;
+};
+
+struct WeakMeasurement {
+  Qubits qubits;
+  double beta;
+  std::optional<PauliString> pauli;
+  std::optional<bool> outcome;
+
+  WeakMeasurement(const Qubits& qubits, double beta, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt);
+  PauliString get_pauli() const;
+  bool is_forced() const;
+  bool get_outcome() const;
+};
+
+typedef std::variant<std::shared_ptr<Gate>, Measurement, WeakMeasurement> Instruction;
 
 static Instruction copy_instruction(const Instruction& inst) {
   return std::visit(quantumcircuit_utils::overloaded {
@@ -364,7 +694,10 @@ static Instruction copy_instruction(const Instruction& inst) {
       return Instruction(gate->clone());
     },
     [](Measurement m) {
-      return Instruction(Measurement(m.qubits));
+      return Instruction(Measurement(m.qubits, m.pauli, m.outcome));
+    },
+    [](WeakMeasurement m) {
+      return Instruction(WeakMeasurement(m.qubits, m.beta, m.pauli, m.outcome));
     }
   }, inst);
 }

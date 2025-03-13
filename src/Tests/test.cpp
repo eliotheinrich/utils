@@ -5,7 +5,7 @@
 
 #include "QuantumState.h"
 #include "CliffordState.h"
-#include "BinaryPolynomial.h"
+#include "LinearCode.h"
 #include "Graph.hpp"
 #include "Display.h"
 #include <iostream>
@@ -129,7 +129,13 @@ void randomize_state(QuantumStates&... states) {
     for (uint32_t j = k; j < num_qubits - 1; j += 2) {
       Eigen::Matrix4cd random = Eigen::Matrix4cd::Random();
       std::vector<uint32_t> qubits = {j, j + 1};
-      (states.evolve(random, qubits), ...);
+      ([&] {
+       if constexpr (std::is_same_v<std::decay_t<QuantumStates>, QuantumCircuit>) {
+         states.add_gate(random, qubits);
+       } else {
+         states.evolve(random, qubits);
+       }
+      }(), ...);
     }
   }
 }
@@ -186,6 +192,10 @@ std::minstd_rand seeded_rng() {
   std::minstd_rand rng(seed);
 
   return rng;
+}
+
+double randf(std::minstd_rand& rng) {
+  return double(rng())/double(RAND_MAX);
 }
 
 bool test_statevector() {
@@ -536,9 +546,9 @@ bool test_mps_measure() {
 
       int s = rng();
       QuantumState::seed(s);
-      bool b1 = mps.measure(P, qubits);
+      bool b1 = mps.measure(Measurement(qubits, P));
       QuantumState::seed(s);
-      bool b2 = sv.measure(P, qubits);
+      bool b2 = sv.measure(Measurement(qubits, P));
 
       ASSERT(mps.state_valid(), fmt::format("MPS failed debug tests for P = {} on {}.", P, qubits));
       ASSERT(b1 == b2, fmt::format("Different measurement outcomes observed for {}.", P));
@@ -580,9 +590,9 @@ bool test_mps_weak_measure() {
       constexpr double beta = 1.0;
       int s = rng();
       QuantumState::seed(s);
-      bool b1 = mps.weak_measure(P, qubits, beta);
+      bool b1 = mps.weak_measure(WeakMeasurement(qubits, beta, P));
       QuantumState::seed(s);
-      bool b2 = sv.weak_measure(P, qubits, beta);
+      bool b2 = sv.weak_measure(WeakMeasurement(qubits, beta, P));
 
       double d = std::abs(sv.inner(Statevector(mps)));
 
@@ -1082,9 +1092,9 @@ bool test_mps_random_clifford() {
     randomize_state_clifford(rng, 2, mps);
 
     for (size_t q = 0; q < nqb; q++) {
-      double r = double(rng())/double(RAND_MAX);
+      double r = randf(rng);
       if (r < 0.1) {
-        mps.mzr(q);
+        mps.measure(Measurement({static_cast<uint32_t>(q)}, PauliString("+Z")));
       }
     }
   }
@@ -1174,6 +1184,41 @@ bool test_serialize() {
   return true;
 }
 
+bool test_circuit_measurements() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 6;
+
+  Statevector psi(nqb);
+  DensityMatrix rho(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  for (size_t i = 0; i < 4; i++) {
+    QuantumCircuit qc(nqb);
+    randomize_state_haar(rng, qc);
+
+    for (size_t j = 0; j < 3; j++) {
+      size_t k = rng() % 2 + 1;
+      auto qubits = to_qubits(random_interval(nqb, k, rng));
+      PauliString P = PauliString::randh(k, rng);
+      qc.add_measurement(Measurement(qubits, P, rng() % 2));
+    }
+
+    for (size_t j = 0; j < 3; j++) {
+      double beta = randf(rng);
+      size_t k = rng() % 2 + 1;
+      auto qubits = to_qubits(random_interval(nqb, k, rng));
+      PauliString P = PauliString::randh(k, rng);
+      qc.add_weak_measurement(WeakMeasurement(qubits, beta, P, rng() % 2));
+    }
+
+    qc.apply(psi, rho, mps);
+
+    ASSERT(states_close(psi, rho, mps), fmt::format("States do not match after applying mid-circuit measurements."));
+  }
+
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1217,16 +1262,16 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
-  ADD_TEST(test_mpo_sample_paulis_montecarlo);
-  //ADD_TEST(test_mpo_bipartite_mmi);
+  ADD_TEST(test_mpo_sample_paulis_montecarlo); // TODO fix
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
+  ADD_TEST(test_circuit_measurements);
 
-  ADD_TEST(inspect_svd_error);
+  //ADD_TEST(inspect_svd_error);
 
 
   constexpr char green[] = "\033[1;32m";

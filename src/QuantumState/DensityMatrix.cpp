@@ -245,33 +245,97 @@ bool DensityMatrix::mzr(uint32_t q) {
 	return 0;
 }
 
-std::vector<bool> DensityMatrix::mzr_all() {
+void DensityMatrix::forced_mzr(uint32_t q, bool outcome) {
 	for (uint32_t i = 0; i < basis; i++) {
 		for (uint32_t j = 0; j < basis; j++) {
-			if (i != j) {
+			uint32_t q1 = (i >> q) & 1u;
+			uint32_t q2 = (j >> q) & 1u;
+
+			if (q1 != outcome || q2 != outcome) {
 				data(i, j) = 0;
 			}
 		}
 	}
 
-	return std::vector<bool>(num_qubits, 0);
+  data /= trace();
 }
 
-bool DensityMatrix::measure(const PauliString& p, const Qubits& qubits) {
+
+bool DensityMatrix::measure(const Measurement& m) {
+  Qubits qubits = m.qubits;
+  if (m.is_basis()) { // Special, more efficient behavior for computational basis measurements
+    if (m.is_forced()) {
+      bool outcome = m.get_outcome();
+      forced_mzr(qubits[0], outcome);
+      return outcome;
+    } else {
+      return mzr(qubits[0]);
+    }
+  }
+
+  PauliString p = m.get_pauli();
+
   PauliString p_ = p.superstring(qubits, num_qubits);
   Eigen::MatrixXcd matrix = p_.to_matrix();
   Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(basis, basis);
 
-  Eigen::MatrixXcd P0 = (id - matrix)/2.0;
-  Eigen::MatrixXcd P1 = (id + matrix)/2.0;
+  if (m.is_forced()) {
+    bool outcome = m.get_outcome();
 
-  double p0 = std::abs(expectation(P0));
+    Eigen::MatrixXcd P;
+    if (outcome) {
+      P = (id - matrix)/2.0;
+    } else {
+      P = (id + matrix)/2.0;
+    }
 
+    data = P*data*P.adjoint();
+    data /= trace();
+    return outcome;
+  } else { // Unforced; result is mixed state
+    Eigen::MatrixXcd P0 = (id - matrix)/2.0;
+    Eigen::MatrixXcd P1 = (id + matrix)/2.0;
 
-  data = P0*data*P0.adjoint()/std::sqrt(p0) + P1*data*P1.adjoint()/std::sqrt(1.0 - p0);
-  return 0;
+    double prob = std::abs(expectation(P0));
+
+    data = P0*data*P0.adjoint()/std::sqrt(prob) + P1*data*P1.adjoint()/std::sqrt(1.0 - prob);
+    return 0; // No definite outcome; default to 0
+  }
 }
 
+bool DensityMatrix::weak_measure(const WeakMeasurement& m) {
+  Qubits qubits = m.qubits;
+  PauliString pauli = m.get_pauli();
+  double beta = m.beta;
+
+  PauliString pauli_ = pauli.superstring(qubits, num_qubits);
+  Eigen::MatrixXcd matrix = m.beta * pauli_.to_matrix();
+
+  if (m.is_forced()) {
+    bool outcome = m.get_outcome();
+    Eigen::MatrixXcd P;
+    if (outcome) {
+      P = (-matrix).exp();
+    } else {
+      P = matrix.exp();
+    }
+
+    // TODO check this
+    data = P*data*P.adjoint();
+    data /= trace();
+    return outcome;
+  } else {
+    Eigen::MatrixXcd P0 = matrix.exp();
+    Eigen::MatrixXcd P1 = (-matrix).exp();
+
+    double prob0 = std::abs(expectation(P0));
+    double prob1 = std::abs(expectation(P1));
+
+    // TODO check this
+    data = P0*data*P0.adjoint()/std::sqrt(prob0) + P1*data*P1.adjoint()/std::sqrt(prob1);
+    return 0;
+  }
+}
 
 Eigen::VectorXd DensityMatrix::diagonal() const {
 	return data.diagonal().cwiseAbs();
