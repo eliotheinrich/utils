@@ -1820,51 +1820,6 @@ class MatrixProductStateImpl {
           && (std::abs(norm(singular_values[i]) - 1.0) < 1e-4);
     }
 
-    template <typename T>
-    std::vector<T> sort_measurements(const std::vector<T>& measurements) {
-      std::vector<T> sorted_measurements = measurements;
-
-      std::sort(sorted_measurements.begin(), sorted_measurements.end(), [](const T& m1, const T& m2) {
-        auto [a1, a2] = to_interval(std::get<1>(m1)).value();
-        auto [b1, b2] = to_interval(std::get<1>(m2)).value();
-        return a1 < b1;
-      });
-
-      return sorted_measurements;
-    }
-
-    template <typename T>
-    Qubits get_next_qubits(const std::vector<T>& measurements) {
-      size_t num_measurements = measurements.size();
-      std::vector<bool> mask(num_qubits, false);
-      size_t right_qubit = 0;
-      for (auto const& m : measurements) {
-        auto qubits = std::get<1>(m);
-        for (auto q : qubits) {
-          if (q > right_qubit) {
-            right_qubit = q;
-          }
-          mask[q] = true;
-        }
-      }
-
-      Qubits next_qubit;
-      for (size_t i = 0; i < num_measurements - 1; i++) {
-        auto qubits = std::get<1>(measurements[i]);
-        auto [q1, q2] = to_interval(qubits).value();
-        size_t n = q2;
-        while (n < num_qubits) {
-          if (mask[n]) {
-            next_qubit.push_back(n);
-            break;
-          }
-          n++;
-        }
-      }
-
-      return next_qubit;
-    }
-
     void apply_measure(const MeasurementResult& result, const Qubits& qubits) {
       auto [q1, q2] = support_range(qubits).value();
 
@@ -1917,6 +1872,7 @@ class MatrixProductStateImpl {
         b = r > prob_zero;
       }
 
+      QuantumState::check_forced_measure(b, prob_zero);
       auto proj = b ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
 
       return MeasurementResult(proj, prob_zero, b);

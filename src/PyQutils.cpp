@@ -59,10 +59,13 @@ NB_MODULE(qutils_bindings, m) {
     .def("__str__", &QuantumCircuit::to_string)
     .def("num_params", &QuantumCircuit::num_params)
     .def("length", &QuantumCircuit::length)
-    .def("add_measurement", [](QuantumCircuit& self, uint32_t q) { self.add_measurement(q); })
-    .def("mzr", [](QuantumCircuit& self, uint32_t q) { self.add_measurement(q); })
-    .def("add_measurement", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) { self.add_measurement(qubits); })
-    .def("mzr", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) { self.add_measurement(qubits); })
+    .def("mzr", [](QuantumCircuit& self, uint32_t q) { self.add_measurement({q}, PauliString("+Z")); })
+    .def("add_measurement", [](QuantumCircuit& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
+      self.add_measurement(qubits, pauli, outcome);
+    }, "qubits"_a, "pauli"_a, "outcome"_a=std::nullopt)
+    .def("add_weak_measurement", [](QuantumCircuit& self, const Qubits& qubits, double beta, const PauliString& pauli, std::optional<bool> outcome) {
+      self.add_weak_measurement(qubits, beta, pauli, outcome);
+    }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
     .def("add_gate", [](QuantumCircuit& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.add_gate(gate, qubits); })
     .def("add_gate", [](QuantumCircuit& self, const Eigen::MatrixXcd& gate, uint32_t q) { self.add_gate(gate, q); })
     .def("append", [](QuantumCircuit& self, const QuantumCircuit& other, const std::optional<std::vector<uint32_t>>& qubits) { 
@@ -140,7 +143,15 @@ NB_MODULE(qutils_bindings, m) {
     .def("expectation", &QuantumState::expectation)
     .def("probabilities", &QuantumState::probabilities)
     .def("purity", &QuantumState::purity)
-    .def("mzr", &QuantumState::mzr)
+    .def("mzr", [](QuantumState& self, uint32_t q, std::optional<bool> outcome) {
+      return self.measure(Measurement({q}, PauliString("+Z"), outcome)); 
+    }, "qubit"_a, "outcome"_a=std::nullopt)
+    .def("measure", [](QuantumState& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
+      return self.measure(Measurement(qubits, pauli, outcome));
+    }, "qubits"_a, "pauli"_a, "outcome"_a=std::nullopt)
+    .def("weak_measure", [](QuantumState& self, const Qubits& qubits, double beta, const PauliString& pauli, std::optional<bool> outcome) {
+      return self.weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
+    }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
     .def("entropy", &QuantumState::entropy, "qubits"_a, "index"_a)
     .def("sample_paulis", &QuantumState::sample_paulis)
     .def("sample_paulis_exact", &QuantumState::sample_paulis_exact)
@@ -169,9 +180,6 @@ NB_MODULE(qutils_bindings, m) {
     .def(nanobind::init<MatrixProductState>())
     .def_ro("data", &Statevector::data)
     .def("normalize", &Statevector::normalize)
-    .def("mzr_forced", [](Statevector& self, uint32_t q, bool outcome) { return self.mzr(q, outcome); })
-    .def("measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
-    .def("weak_measure", [](Statevector& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
     .def("inner", &Statevector::inner)
     .def("expectation_matrix", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
@@ -195,10 +203,6 @@ NB_MODULE(qutils_bindings, m) {
     .def("singular_values", &MatrixProductState::singular_values)
     .def("get_logged_truncerr", &MatrixProductState::get_logged_truncerr)
     .def("trace", &MatrixProductState::trace)
-    .def("measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits) { return self.measure(p, qubits); })
-    .def("weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta) { return self.weak_measure(p, qubits, beta); })
-    .def("forced_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, bool outcome) { return self.measure(p, qubits, outcome); })
-    .def("forced_weak_measure", [](MatrixProductState& self, const PauliString& p, const std::vector<uint32_t>& qubits, double beta, bool outcome) { return self.weak_measure(p, qubits, beta, outcome); })
     .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
     .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)

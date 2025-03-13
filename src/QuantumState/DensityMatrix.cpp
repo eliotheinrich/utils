@@ -245,7 +245,26 @@ bool DensityMatrix::mzr(uint32_t q) {
 	return 0;
 }
 
-void DensityMatrix::forced_mzr(uint32_t q, bool outcome) {
+double DensityMatrix::mzr_prob(uint32_t q, bool outcome) const {
+  double p;
+  for (uint32_t i = 0; i < basis; i++) {
+    uint32_t z = (i >> q) & 1u;
+    if (z) {
+      p += std::abs(data(i, i));
+    }
+  }
+
+  if (outcome) {
+    return 1.0 - p;
+  } else {
+    return p;
+  }
+}
+
+bool DensityMatrix::forced_mzr(uint32_t q, bool outcome) {
+  double p = mzr_prob(q, outcome);
+  check_forced_measure(outcome, p);
+
 	for (uint32_t i = 0; i < basis; i++) {
 		for (uint32_t j = 0; j < basis; j++) {
 			uint32_t q1 = (i >> q) & 1u;
@@ -258,6 +277,8 @@ void DensityMatrix::forced_mzr(uint32_t q, bool outcome) {
 	}
 
   data /= trace();
+
+  return outcome;
 }
 
 
@@ -287,6 +308,12 @@ bool DensityMatrix::measure(const Measurement& m) {
       P = (id - matrix)/2.0;
     } else {
       P = (id + matrix)/2.0;
+    }
+
+    double prob_zero = std::abs(expectation(P));
+    bool invalid = check_forced_measure(outcome, 1.0 - prob_zero);
+    if (invalid) {
+      P = id - P;
     }
 
     data = P*data*P.adjoint();

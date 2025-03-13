@@ -192,6 +192,16 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       evolve(qc_mapped);
     }
 
+    static inline bool check_forced_measure(bool& outcome, double prob_zero) {
+      if ((1.0 - prob_zero < QS_ATOL && outcome) || (prob_zero < QS_ATOL && !outcome)) {
+        outcome = !outcome;
+        std::cerr << "Invalid forced measurement.\n";
+        return true;
+      }
+
+      return false;
+    }
+
     virtual bool measure(const Measurement& m)=0;
     virtual bool weak_measure(const WeakMeasurement& m)=0;
 
@@ -293,8 +303,9 @@ class DensityMatrix : public QuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
+		double mzr_prob(uint32_t q, bool outcome) const;
 		bool mzr(uint32_t q);
-    void forced_mzr(uint32_t q, bool outcome);
+    bool forced_mzr(uint32_t q, bool outcome);
     virtual bool measure(const Measurement& m) override;
     virtual bool weak_measure(const WeakMeasurement& m) override;
 
@@ -362,9 +373,8 @@ class Statevector : public QuantumState {
     void evolve(const QuantumCircuit& circuit, const std::vector<bool>& outcomes);
 
 		double mzr_prob(uint32_t q, bool outcome) const;
-
 		bool mzr(uint32_t q);
-    void forced_mzr(uint32_t q, bool outcome);
+    bool forced_mzr(uint32_t q, bool outcome);
     virtual bool measure(const Measurement& m) override;
     virtual bool weak_measure(const WeakMeasurement& m) override;
 

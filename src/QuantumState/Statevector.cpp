@@ -36,8 +36,10 @@ std::string Statevector::to_string() const {
 
   bool first = true;
   std::string st = "";
+  size_t n = 0;
   for (uint32_t i = 0; i < s; i++) {
     if (std::abs(tmp.data(i)) > QS_ATOL) {
+      n++;
       std::string amplitude;
       if (std::abs(tmp.data(i).imag()) < QS_ATOL) {
         amplitude = fmt::format("{}", tmp.data(i).real());
@@ -53,6 +55,10 @@ std::string Statevector::to_string() const {
       first = false;
       st += amplitude + "|" + bin + ">";
     }
+  }
+
+  if (n == 0) {
+    return "0";
   }
 
   return st;
@@ -118,13 +124,16 @@ double Statevector::mzr_prob(uint32_t q, bool outcome) const {
   }
 
   if (outcome) {
-    return 1.0 - prob_zero;
-  } else {
     return prob_zero;
+  } else {
+    return 1.0 - prob_zero;
   }
 }
 
-void Statevector::forced_mzr(uint32_t q, bool outcome) {
+bool Statevector::forced_mzr(uint32_t q, bool outcome) {
+  double prob_zero = mzr_prob(q, outcome);
+  check_forced_measure(outcome, prob_zero);
+
   uint32_t s = 1u << num_qubits;
   for (uint32_t i = 0; i < s; i++) {
     if (((i >> q) & 1u) != outcome) {
@@ -133,24 +142,21 @@ void Statevector::forced_mzr(uint32_t q, bool outcome) {
   }
 
   normalize();
+  return outcome;
 }
 
 bool Statevector::mzr(uint32_t q) {
   double prob_zero = mzr_prob(q, 0);
   uint32_t outcome = !(QuantumState::randf() < prob_zero);
 
-  forced_mzr(q, outcome);
-
-  return outcome;
+  return forced_mzr(q, outcome);
 }
 
 bool Statevector::measure(const Measurement& m) {
   Qubits qubits = m.qubits;
   if (m.is_basis()) {
     if (m.is_forced()) {
-      bool outcome = m.get_outcome();
-      forced_mzr(qubits[0], outcome);
-      return outcome;
+      return forced_mzr(qubits[0], m.get_outcome());
     } else {
       return mzr(qubits[0]);
     }
@@ -170,14 +176,11 @@ bool Statevector::measure(const Measurement& m) {
     b = m.get_outcome();
   } else {
     double r = QuantumState::randf();
-    b = (r >= prob_zero);
+    b = (r > prob_zero);
   }
 
-  proj0 = proj0/std::sqrt(prob_zero);
-  proj1 = proj1/std::sqrt(1.0 - prob_zero);
-
-  Eigen::MatrixXcd proj = b ? proj1 : proj0;
-
+  check_forced_measure(b, prob_zero);
+  Eigen::MatrixXcd proj = b ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
   evolve(proj, qubits);
   normalize();
 

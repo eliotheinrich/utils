@@ -1219,6 +1219,32 @@ bool test_circuit_measurements() {
   return true;
 }
 
+bool test_forced_measurement() {
+  auto rng = seeded_rng();
+  constexpr size_t nqb = 2;
+
+  Statevector psi(nqb);
+  DensityMatrix rho(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  auto test_circuit = [](const QuantumCircuit& qc, MatrixProductState& psi) {
+    std::cout << psi.to_string() << "\n";
+    qc.apply(psi);
+    std::cout << psi.to_string() << "\n";
+  };
+  
+  QuantumCircuit qc(nqb);
+  qc.add_measurement({0}, PauliString("+Z"), true);
+  test_circuit(qc, mps);
+
+  qc = QuantumCircuit(nqb);
+  qc.add_measurement({0, 1}, PauliString("+ZZ"), true);
+  test_circuit(qc, mps);
+
+
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1270,6 +1296,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
   ADD_TEST(test_circuit_measurements);
+  ADD_TEST(test_forced_measurement);
 
   //ADD_TEST(inspect_svd_error);
 
