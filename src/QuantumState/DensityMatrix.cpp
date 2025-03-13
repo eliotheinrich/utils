@@ -246,24 +246,23 @@ bool DensityMatrix::mzr(uint32_t q) {
 }
 
 double DensityMatrix::mzr_prob(uint32_t q, bool outcome) const {
-  double p;
+  double prob_one = 0.0;
   for (uint32_t i = 0; i < basis; i++) {
-    uint32_t z = (i >> q) & 1u;
-    if (z) {
-      p += std::abs(data(i, i));
+    if ((i >> q) & 1u) {
+      prob_one += std::abs(data(i, i));
     }
   }
 
   if (outcome) {
-    return 1.0 - p;
+    return prob_one;
   } else {
-    return p;
+    return 1.0 - prob_one;
   }
 }
 
 bool DensityMatrix::forced_mzr(uint32_t q, bool outcome) {
-  double p = mzr_prob(q, outcome);
-  check_forced_measure(outcome, p);
+  double prob_zero = mzr_prob(q, 0);
+  check_forced_measure(outcome, prob_zero);
 
 	for (uint32_t i = 0; i < basis; i++) {
 		for (uint32_t j = 0; j < basis; j++) {
@@ -286,9 +285,7 @@ bool DensityMatrix::measure(const Measurement& m) {
   Qubits qubits = m.qubits;
   if (m.is_basis()) { // Special, more efficient behavior for computational basis measurements
     if (m.is_forced()) {
-      bool outcome = m.get_outcome();
-      forced_mzr(qubits[0], outcome);
-      return outcome;
+      return forced_mzr(qubits[0], m.get_outcome());
     } else {
       return mzr(qubits[0]);
     }
@@ -304,14 +301,16 @@ bool DensityMatrix::measure(const Measurement& m) {
     bool outcome = m.get_outcome();
 
     Eigen::MatrixXcd P;
+    double prob_zero;
     if (outcome) {
       P = (id - matrix)/2.0;
+      prob_zero = 1.0 - std::abs(expectation(P));
     } else {
       P = (id + matrix)/2.0;
+      prob_zero = std::abs(expectation(P));
     }
 
-    double prob_zero = std::abs(expectation(P));
-    bool invalid = check_forced_measure(outcome, 1.0 - prob_zero);
+    bool invalid = check_forced_measure(outcome, prob_zero);
     if (invalid) {
       P = id - P;
     }

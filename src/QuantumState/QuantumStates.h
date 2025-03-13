@@ -193,7 +193,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     }
 
     static inline bool check_forced_measure(bool& outcome, double prob_zero) {
-      if ((1.0 - prob_zero < QS_ATOL && outcome) || (prob_zero < QS_ATOL && !outcome)) {
+      if (((1.0 - prob_zero) < QS_ATOL && outcome) || (prob_zero < QS_ATOL && !outcome)) {
         outcome = !outcome;
         std::cerr << "Invalid forced measurement.\n";
         return true;

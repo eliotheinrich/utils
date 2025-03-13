@@ -116,22 +116,22 @@ std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m) const {
 double Statevector::mzr_prob(uint32_t q, bool outcome) const {
   uint32_t s = 1u << num_qubits;
 
-  double prob_zero = 0.0;
+  double prob_one = 0.0;
   for (uint32_t i = 0; i < s; i++) {
-    if (((i >> q) & 1u) == 0) {
-      prob_zero += std::pow(std::abs(data(i)), 2);
+    if ((i >> q) & 1u) {
+      prob_one += std::pow(std::abs(data(i)), 2);
     }
   }
 
   if (outcome) {
-    return prob_zero;
+    return prob_one;
   } else {
-    return 1.0 - prob_zero;
+    return 1.0 - prob_one;
   }
 }
 
 bool Statevector::forced_mzr(uint32_t q, bool outcome) {
-  double prob_zero = mzr_prob(q, outcome);
+  double prob_zero = mzr_prob(q, 0);
   check_forced_measure(outcome, prob_zero);
 
   uint32_t s = 1u << num_qubits;
