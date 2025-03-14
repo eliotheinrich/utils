@@ -59,7 +59,9 @@ NB_MODULE(qutils_bindings, m) {
     .def("__str__", &QuantumCircuit::to_string)
     .def("num_params", &QuantumCircuit::num_params)
     .def("length", &QuantumCircuit::length)
-    .def("mzr", [](QuantumCircuit& self, uint32_t q) { self.add_measurement({q}, PauliString("+Z")); })
+    .def("mzr", [](QuantumCircuit& self, uint32_t q, std::optional<bool> outcome) { 
+      self.add_measurement(Measurement::computational_basis(q, outcome)); 
+    }, "qubit"_a, "outcome"_a = std::nullopt)
     .def("add_measurement", [](QuantumCircuit& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
       self.add_measurement(qubits, pauli, outcome);
     }, "qubits"_a, "pauli"_a, "outcome"_a=std::nullopt)
@@ -144,7 +146,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("probabilities", &QuantumState::probabilities)
     .def("purity", &QuantumState::purity)
     .def("mzr", [](QuantumState& self, uint32_t q, std::optional<bool> outcome) {
-      return self.measure(Measurement({q}, PauliString("+Z"), outcome)); 
+      return self.measure(Measurement::computational_basis(q, outcome));
     }, "qubit"_a, "outcome"_a=std::nullopt)
     .def("measure", [](QuantumState& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
       return self.measure(Measurement(qubits, pauli, outcome));

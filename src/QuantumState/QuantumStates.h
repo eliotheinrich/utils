@@ -205,6 +205,14 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     virtual bool measure(const Measurement& m)=0;
     virtual bool weak_measure(const WeakMeasurement& m)=0;
 
+    // Helper functions
+    bool measure(const Qubits& qubits, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt) {
+      return measure(Measurement(qubits, pauli, outcome));
+    }
+    bool weak_measure(const Qubits& qubits, double beta, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt) {
+      return weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
+    }
+
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
 
@@ -369,8 +377,6 @@ class Statevector : public QuantumState {
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
-
-    void evolve(const QuantumCircuit& circuit, const std::vector<bool>& outcomes);
 
 		double mzr_prob(uint32_t q, bool outcome) const;
 		bool mzr(uint32_t q);

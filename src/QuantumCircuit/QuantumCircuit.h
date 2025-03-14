@@ -150,6 +150,8 @@ class QuantumCircuit {
     void append(const Instruction& inst);
 
     QuantumCircuit bind_params(const std::vector<double>& params) const;
+    size_t get_num_measurements() const;
+    void set_measurement_outcomes(const std::vector<bool>& outcomes);
 
     QuantumCircuit adjoint(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
     QuantumCircuit reverse() const;

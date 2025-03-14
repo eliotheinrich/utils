@@ -18,6 +18,10 @@ Measurement::Measurement(const Qubits& qubits, std::optional<PauliString> pauli,
   }
 }
 
+Measurement Measurement::computational_basis(uint32_t q, std::optional<bool> outcome) {
+  return Measurement({q}, PauliString("+Z"), outcome);
+}
+
 PauliString Measurement::get_pauli() const {
   if (pauli) {
     return pauli.value();

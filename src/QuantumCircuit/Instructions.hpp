@@ -668,6 +668,7 @@ struct Measurement {
   std::optional<bool> outcome;
 
   Measurement(const Qubits& qubits, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt);
+  static Measurement computational_basis(uint32_t q, std::optional<bool> outcome=std::nullopt);
   PauliString get_pauli() const;
   bool is_basis() const;
   bool is_forced() const;

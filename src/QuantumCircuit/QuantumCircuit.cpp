@@ -231,6 +231,35 @@ QuantumCircuit QuantumCircuit::bind_params(const std::vector<double>& params) co
   return qc;
 }
 
+size_t QuantumCircuit::get_num_measurements() const {
+  size_t n = 0;
+  for (auto const& inst : instructions) {
+		std::visit(quantumcircuit_utils::overloaded {
+      [](std::shared_ptr<Gate> gate) { },
+      [&](const Measurement& m) { n++; },
+      [&](const WeakMeasurement& m) { n++; }
+    }, inst);
+  }
+
+  return n;
+}
+
+void QuantumCircuit::set_measurement_outcomes(const std::vector<bool>& outcomes) {
+  size_t num_measurements = get_num_measurements();
+  if (outcomes.size() != num_measurements) {
+    throw std::runtime_error(fmt::format("Passed {} measurement outcomes to a circuit with {} measurements.", outcomes.size(), num_measurements));
+  }
+
+  size_t n = 0;
+  for (auto& inst : instructions) {
+		std::visit(quantumcircuit_utils::overloaded {
+      [](std::shared_ptr<Gate> gate) { },
+      [&](Measurement& m) { m.outcome = outcomes[n++]; },
+      [&](WeakMeasurement& m) { m.outcome = outcomes[n++]; }
+    }, inst);
+  }
+}
+
 void QuantumCircuit::random_clifford(const Qubits& qubits, std::minstd_rand& rng) {
   random_clifford_impl(qubits, rng, *this);
 }
