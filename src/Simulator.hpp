@@ -6,6 +6,8 @@
 
 #include <Frame.h>
 
+#include "Random.hpp"
+
 struct Color {
   float r;
   float g;
@@ -81,28 +83,7 @@ class Texture {
 
 class Simulator {
   public:
-    // All simulators are equipeed with a random number generator
-    int rand() { 
-      return rng(); 
-    }
-
-    double randf() { 
-      return double(rng())/double(RAND_MAX); 
-    }
-
-    void seed(int i) {
-      rng.seed(i);
-    }
-
-    Simulator(dataframe::ExperimentParams &params) {
-      s = dataframe::utils::get<int>(params, "seed", -1);
-      if (s == -1) {
-        thread_local std::random_device rd;
-        seed(rd());
-      } else {
-        seed(s);
-      }
-    }
+    Simulator(dataframe::ExperimentParams &params) { }
 
     virtual ~Simulator()=default;
 
@@ -138,9 +119,6 @@ class Simulator {
     virtual Texture get_texture() const {
       return Texture();
     }
-
-  private:
-    int s;
 
   protected:
     std::minstd_rand rng;

@@ -333,10 +333,8 @@ class MatrixProductStateImpl {
       return e;
     }
 
-    static void inspect_svd_error() {
-      std::string filename = "svd_error60440.eve";
+    static void inspect_svd_error(const std::string& filename) {
       svd_error e = read_svd_error(filename);    
-
 
       auto bytes = e.mps_bytes;
       MatrixProductStateImpl mps;
@@ -1218,9 +1216,10 @@ class MatrixProductStateImpl {
       return {pauli, amplitudes};
     }
 
-    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples, std::minstd_rand& rng) {
+    std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
       std::vector<PauliAmplitudes> samples(num_samples);
 
+      std::minstd_rand rng(randi());
       for (size_t k = 0; k < num_samples; k++) {
         samples[k] = sample_pauli(supports, rng);
       } 
@@ -1230,7 +1229,7 @@ class MatrixProductStateImpl {
 
     std::vector<PauliAmplitudes> sample_paulis_montecarlo(
       PauliExpectationTree& tree, const std::vector<QubitSupport>& supports, 
-      size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PauliMutationFunc mutation, std::minstd_rand& rng
+      size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PauliMutationFunc mutation
     ) {
       PauliString p = tree.to_pauli_string();
       auto perform_mutation = [&](PauliString& p) -> double {
@@ -1238,7 +1237,7 @@ class MatrixProductStateImpl {
         double p1 = prob(t1);
 
         PauliString q(p);
-        mutation(q, rng);
+        mutation(q);
 
         PauliString product = q*p;
 
@@ -1247,7 +1246,7 @@ class MatrixProductStateImpl {
         double t2 = std::abs(tree.expectation());
         double p2 = prob(t2);
 
-        double r = static_cast<double>(rng())/static_cast<double>(RAND_MAX); 
+        double r = randf();
         if (r < p2 / p1) {
           p = PauliString(q);
           return t2;
@@ -1466,10 +1465,8 @@ class MatrixProductStateImpl {
         if (T) {
           t = *T;
         }
-        svd_error error{QuantumState::initial_seed, t, to_bytes(), q, truncate};
-        thread_local std::random_device gen;
-        std::minstd_rand rng(gen());
-        uint16_t r = rng();
+        svd_error error{Random::get_seed(), t, to_bytes(), q, truncate};
+        uint32_t r = randi();
 
         write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
 
@@ -1840,7 +1837,7 @@ class MatrixProductStateImpl {
       assert_state_valid(fmt::format("Error after applying measurement on {}.", qubits));
     }
 
-    MeasurementResult measurement_result(const Measurement& m, double r) {
+    MeasurementResult measurement_result(const Measurement& m) {
       PauliString pauli = m.get_pauli();
       Qubits qubits = m.qubits;
 
@@ -1869,7 +1866,7 @@ class MatrixProductStateImpl {
       if (m.is_forced()) {
         b = m.get_outcome();
       } else {
-        b = r > prob_zero;
+        b = randf() > prob_zero;
       }
 
       QuantumState::check_forced_measure(b, prob_zero);
@@ -1878,13 +1875,13 @@ class MatrixProductStateImpl {
       return MeasurementResult(proj, prob_zero, b);
     }
 
-    bool measure(const Measurement& m, double r) {
-      auto result = measurement_result(m, r);
+    bool measure(const Measurement& m) {
+      auto result = measurement_result(m);
       apply_measure(result, m.qubits);
       return result.outcome;
     }
 
-    MeasurementResult weak_measurement_result(const WeakMeasurement& m, double r) {
+    MeasurementResult weak_measurement_result(const WeakMeasurement& m) {
       PauliString pauli = m.get_pauli();
       Qubits qubits = m.qubits;
 
@@ -1912,7 +1909,7 @@ class MatrixProductStateImpl {
       if (m.is_forced()) {
         b = m.get_outcome();
       } else {
-        b = r > prob_zero;
+        b = randf() > prob_zero;
       }
 
       Eigen::MatrixXcd t = pm;
@@ -1929,8 +1926,8 @@ class MatrixProductStateImpl {
       return MeasurementResult(proj, prob_zero, b);
     }
 
-    bool weak_measure(const WeakMeasurement& m, double r) {
-      auto result = weak_measurement_result(m, r);
+    bool weak_measure(const WeakMeasurement& m) {
+      auto result = weak_measurement_result(m);
       apply_measure(result, m.qubits);
       return result.outcome;
     }
@@ -2412,19 +2409,19 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector
 
   impl->orthogonalize(0);
 
-  //return impl->sample_paulis(qubits, num_samples, QuantumState::rng);
+  //return impl->sample_paulis(qubits, num_samples);
   // Should these checks be done in Impl?
   std::vector<PauliAmplitudes> samples;
   if (impl->is_pure_state()) {
-    samples = impl->sample_paulis(supports, num_samples, QuantumState::rng);
+    samples = impl->sample_paulis(supports, num_samples);
   } else if (impl->blocks.size() == 1) {
     if (impl->block_map.contains(0)) { // Left-bipartite
       // TODO check that this is correct!
-      samples = impl->sample_paulis(supports, num_samples, QuantumState::rng);
+      samples = impl->sample_paulis(supports, num_samples);
     } else if (impl->block_map.contains(impl->num_blocks() - 1)) { // Right-bipartite
       MatrixProductState reversed(*this);
       reversed.reverse();
-      samples = reversed.impl->sample_paulis(supports, num_samples, QuantumState::rng);
+      samples = reversed.impl->sample_paulis(supports, num_samples);
     } else {
       throw std::runtime_error("Cannot currently perform sample_paulis on non-bipartite mixed states.");
     }
@@ -2452,7 +2449,7 @@ std::vector<PauliAmplitudes> MatrixProductState::sample_paulis_montecarlo(const 
   PauliString p(num_qubits);
   PauliExpectationTree tree(*this, p);
 
-  auto samples = impl->sample_paulis_montecarlo(tree, supports, num_samples, equilibration_timesteps, prob, mutation, QuantumState::rng);
+  auto samples = impl->sample_paulis_montecarlo(tree, supports, num_samples, equilibration_timesteps, prob, mutation);
   impl->set_orthogonality_level(i);
   return samples;
 }
@@ -2543,19 +2540,11 @@ double MatrixProductState::purity() const {
 }
 
 bool MatrixProductState::measure(const Measurement& m) {
-  if (m.is_forced()) {
-    return impl->measure(m, 0.0);
-  } else {
-    return impl->measure(m, QuantumState::randf()); // Unforced measurement needs a source of randomness
-  }
+  return impl->measure(m);
 }
 
 bool MatrixProductState::weak_measure(const WeakMeasurement& m) {
-  if (m.is_forced()) {
-    return impl->weak_measure(m, 0.0);
-  } else {
-    return impl->weak_measure(m, QuantumState::randf()); // Unforced measurement needs a source of randomness
-  }
+  return impl->weak_measure(m);
 }
 
 std::vector<double> MatrixProductState::get_logged_truncerr() {
@@ -2648,8 +2637,8 @@ PauliString PauliExpectationTree::to_pauli_string() const {
 
 
 bool inspect_svd_error() {
-  MatrixProductStateImpl::inspect_svd_error();
-
+  std::string filename = "";
+  MatrixProductStateImpl::inspect_svd_error(filename);
   return true;
 }
 

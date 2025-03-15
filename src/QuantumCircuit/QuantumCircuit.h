@@ -143,7 +143,7 @@ class QuantumCircuit {
       add_gate("swap", {q1, q2});
     }
 
-    void random_clifford(const Qubits& qubits, std::minstd_rand& rng);
+    void random_clifford(const Qubits& qubits);
 
     void append(const QuantumCircuit& other);
     void append(const QuantumCircuit& other, const Qubits& qubits);
@@ -174,7 +174,7 @@ struct fmt::formatter<QuantumCircuit> {
 
 // --- Library for building common circuits --- //
 
-QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc=true, std::optional<int> seed = std::nullopt);
+QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc=true);
 QuantumCircuit hardware_efficient_ansatz(uint32_t num_qubits, uint32_t depth, const std::vector<std::string>& rotation_gates, const std::string& entangling_gate = "cz", bool final_layer = true);
 QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<Qubits>& qargs_opt = std::nullopt);
-QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng);
+QuantumCircuit random_clifford(uint32_t num_qubits);

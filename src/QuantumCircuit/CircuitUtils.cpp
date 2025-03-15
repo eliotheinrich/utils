@@ -58,7 +58,9 @@ std::pair<uint32_t, uint32_t> get_targets(uint32_t d, uint32_t q, uint32_t num_q
   }
 }
 
-Eigen::MatrixXcd haar_unitary(uint32_t num_qubits, std::minstd_rand &rng) {
+Eigen::MatrixXcd haar_unitary(uint32_t num_qubits) {
+  std::minstd_rand rng(randi());
+
   Eigen::MatrixXcd z = Eigen::MatrixXcd::Zero(1u << num_qubits, 1u << num_qubits);
   std::normal_distribution<double> distribution(0.0, 1.0);
 
@@ -80,17 +82,11 @@ Eigen::MatrixXcd haar_unitary(uint32_t num_qubits, std::minstd_rand &rng) {
   return q * d;
 }
 
-Eigen::MatrixXcd haar_unitary(uint32_t num_qubits) {
-  thread_local std::random_device rng;
-  std::minstd_rand gen(rng());
-  return haar_unitary(num_qubits, gen);
-}
-
-Eigen::MatrixXcd random_real_unitary(std::minstd_rand &rng) {
+Eigen::MatrixXcd random_real_unitary() {
   Eigen::MatrixXcd u = Eigen::MatrixXcd(4u, 4u);
 
-  double t1 = double(rng())/double(RAND_MAX);
-  double t2 = double(rng())/double(RAND_MAX);
+  double t1 = randf();
+  double t2 = randf();
   double ct1 = std::cos(t1);
   double ct2 = std::cos(t2);
   double st1 = std::sin(t1);
@@ -102,12 +98,6 @@ Eigen::MatrixXcd random_real_unitary(std::minstd_rand &rng) {
     st1*st2,-ct2*st1,-ct1*st2,-ct1*ct2;
 
   return u;
-}
-
-Eigen::MatrixXcd random_real_unitary() {
-  thread_local std::random_device rng;
-  std::minstd_rand gen(rng());
-  return random_real_unitary(gen);
 }
 
 Eigen::MatrixXcd full_circuit_unitary(const Eigen::MatrixXcd &gate, const Qubits &qubits, uint32_t total_qubits) {

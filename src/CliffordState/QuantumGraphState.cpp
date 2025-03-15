@@ -370,7 +370,7 @@ void QuantumGraphState::cz(uint32_t a, uint32_t b) {
 }
 
 void QuantumGraphState::random_clifford(const Qubits& qubits) {
-  random_clifford_impl(qubits, rng, *this);
+  random_clifford_impl(qubits, *this);
 }
 
 double QuantumGraphState::mzr_expectation(uint32_t a) {

@@ -260,8 +260,8 @@ void QuantumCircuit::set_measurement_outcomes(const std::vector<bool>& outcomes)
   }
 }
 
-void QuantumCircuit::random_clifford(const Qubits& qubits, std::minstd_rand& rng) {
-  random_clifford_impl(qubits, rng, *this);
+void QuantumCircuit::random_clifford(const Qubits& qubits) {
+  random_clifford_impl(qubits, *this);
 }
 
 QuantumCircuit QuantumCircuit::adjoint(const std::optional<std::vector<double>>& params_opt) const {
@@ -359,15 +359,7 @@ Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<doubl
 }
 
 // --- Library for building common circuits --- //
-QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc, std::optional<int> seed) {
-  std::minstd_rand rng;
-  if (seed.has_value()) {
-    rng.seed(seed.value());
-  } else {
-    thread_local std::random_device rd;
-    rng.seed(rd());
-  }
-
+QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool pbc) {
   QuantumCircuit circuit(num_qubits);
 
   for (uint32_t i = 0; i < depth; i++) {
@@ -379,7 +371,7 @@ QuantumCircuit generate_haar_circuit(uint32_t num_qubits, uint32_t depth, bool p
         }
       }
 
-      circuit.add_gate(haar_unitary(2, rng), {q1, q2});
+      circuit.add_gate(haar_unitary(2), {q1, q2});
     }
   }
 
@@ -445,12 +437,12 @@ QuantumCircuit rotation_layer(uint32_t num_qubits, const std::optional<Qubits>& 
   return circuit;
 }
 
-QuantumCircuit random_clifford(uint32_t num_qubits, std::minstd_rand& rng) {
+QuantumCircuit random_clifford(uint32_t num_qubits) {
   QuantumCircuit qc(num_qubits);
 
   Qubits qubits(num_qubits);
   std::iota(qubits.begin(), qubits.end(), 0);
-  random_clifford_impl(qubits, rng, qc);
+  random_clifford_impl(qubits, qc);
 
   return qc;
 }

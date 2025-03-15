@@ -69,10 +69,12 @@ class CliffordTable {
     }
 
     template <typename... Args>
-    void apply_random(std::minstd_rand& rng, const Qubits& qubits, Args&... args) {
-      size_t r1 = rng() % circuits.size();
+    void apply_random(const Qubits& qubits, Args&... args) {
+      size_t r1 = randi() % circuits.size();
 
       auto [X, Z, r2] = circuits[r1];
+
+      std::cout << fmt::format("Chose r1 = {}, r2 = {}\n", r1, r2);
 
       reduce_paulis(X, Z, qubits, args...);
       (single_qubit_clifford_impl(args, qubits[0], r2), ...);

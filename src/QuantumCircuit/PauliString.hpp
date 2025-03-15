@@ -8,6 +8,7 @@
 #include <ranges>
 
 #include "CircuitUtils.h"
+#include "Random.hpp"
 
 template <typename T>
 static void remove_even_indices(std::vector<T> &v) {
@@ -193,14 +194,14 @@ class PauliString {
       set_r(phase);
     }
 
-    static PauliString rand(uint32_t num_qubits, std::minstd_rand& rng) {
+    static PauliString rand(uint32_t num_qubits) {
       PauliString p(num_qubits);
 
       for (uint32_t j = 0; j < p.width; j++) {
-        p.bit_string[j] = rng();
+        p.bit_string[j] = randi();
       }
 
-      p.set_r(rng() % 4);
+      p.set_r(randi() % 4);
 
       if (num_qubits == 0) {
         return p;
@@ -213,11 +214,11 @@ class PauliString {
         }
       }
 
-      return PauliString::rand(num_qubits, rng);
+      return PauliString::rand(num_qubits);
     }
 
-    static PauliString randh(uint32_t num_qubits, std::minstd_rand& rng) {
-      PauliString p = PauliString::rand(num_qubits, rng);
+    static PauliString randh(uint32_t num_qubits) {
+      PauliString p = PauliString::rand(num_qubits);
       p.set_r(p.get_r() + p.get_r() & 0b1);
 
       return p;
@@ -985,12 +986,12 @@ void reduce_paulis_inplace(PauliString& p1, PauliString& p2, const Qubits& qubit
 
 // Performs an iteration of the random clifford algorithm outlined in https://arxiv.org/pdf/2008.06011.pdf
 template <typename... Args>
-void random_clifford_iteration_impl(const Qubits& qubits, std::minstd_rand& rng, Args&... args) {
+void random_clifford_iteration_impl(const Qubits& qubits, Args&... args) {
   size_t num_qubits = qubits.size();
 
   // If only acting on one qubit, can easily lookup from a table
   if (num_qubits == 1) {
-    size_t r = rng() % 24;
+    size_t r = randi() % 24;
     (single_qubit_clifford_impl(args, {qubits[0]}, r), ...);
     return;
   }
@@ -998,21 +999,21 @@ void random_clifford_iteration_impl(const Qubits& qubits, std::minstd_rand& rng,
   Qubits qubits_(num_qubits);
   std::iota(qubits_.begin(), qubits_.end(), 0);
 
-  PauliString p1 = PauliString::randh(num_qubits, rng);
-  PauliString p2 = PauliString::randh(num_qubits, rng);
+  PauliString p1 = PauliString::randh(num_qubits);
+  PauliString p2 = PauliString::randh(num_qubits);
   while (p1.commutes(p2)) {
-    p2 = PauliString::randh(num_qubits, rng);
+    p2 = PauliString::randh(num_qubits);
   }
 
   reduce_paulis_inplace(p1, p2, qubits, args...);
 }
 
 template <typename... Args>
-void random_clifford_impl(const Qubits& qubits, std::minstd_rand& rng, Args&... args) {
+void random_clifford_impl(const Qubits& qubits, Args&... args) {
   Qubits qubits_(qubits.begin(), qubits.end());
 
   for (uint32_t i = 0; i < qubits.size(); i++) {
-    random_clifford_iteration_impl(qubits_, rng, args...);
+    random_clifford_iteration_impl(qubits_, args...);
     qubits_.pop_back();
   }
 }

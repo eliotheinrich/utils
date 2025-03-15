@@ -358,7 +358,8 @@ bool DensityMatrix::weak_measure(const WeakMeasurement& m) {
     double prob1 = std::abs(expectation(P1));
 
     // TODO check this
-    data = P0*data*P0.adjoint()/std::sqrt(prob0) + P1*data*P1.adjoint()/std::sqrt(prob1);
+    data = P0*data*P0.adjoint()/(prob0*prob0) + P1*data*P1.adjoint()/(prob1*prob1);
+    data /= trace();
     return 0;
   }
 }

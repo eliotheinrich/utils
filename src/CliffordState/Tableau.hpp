@@ -208,22 +208,16 @@ class Tableau {
     }
 
     void evolve(const QuantumCircuit& qc) {
-      thread_local std::random_device gen;
-      std::minstd_rand rng(gen());
-      evolve(qc, rng);
-    }
-
-    void evolve(const QuantumCircuit& qc, std::minstd_rand& rng) {
       if (!qc.is_clifford()) {
         throw std::runtime_error("Provided circuit is not Clifford.");
       }
 
 			for (auto const &inst : qc.instructions) {
-				evolve(inst, rng);
+				evolve(inst);
 			}
     }
 
-		void evolve(const Instruction& inst, std::minstd_rand& rng) {
+		void evolve(const Instruction& inst) {
 			std::visit(quantumcircuit_utils::overloaded{
 				[this](std::shared_ptr<Gate> gate) { 
           std::string name = gate->label();
@@ -248,12 +242,12 @@ class Tableau {
             throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to Tableau.evolve.", name));
           }
 				},
-				[this, &rng](const Measurement& m) { 
+				[this](const Measurement& m) { 
           if (!m.is_basis()) {
             throw std::runtime_error("Currently, can only perform measurements in computational basis on Clifford states.");
           }
 
-          mzr(m.qubits[0], rng);
+          mzr(m.qubits[0]);
 				},
         [this](const WeakMeasurement& m) {
           throw std::runtime_error("Cannot perform weak measurements on Clifford states.");
@@ -334,7 +328,7 @@ class Tableau {
       return std::pair(true, 0);
     }
 
-    bool mzr(uint32_t a, std::minstd_rand& rng) {
+    bool mzr(uint32_t a) {
       validate_qubit(a);
       if (!track_destabilizers) {
         throw std::invalid_argument("Cannot mzr without track_destabilizers.");
@@ -344,7 +338,7 @@ class Tableau {
       auto [deterministic, p] = mzr_deterministic(a);
 
       if (!deterministic) {
-        bool outcome = rng() % 2;
+        bool outcome = randi() % 2;
         for (uint32_t i = 0; i < 2*num_qubits; i++) {
           if (i != p && get_x(i, a)) {
             rowsum(i, p);

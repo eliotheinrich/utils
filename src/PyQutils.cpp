@@ -191,6 +191,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<DensityMatrix, QuantumState>(m, "DensityMatrix")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
+    .def_ro("data", &DensityMatrix::data)
     .def("expectation_matrix", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })

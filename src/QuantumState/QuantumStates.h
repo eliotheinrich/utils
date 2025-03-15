@@ -1,5 +1,6 @@
 #include "QuantumCircuit.h"
 #include "EntropyState.hpp"
+#include "Random.hpp"
 
 #include <map>
 #include <bitset>
@@ -19,7 +20,7 @@ using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
 
 using PartialState = std::pair<std::shared_ptr<QuantumState>, QubitSupport>;
 
-using PauliMutationFunc = std::function<void(PauliString&, std::minstd_rand&)>;
+using PauliMutationFunc = std::function<void(PauliString&)>;
 using ProbabilityFunc = std::function<double(double)>;
 
 using MutualMagicAmplitudes = std::vector<std::vector<double>>; // tA, tB, tAB
@@ -36,33 +37,9 @@ struct MeasurementResult {
 
 class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
 	protected:
-    static thread_local std::minstd_rand rng;
-
-    static uint32_t rand() { 
-      return QuantumState::rng(); 
-    }
-
-    static double randf() { 
-      return static_cast<double>(QuantumState::rand())/static_cast<double>(RAND_MAX); 
-    }
-
     bool use_parent;
 
 	public:
-    using outcome_t = std::variant<double, bool>;
-
-		static void seed(int s) {
-      QuantumState::initial_seed = s;
-      QuantumState::rng.seed(s);
-		}
-
-    static unsigned int random_seed() {
-      thread_local std::random_device gen;
-      return gen();
-    }
-
-    static unsigned int initial_seed;
-
 		uint32_t num_qubits;
 		uint32_t basis;
 
@@ -134,7 +111,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     DEFINE_ALL_TWO_QUBIT_GATES
 
     void random_clifford(const Qubits& qubits) {
-      random_clifford_impl(qubits, QuantumState::rng, *this);
+      random_clifford_impl(qubits, *this);
     }
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) {
@@ -487,8 +464,6 @@ class MatrixProductState : public QuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
-    void id(uint32_t q1, uint32_t q2);
-
 		virtual std::vector<double> probabilities() const override {
 			Statevector statevector(*this);
 			return statevector.probabilities();
@@ -512,7 +487,7 @@ class MatrixProductState : public QuantumState {
     virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
-void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng);
+void single_qubit_random_mutation(PauliString& p);
 
 std::vector<QubitSupport> get_bipartite_supports(size_t num_qubits);
 

@@ -1,19 +1,9 @@
 #include "QuantumStates.h"
 #include <stdexcept>
 
-unsigned int QuantumState::initial_seed = 0;
-
-static unsigned int get_random_seed() {
-  unsigned int r = QuantumState::random_seed();
-  QuantumState::initial_seed = r;
-  return r;
-}
-
-thread_local std::minstd_rand QuantumState::rng{get_random_seed()};
-
-void single_qubit_random_mutation(PauliString& p, std::minstd_rand& rng) {
-  size_t j = rng() % p.num_qubits;
-  size_t g = rng() % 4;
+void single_qubit_random_mutation(PauliString& p) {
+  size_t j = randi() % p.num_qubits;
+  size_t g = randi() % 4;
 
   if (g == 0) {
     p.set_x(j, 0);
@@ -129,6 +119,7 @@ std::vector<PauliAmplitudes> QuantumState::sample_paulis_exact(const std::vector
   }
 
   std::discrete_distribution<> dist(pauli_pdf.begin(), pauli_pdf.end()); 
+  std::minstd_rand rng(randi());
 
   std::vector<PauliAmplitudes> samples;
   for (size_t i = 0; i < num_samples; i++) {
@@ -150,12 +141,12 @@ std::vector<PauliAmplitudes> QuantumState::sample_paulis_montecarlo(const std::v
     double p1 = prob(t1);
 
     PauliString q(p);
-    mutation(q, rng);
+    mutation(q);
 
     double t2 = std::abs(expectation(q));
     double p2 = prob(t2);
 
-    double r = QuantumState::randf();
+    double r = randf();
     if (r < p2 / p1) {
       p = PauliString(q);
       return t2;

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "QuantumCircuit.h"
-
 #include "EntropyState.hpp"
+#include "Random.hpp"
 
 #include <algorithm>
 #include <format>
@@ -20,32 +20,11 @@ static inline CliffordType parse_clifford_type(std::string s) {
 }
 
 class CliffordState : public EntropyState {
-  protected:
-    static thread_local std::minstd_rand rng;
-
   public:
     size_t num_qubits;
     CliffordState()=default;
 
     CliffordState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits) {}
-
-    static void seed(int s) {
-      CliffordState::rng.seed(s);
-    }
-
-    static unsigned int random_seed() {
-      thread_local std::random_device gen;
-      return gen();
-    }
-
-    static uint32_t rand() {
-      return CliffordState::rng();
-    }
-
-    static double randf() {
-      return static_cast<double>(CliffordState::rand())/static_cast<double>(RAND_MAX);
-    }
-
     virtual ~CliffordState() {}
 
     void evolve(const QuantumCircuit& qc, const Qubits& qubits) {

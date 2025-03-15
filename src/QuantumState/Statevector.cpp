@@ -1,4 +1,5 @@
 #include "QuantumStates.h"
+#include "utils.hpp"
 
 #include <unsupported/Eigen/MatrixFunctions>
 
@@ -147,7 +148,7 @@ bool Statevector::forced_mzr(uint32_t q, bool outcome) {
 
 bool Statevector::mzr(uint32_t q) {
   double prob_zero = mzr_prob(q, 0);
-  uint32_t outcome = !(QuantumState::randf() < prob_zero);
+  uint32_t outcome = !(randf() < prob_zero);
 
   return forced_mzr(q, outcome);
 }
@@ -175,7 +176,7 @@ bool Statevector::measure(const Measurement& m) {
   if (m.is_forced()) {
     b = m.get_outcome();
   } else {
-    double r = QuantumState::randf();
+    double r = randf();
     b = (r > prob_zero);
   }
 
@@ -201,7 +202,7 @@ bool Statevector::weak_measure(const WeakMeasurement& m) {
   if (m.is_forced()) {
     b = m.get_outcome();
   } else {
-    double r = QuantumState::randf();
+    double r = randf();
     b = (r >= prob_zero);
   }
 
@@ -254,35 +255,39 @@ void Statevector::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
 }
 
 // Vector representing diagonal gate
-void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate, const Qubits& qubits) {
-  throw std::runtime_error("evolve_diagonal is currently bugged.");
+void Statevector::evolve_diagonal(const Eigen::VectorXcd& gate, const Qubits& qubits) {
+  uint32_t h = 1u << qubits.size();
 
-  //uint32_t s = 1u << num_qubits;
-  //uint32_t h = 1u << qubits.size();
+  if (gate.size() != h) {
+    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+  }
 
-  //if (gate.size() != h) {
-  //  throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
-  //}
+  //  uint32_t b1 = quantumstate_utils::reduce_bits(a1, qubits);
 
-  //for (uint32_t a = 0; a < s; a++) {
-  //  uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
+  //  for (uint32_t b2 = 0; b2 < h; b2++) {
+  //    uint32_t a2 = a1;
+  //    for (uint32_t j = 0; j < qubits.size(); j++) {
+  //      a2 = quantumstate_utils::set_bit(a2, qubits[j], b2, j);
+  //    }
 
-  //  data(a) *= gate(h - b - 1);
-  //}
+  //    ndata(a1) += gate(b1, b2)*data(a2);
+  //  }
+
+
+  for (uint32_t a = 0; a < basis; a++) {
+    uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
+    data(a) *= gate(b);
+  }
 }
 
-void Statevector::evolve_diagonal(const Eigen::VectorXcd &gate) {
-  throw std::runtime_error("evolve_diagonal is currently bugged.");
+void Statevector::evolve_diagonal(const Eigen::VectorXcd& gate) {
+  if (gate.size() != basis) {
+    throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
+  }
 
-  //uint32_t s = 1u << num_qubits;
-
-  //if (gate.size() != s) {
-  //  throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
-  //}
-
-  //for (uint32_t a = 0; a < s; a++) {
-  //  data(a) *= gate(a);
-  //}
+  for (uint32_t a = 0; a < basis; a++) {
+    data(a) *= gate(a);
+  }
 }
 
 double Statevector::norm() const {

@@ -1245,6 +1245,38 @@ bool test_forced_measurement() {
   return true;
 }
 
+bool test_statevector_diagonal_gate() {
+  constexpr size_t nqb = 6;
+  auto rng = seeded_rng();
+
+  QuantumCircuit qc(nqb);
+  for(size_t i = 0; i < nqb; i++) {
+    qc.h(i);
+  }
+
+  Statevector psi1(qc);
+  Statevector psi2(qc);
+
+  auto randexp = [&]() { return std::exp(-std::complex<double>(0.0, randf(rng) * 2 * M_PI)); };
+  for (size_t i = 0; i < 5; i++) {
+    size_t k = rng() % (nqb - 1) + 1;
+    auto qubits = random_qubits(nqb, k, rng);
+
+    size_t h = 1u << k;
+    Eigen::VectorXcd U(h);
+    for (size_t j = 0; j < h; j++) {
+      U(j) = randexp();
+    }
+
+    psi1.evolve_diagonal(U, qubits);
+    psi2.evolve(U.asDiagonal(), qubits);
+
+    ASSERT(is_close(std::abs(psi1.inner(psi2)), 1.0), "Statevectors not equal after evolving diagonal gates.");
+  }
+
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1297,6 +1329,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_serialize);
   ADD_TEST(test_circuit_measurements);
   ADD_TEST(test_forced_measurement);
+  ADD_TEST(test_statevector_diagonal_gate);
 
   //ADD_TEST(inspect_svd_error);
 

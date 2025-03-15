@@ -99,7 +99,7 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual void random_clifford(const Qubits& qubits) override {
-      random_clifford_impl(qubits, rng, *this);
+      random_clifford_impl(qubits, *this);
     }
 
     virtual double mzr_expectation(uint32_t a) override {
@@ -112,7 +112,7 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual bool mzr(uint32_t a) override {
-      return tableau.mzr(a, rng);
+      return tableau.mzr(a);
     }
 
     virtual double sparsity() const override {
