@@ -2,7 +2,7 @@
 
 using PyMutationFunc = std::function<PauliString(PauliString)>;
 inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
-  return [func](PauliString& p, std::minstd_rand&) { p = func(p); };
+  return [func](PauliString& p) { p = func(p); };
 }
 
 NB_MODULE(qutils_bindings, m) {
@@ -43,9 +43,7 @@ NB_MODULE(qutils_bindings, m) {
       }, "z"_a = true);
 
   m.def("random_paulistring", [](uint32_t num_qubits) {
-    thread_local std::random_device gen;
-    std::minstd_rand rng(gen());
-    return PauliString::rand(num_qubits, rng);
+    return PauliString::randh(num_qubits);
   });
 
   m.def("bitstring_paulistring", [](uint32_t num_qubits, uint32_t bitstring) {
@@ -96,9 +94,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("cz", &QuantumCircuit::cz)
     .def("swap", &QuantumCircuit::swap)
     .def("random_clifford", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) {
-      thread_local std::random_device gen;
-      std::minstd_rand rng(gen());
-      self.random_clifford(qubits, rng);
+      self.random_clifford(qubits);
     })
     .def("adjoint", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.adjoint(params); }, "params"_a = nanobind::none())
     .def("reverse", &QuantumCircuit::reverse)
@@ -106,9 +102,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("to_matrix", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.to_matrix(params); }, "params"_a = nanobind::none());
 
   m.def("random_clifford", [](uint32_t num_qubits) { 
-    thread_local std::random_device gen;
-    std::minstd_rand rng(gen());
-    return random_clifford(num_qubits, rng);
+    return random_clifford(num_qubits);
   });
   m.def("single_qubit_random_clifford", [](uint32_t r) {
     QuantumCircuit qc(1);
@@ -338,10 +332,8 @@ NB_MODULE(qutils_bindings, m) {
     .def("circuits", &CliffordTable::get_circuits)
     .def("num_elements", &CliffordTable::num_elements)
     .def("random_circuit", [](CliffordTable& self) {
-      thread_local std::random_device gen;
-      std::minstd_rand rng(gen());
       QuantumCircuit qc(2);
-      self.apply_random(rng, {0, 1}, qc);
+      self.apply_random({0, 1}, qc);
       return qc;
     });
 
@@ -361,10 +353,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("weak_measure_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta) { self.weak_measurement_hamiltonian(A, B, beta); }, "A"_a, "B"_a, "beta"_a = 1.0)
     .def("weak_measure", [](FreeFermionState& self, const Eigen::MatrixXcd& U) { self.weak_measurement(U); }, "H"_a)
     .def("mzr", [](FreeFermionState& self, size_t i) {
-      thread_local std::random_device gen;
-      std::minstd_rand rng(gen());
-      double r = rng()/RAND_MAX;
-      return self.projective_measurement(i, rng()/RAND_MAX);
+      return self.projective_measurement(i, randf());
     })
     .def("num_particles", &FreeFermionState::num_particles)
     .def("correlation_matrix", &FreeFermionState::correlation_matrix)

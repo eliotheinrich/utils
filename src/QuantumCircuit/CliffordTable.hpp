@@ -74,8 +74,6 @@ class CliffordTable {
 
       auto [X, Z, r2] = circuits[r1];
 
-      std::cout << fmt::format("Chose r1 = {}, r2 = {}\n", r1, r2);
-
       reduce_paulis(X, Z, qubits, args...);
       (single_qubit_clifford_impl(args, qubits[0], r2), ...);
     } 
