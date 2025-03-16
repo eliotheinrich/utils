@@ -16,7 +16,7 @@ class ParityCheckMatrix : public BinaryMatrix {
 
     size_t degree(size_t c) const;
     std::vector<size_t> degree_distribution() const;
-    std::pair<std::optional<size_t>, std::vector<size_t>> leaf_removal_iteration(std::minstd_rand& rng);
+    std::pair<std::optional<size_t>, std::vector<size_t>> leaf_removal_iteration();
 
     bool congruent(const GeneratorMatrix& G) const;
     void reduce();

@@ -41,5 +41,5 @@ inline static uint32_t randi() {
 }
 
 inline static double randf() {
-  return static_cast<double>(rand())/static_cast<double>(RAND_MAX);
+  return static_cast<double>(randi())/static_cast<double>(RAND_MAX);
 }
