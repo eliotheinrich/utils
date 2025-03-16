@@ -61,7 +61,7 @@ std::vector<size_t> ParityCheckMatrix::degree_distribution() const {
   return sizes;
 }
 
-std::pair<std::optional<size_t>, std::vector<size_t>> ParityCheckMatrix::leaf_removal_iteration(std::minstd_rand& rng) {
+std::pair<std::optional<size_t>, std::vector<size_t>> ParityCheckMatrix::leaf_removal_iteration() {
   std::vector<size_t> sizes(num_rows+1);
   std::vector<size_t> leafs;
   std::vector<size_t> edges;
@@ -88,7 +88,7 @@ std::pair<std::optional<size_t>, std::vector<size_t>> ParityCheckMatrix::leaf_re
     return {std::nullopt, sizes};
   }
 
-  size_t r = rng() % leafs.size();
+  size_t r = randi() % leafs.size();
   remove_row(edges[r]);
 
   return {edges[r], sizes};

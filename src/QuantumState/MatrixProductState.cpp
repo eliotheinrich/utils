@@ -1471,23 +1471,30 @@ class MatrixProductStateImpl {
         write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
 
         std::cout << "There was a LAPACK error!\n";
+        std::cout << fmt::format("j1, j2  = ({}, {}), bond_dimension = {}, threshold = {:.20f}\n", j1, j2, bond_dimension, threshold);
         std::cout << "\n\n ============================================================================= \n";
+        print_mps();
+        print(U);
+        print(S);
+        print(V);
         if (T) {
           PrintData(*T);
         }
         std:: cout << " ============================================================================= \n";
-        PrintData(theta);
-        std:: cout << " ============================================================================= \n";
-        PrintData(singular_values[j1]);
-        std:: cout << " ============================================================================= \n";
-        if (j2 != num_blocks() - 1) {
-          PrintData(singular_values[j2]);
-        }
+        writeToFile("theta.h5", theta);
 
-        std:: cout << " ============================================================================= \n";
-        if (j1 != 0) {
-          PrintData(singular_values[j1 - 1]);
-        }
+        PrintData(theta);
+        //std:: cout << " ============================================================================= \n";
+        //PrintData(singular_values[j1]);
+        //std:: cout << " ============================================================================= \n";
+        //if (j2 != num_blocks() - 1) {
+        //  PrintData(singular_values[j2]);
+        //}
+
+        //std:: cout << " ============================================================================= \n";
+        //if (j1 != 0) {
+        //  PrintData(singular_values[j1 - 1]);
+        //}
         
         throw e;
       }
@@ -2637,9 +2644,27 @@ PauliString PauliExpectationTree::to_pauli_string() const {
 
 
 bool inspect_svd_error() {
-  std::string filename = "";
-  MatrixProductStateImpl::inspect_svd_error(filename);
-  return true;
+  ITensor theta;
+  readFromFile("theta.h5", theta);
+  print(theta);
+
+  size_t q = 94;
+  std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
+  std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
+
+  size_t bond_dimension = 128;
+  double threshold = 1e-4;
+  print(u_inds);
+  std::cout << "\n";
+  print(v_inds);
+  std::cout << "\n";
+  auto [U, S, V] = svd(theta, u_inds, v_inds, 
+      {"Cutoff=",threshold,"MaxDim=",bond_dimension,
+      "LeftTags=",fmt::format("Internal,Left,n={}", q),
+      "RightTags=",fmt::format("Internal,Right,n={}", q)});
+  //std::string filename = "";
+  //MatrixProductStateImpl::inspect_svd_error(filename);
+  //return true;
 }
 
 int load_seed(const std::string& filename) {

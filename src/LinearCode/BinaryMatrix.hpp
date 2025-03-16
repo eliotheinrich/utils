@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BinaryMatrixBase.hpp"
+#include "Random.hpp"
 
 #include <fmt/format.h>
 
@@ -45,11 +46,11 @@ struct Bitstring {
 
   Bitstring(const Bitstring& bitstring) : Bitstring(bitstring.bits, bitstring.num_bits) {}
 
-  static Bitstring random(uint32_t num_bits, std::minstd_rand& rng) {
+  static Bitstring random(uint32_t num_bits) {
     size_t num_words = num_bits / binary_word_size() + 1;
     std::vector<binary_word> bits(num_words);
     for (size_t i = 0; i < bits.size(); i++) {
-      bits[i] = rng();
+      bits[i] = randi();
     }
 
     return Bitstring(bits, num_bits);

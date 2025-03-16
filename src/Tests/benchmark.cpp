@@ -53,18 +53,18 @@ void randomize_state(QuantumStates&... states) {
 }
 
 template <typename... QuantumStates>
-void randomize_state_haar(std::minstd_rand& rng, QuantumStates&... states) {
+void randomize_state_haar(QuantumStates&... states) {
   size_t num_qubits = get_num_qubits(states...);
 
   QuantumCircuit qc(num_qubits);
   size_t depth = 2;
 
-  qc.append(generate_haar_circuit(num_qubits, depth, false, rng()));
+  qc.append(generate_haar_circuit(num_qubits, depth, false)); 
   qc.apply(states...);
 }
 
 template <typename... QuantumStates>
-void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
+void randomize_state_clifford(QuantumStates&... states) {
   size_t num_qubits = get_num_qubits(states...);
 
   QuantumCircuit qc(num_qubits);
@@ -75,15 +75,16 @@ void randomize_state_clifford(std::minstd_rand& rng, QuantumStates&... states) {
       uint32_t q1 = (k % 2) ? 2*i : 2*i + 1;
       uint32_t q2 = q1 + 1;
 
-      QuantumCircuit rc = random_clifford(2, rng);
-      qc.append(random_clifford(2, rng), {q1, q2});
+      QuantumCircuit rc = random_clifford(2);
+      qc.append(random_clifford(2), {q1, q2});
     }
   }
 
   qc.apply(states...);
 }
 
-Qubits random_qubits(size_t num_qubits, size_t k, std::minstd_rand& rng) {
+Qubits random_qubits(size_t num_qubits, size_t k) {
+  std::minstd_rand rng(randi());
   Qubits qubits(num_qubits);
   std::iota(qubits.begin(), qubits.end(), 0);
   std::shuffle(qubits.begin(), qubits.end(), rng);
@@ -92,30 +93,21 @@ Qubits random_qubits(size_t num_qubits, size_t k, std::minstd_rand& rng) {
   return r;
 }
 
-QubitInterval random_interval(size_t num_qubits, size_t k, std::minstd_rand& rng) {
-  uint32_t q1 = rng() % (num_qubits - k + 1);
+QubitInterval random_interval(size_t num_qubits, size_t k) {
+  uint32_t q1 = randi() % (num_qubits - k + 1);
   uint32_t q2 = q1 + k;
 
   return std::make_pair(q1, q2);
 }
 
-std::minstd_rand seeded_rng() {
-  thread_local std::random_device gen;
-  int seed = gen();
-  std::minstd_rand rng(seed);
-
-  return rng;
-}
-
 void benchmark_magic_mutual_information_montecarlo() {
-  auto rng = seeded_rng();
   constexpr size_t nqb = 16;
 
   MatrixProductState mps(nqb, 112);
   size_t depth = 10;
 
   for (size_t i = 0; i < depth; i++) {
-    randomize_state_haar(rng, mps);
+    randomize_state_haar(mps);
   }
 
   std::vector<uint32_t> qubitsA = {0, 1, 2};
@@ -124,14 +116,13 @@ void benchmark_magic_mutual_information_montecarlo() {
 }
 
 void benchmark_stabilizer_renyi_entropy() {
-  auto rng = seeded_rng();
   constexpr size_t nqb = 16;
 
   MatrixProductState mps(nqb, 32);
   size_t depth = 10;
 
   for (size_t i = 0; i < depth; i++) {
-    randomize_state_haar(rng, mps);
+    randomize_state_haar(mps);
   }
 
   size_t num_samples = 100;
@@ -141,14 +132,13 @@ void benchmark_stabilizer_renyi_entropy() {
 }
 
 void benchmark_stabilizer_renyi_entropy_montecarlo() {
-  auto rng = seeded_rng();
   constexpr size_t nqb = 16;
 
   MatrixProductState mps(nqb, 32);
   size_t depth = 10;
 
   for (size_t i = 0; i < depth; i++) {
-    randomize_state_haar(rng, mps);
+    randomize_state_haar(mps);
   }
 
   size_t num_samples = 100;
