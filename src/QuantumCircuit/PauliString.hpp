@@ -99,40 +99,54 @@ constexpr static std::complex<double> sign_from_bits(uint8_t phase) {
 
 class QuantumCircuit;
 
+using binary_word = uint32_t;
+
 struct BitString {
   uint32_t num_bits;
-  std::vector<uint32_t> bits;
+  std::vector<binary_word> bits;
 
   BitString()=default;
 
   BitString(uint32_t num_bits) : num_bits(num_bits) {
-    size_t width = num_bits / 32 + static_cast<bool>(num_bits % 32);
-    bits = std::vector<uint32_t>(width, 0);
+    size_t width = num_bits / binary_word_size() + static_cast<bool>(num_bits % binary_word_size());
+    bits = std::vector<binary_word>(width, 0);
   }
 
-  static BitString from_bits(size_t num_bits, uint32_t bits) {
-    if (num_bits > 31) {
-      throw std::runtime_error("Cannot create a >31 BitString from a 32-bit integer.");
+  static BitString from_bits(size_t num_bits, binary_word bits) {
+    if (num_bits >= binary_word_size()) {
+      throw std::runtime_error(fmt::format("Cannot create a >{} BitString from a {}-bit integer.", binary_word_size(), sizeof(bits)));
     }
 
     BitString bit_string(num_bits);
 
-    bit_string.bits = std::vector<uint32_t>(1);
+    bit_string.bits = std::vector<binary_word>(1);
     bit_string[0] = bits;
 
     return bit_string;
   }
 
+  uint32_t hamming_weight() const {
+    uint32_t r = 0;
+    for (size_t i = 0; i < num_bits; i++) {
+      r += get(i);
+    }
+    return r;
+  }
+
+  static inline constexpr size_t binary_word_size() {
+    return sizeof(binary_word);
+  }
+
   inline bool get(uint32_t i) const {
-    uint32_t word = bits[i / 32u];
-    uint32_t bit_ind = i % 32u;
+    uint32_t word = bits[i / binary_word_size()];
+    uint32_t bit_ind = i % binary_word_size();
 
     return (word >> bit_ind) & 1u;
   }
 
   inline void set(uint32_t i, bool v) {
-    uint32_t word_ind = i / 32u;
-    uint32_t bit_ind = i % 32u;
+    uint32_t word_ind = i / binary_word_size();
+    uint32_t bit_ind = i % binary_word_size();
 
     bits[word_ind] = (bits[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
   }
@@ -141,7 +155,7 @@ struct BitString {
     return bits.size();
   }
 
-  const uint32_t& operator[](uint32_t i) const {
+  const binary_word& operator[](uint32_t i) const {
     return bits[i];
   }
 
@@ -161,6 +175,18 @@ struct BitString {
     }
 
     return new_bits;
+  }
+
+  BitString& operator^=(const BitString& other) {
+    if (size() != other.size()) {
+      throw std::runtime_error(fmt::format("Tried to perform ^ on BitStrings of unequal length: {} and {}", size(), other.size()));
+    }
+
+    for (size_t i = 0; i < bits.size(); ++i) {
+      bits[i] ^= other.bits[i];
+    }
+
+    return *this;
   }
 };
 
@@ -376,7 +402,8 @@ class PauliString {
 
       p.set_r(PauliString::get_multiplication_phase(*this, other));
 
-      p.bit_string = bit_string ^ other.bit_string;
+      p.bit_string ^= other.bit_string;
+      std::cout << fmt::format("{} * {} = {}\n", this->to_string_ops(), other.to_string_ops(), p.to_string_ops());
 
       return p;
     }
@@ -812,10 +839,8 @@ class PauliString {
     // It is slightly faster (~20-30%) to query both the x and z bits at a given site
     // at the same time, storing them in the first two bits of the return value.
     inline uint8_t get_xz(uint32_t i) const {
-      uint32_t word = bit_string[i / 16u];
       uint32_t bit_ind = 2u*(i % 16u);
-
-      return 0u | (((word >> bit_ind) & 3u) << 0u);
+      return 0u | (((bit_string.bits[i / 16u] >> bit_ind) & 3u) << 0u);
     }
 
     inline uint8_t get_r() const { 

@@ -148,7 +148,7 @@ void benchmark_stabilizer_renyi_entropy_montecarlo() {
 }
 
 void benchmark_clifford_circuit() {
-  constexpr uint32_t nqb = 256;
+  constexpr uint32_t nqb = 16;
 
   QuantumCHPState chp(nqb);
 
@@ -166,6 +166,7 @@ void benchmark_clifford_circuit() {
     }
   }
 
+  std::cout << chp.to_string_ops() << "\n";
   std::cout << fmt::format("Finished benchmark_clifford_circuit!");
 }
 

@@ -34,7 +34,7 @@ class BinaryPolynomialTerm {
       return s;
     }
 
-    bool evaluate(const Bitstring& z) const {
+    bool evaluate(const BitString& z) const {
       bool b = coefficient;
 
       for (auto const i : inds) {
@@ -56,7 +56,7 @@ class BinaryPolynomialTerm {
       return BinaryPolynomialTerm(new_inds);
     }
 
-    BinaryPolynomialTerm partial_evaluate(Bitstring bits, std::vector<size_t> applied_inds) const {
+    BinaryPolynomialTerm partial_evaluate(const BitString& bits, const std::vector<size_t>& applied_inds) const {
       std::vector<size_t> new_inds;
       bool b = true;
 
@@ -186,7 +186,7 @@ class BinaryPolynomial {
       return s;
     }
 
-    bool evaluate(Bitstring z) const {
+    bool evaluate(BitString z) const {
       bool s = false;
       for (auto const& term : terms) {
         s ^= term.evaluate(z);
@@ -195,7 +195,7 @@ class BinaryPolynomial {
       return s;
     }
 
-    BinaryPolynomial partial_evaluate(const Bitstring& bits, const std::vector<size_t>& assigned_bits) const {
+    BinaryPolynomial partial_evaluate(const BitString& bits, const std::vector<size_t>& assigned_bits) const {
       BinaryPolynomial poly(n);
 
       for (auto const& term : terms) {
@@ -211,7 +211,7 @@ class BinaryPolynomial {
       uint64_t s = 1u << n;
 
       for (uint64_t i = 0; i < s; i++) {
-        z += std::pow(-1.0, evaluate(Bitstring(i)));
+        z += std::pow(-1.0, evaluate(BitString::from_bits(n, i)));
       }
 
       return z/s;
