@@ -147,6 +147,28 @@ void benchmark_stabilizer_renyi_entropy_montecarlo() {
   auto s = mps.stabilizer_renyi_entropy(2, amplitudes[0]);
 }
 
+void benchmark_clifford_circuit() {
+  constexpr uint32_t nqb = 256;
+
+  QuantumCHPState chp(nqb);
+
+  for (size_t i = 0; i < nqb; i++) {
+    for (uint32_t q = 0; q < nqb/2; q++) {
+      Qubits qubits;
+      if (i % 2) {
+        qubits = {2*q, 2*q + 1};
+      } else {
+        qubits = {2*q + 1, (2*q + 2) % nqb};
+      }
+      
+      chp.random_clifford(qubits);
+      double entropy = chp.entropy(qubits, 2);
+    }
+  }
+
+  std::cout << fmt::format("Finished benchmark_clifford_circuit!");
+}
+
 #define DO_BENCHMARK(x)                                                           \
 if (run_all || benchmarks.contains(#x)) {                                         \
   auto start = std::chrono::high_resolution_clock::now();                         \
@@ -171,6 +193,7 @@ int main(int argc, char *argv[]) {
   DO_BENCHMARK(benchmark_magic_mutual_information_montecarlo);
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy);
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy_montecarlo);
+  DO_BENCHMARK(benchmark_clifford_circuit);
 
   if (benchmarks_results.size() == 0) {
     std::cout << "No benchmarks to run.\n";
