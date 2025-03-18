@@ -17,6 +17,7 @@
 class QuantumState;
 
 using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
+using BitAmplitudes = std::pair<BitString, double>;
 
 using PartialState = std::pair<std::shared_ptr<QuantumState>, QubitSupport>;
 
@@ -431,6 +432,8 @@ class MatrixProductState : public QuantumState {
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
     std::vector<double> singular_values(uint32_t i) const;
+
+    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const;
 
     virtual std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) override;
     virtual std::vector<PauliAmplitudes> sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;

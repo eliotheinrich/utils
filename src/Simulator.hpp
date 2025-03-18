@@ -83,7 +83,7 @@ class Texture {
 
 class Simulator {
   public:
-    Simulator(dataframe::ExperimentParams &params) { }
+    Simulator(dataframe::ExperimentParams &params) {}
 
     virtual ~Simulator()=default;
 
@@ -100,7 +100,7 @@ class Simulator {
     }
 
     virtual std::vector<dataframe::byte_t> serialize() const {
-      std::cerr << "WARNING: serialize not implemented for this simulator; return empty data.";
+      std::cerr << "WARNING: serialize not implemented for this simulator; returning empty data.";
       return {};
     }
 

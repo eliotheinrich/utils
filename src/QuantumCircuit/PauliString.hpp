@@ -99,6 +99,71 @@ constexpr static std::complex<double> sign_from_bits(uint8_t phase) {
 
 class QuantumCircuit;
 
+struct BitString {
+  uint32_t num_bits;
+  std::vector<uint32_t> bits;
+
+  BitString()=default;
+
+  BitString(uint32_t num_bits) : num_bits(num_bits) {
+    size_t width = num_bits / 32 + static_cast<bool>(num_bits % 32);
+    bits = std::vector<uint32_t>(width, 0);
+  }
+
+  static BitString from_bits(size_t num_bits, uint32_t bits) {
+    if (num_bits > 31) {
+      throw std::runtime_error("Cannot create a >31 BitString from a 32-bit integer.");
+    }
+
+    BitString bit_string(num_bits);
+
+    bit_string.bits = std::vector<uint32_t>(1);
+    bit_string[0] = bits;
+
+    return bit_string;
+  }
+
+  inline bool get(uint32_t i) const {
+    uint32_t word = bits[i / 32u];
+    uint32_t bit_ind = i % 32u;
+
+    return (word >> bit_ind) & 1u;
+  }
+
+  inline void set(uint32_t i, bool v) {
+    uint32_t word_ind = i / 32u;
+    uint32_t bit_ind = i % 32u;
+
+    bits[word_ind] = (bits[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
+  }
+
+  uint32_t size() const {
+    return bits.size();
+  }
+
+  const uint32_t& operator[](uint32_t i) const {
+    return bits[i];
+  }
+
+  uint32_t& operator[](uint32_t i) {
+    return bits[i];
+  }
+
+  BitString operator^(const BitString& other) const {
+    if (size() != other.size()) {
+      throw std::runtime_error(fmt::format("Tried to perform ^ on BitStrings of unequal length: {} and {}", size(), other.size()));
+    }
+
+    BitString new_bits(num_bits);
+
+    for (size_t i = 0; i < size(); i++) {
+      new_bits[i] = bits[i] ^ other.bits[i];
+    }
+
+    return new_bits;
+  }
+};
+
 // TODO fix segfault when gate is applied to 0-qubit PauliString
 class PauliString {
   public:
@@ -112,20 +177,17 @@ class PauliString {
     // This appears to be slightly more efficient than the originally format originally described
     // by Aaronson and Gottesman (https://arxiv.org/abs/quant-ph/0406196) as it 
     // is more cache-friendly; most operations only act on a single word.
-    std::vector<uint32_t> bit_string;
-    uint32_t width;
+    BitString bit_string;
 
     PauliString()=default;
     PauliString(uint32_t num_qubits) : num_qubits(num_qubits), phase(0) {
-      width = (2u*num_qubits) / 32 + static_cast<bool>((2u*num_qubits) % 32);
-      bit_string = std::vector<uint32_t>(width, 0);
+      bit_string = BitString(2u * num_qubits);
     }
 
     PauliString(const PauliString& other) {
       num_qubits = other.num_qubits;
       bit_string = other.bit_string;
       phase = other.phase;
-      width = other.width;
     }
 
     static uint32_t process_pauli_string(const std::string& paulis) {
@@ -197,8 +259,8 @@ class PauliString {
     static PauliString rand(uint32_t num_qubits) {
       PauliString p(num_qubits);
 
-      for (uint32_t j = 0; j < p.width; j++) {
-        p.bit_string[j] = randi();
+      for (size_t i = 0; i < p.bit_string.size(); i++) {
+        p.bit_string[i] = randi();
       }
 
       p.set_r(randi() % 4);
@@ -244,13 +306,8 @@ class PauliString {
     }
 
     static PauliString from_bitstring(uint32_t num_qubits, uint32_t bits) {
-      if (num_qubits > 15) {
-        throw std::runtime_error("Cannot create a >15 qubit PauliString from a 32-bit integer.");
-      }
-
       PauliString p = PauliString(num_qubits);
-      p.bit_string = std::vector<uint32_t>(1);
-      p.bit_string[0] = bits;
+      p.bit_string = BitString::from_bits(2u * num_qubits, bits);
       return p;
     }
 
@@ -319,10 +376,7 @@ class PauliString {
 
       p.set_r(PauliString::get_multiplication_phase(*this, other));
 
-      uint32_t width = other.width;
-      for (uint32_t j = 0; j < width; j++) {
-        p.bit_string[j] = bit_string[j] ^ other.bit_string[j];
-      }
+      p.bit_string = bit_string ^ other.bit_string;
 
       return p;
     }
@@ -363,13 +417,13 @@ class PauliString {
       return stream;
     }
 
-    std::vector<uint32_t>::iterator begin() {
-      return bit_string.begin();
-    }
+    //std::vector<uint32_t>::iterator begin() {
+    //  return bit_string.begin();
+    //}
 
-    std::vector<uint32_t>::iterator end() {
-      return bit_string.end();
-    }
+    //std::vector<uint32_t>::iterator end() {
+    //  return bit_string.end();
+    //}
 
     Eigen::Matrix2cd to_matrix(uint32_t i) const {
       std::string s = to_op(i);
@@ -739,6 +793,22 @@ class PauliString {
     // Returns the circuit which maps this PauliString onto p
     QuantumCircuit transform(PauliString const &p) const;
 
+    inline std::complex<double> sign() const {
+      return sign_from_bits(phase);
+    }
+
+    inline bool get(size_t i) const {
+      return bit_string.get(i);
+    }
+
+    inline bool get_x(uint32_t i) const {
+      return bit_string.get(2*i);
+    }
+
+    inline bool get_z(uint32_t i) const {
+      return bit_string.get(2*i + 1);
+    }
+
     // It is slightly faster (~20-30%) to query both the x and z bits at a given site
     // at the same time, storing them in the first two bits of the return value.
     inline uint8_t get_xz(uint32_t i) const {
@@ -748,36 +818,24 @@ class PauliString {
       return 0u | (((word >> bit_ind) & 3u) << 0u);
     }
 
-    inline bool get_x(uint32_t i) const { 
-      uint32_t word = bit_string[i / 16u];
-      uint32_t bit_ind = 2u*(i % 16u);
-      return (word >> bit_ind) & 1u;
-    }
-
-    inline bool get_z(uint32_t i) const { 
-      uint32_t word = bit_string[i / 16u];
-      uint32_t bit_ind = 2u*(i % 16u) + 1u;
-      return (word >> bit_ind) & 1u; 
-    }
-
     inline uint8_t get_r() const { 
       return phase; 
     }
 
-    inline std::complex<double> sign() const {
-      return sign_from_bits(phase);
-    }
-
     inline void set(size_t i, bool v) {
-      uint32_t word_ind = i / 32u;
-      uint32_t bit_ind = i % 32u;
-      bit_string[word_ind] = (bit_string[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
+      bit_string.set(i, v);
     }
 
-    inline bool get(size_t i) const {
-      uint32_t word_ind = i / 32u;
-      uint32_t bit_ind = i % 32u;
-      return (bit_string[word_ind] >> bit_ind) & 1u;
+    inline void set_x(uint32_t i, bool v) {
+      bit_string.set(2*i, v);
+    }
+
+    inline void set_z(uint32_t i, bool v) {
+      bit_string.set(2*i + 1, v);
+    }
+
+    inline void set_r(uint8_t v) { 
+      phase = v & 0b11; 
     }
 
     inline void set_op(size_t i, Pauli p) {
@@ -796,21 +854,6 @@ class PauliString {
       }
     }
 
-    inline void set_x(uint32_t i, bool v) { 
-      uint32_t word_ind = i / 16u;
-      uint32_t bit_ind = 2u*(i % 16u);
-      bit_string[word_ind] = (bit_string[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
-    }
-
-    inline void set_z(uint32_t i, bool v) { 
-      uint32_t word_ind = i / 16u;
-      uint32_t bit_ind = 2u*(i % 16u) + 1u;
-      bit_string[word_ind] = (bit_string[word_ind] & ~(1u << bit_ind)) | (v << bit_ind);
-    }
-
-    inline void set_r(uint8_t v) { 
-      phase = v & 0b11; 
-    }
 };
 
 namespace fmt {

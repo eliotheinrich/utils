@@ -1161,6 +1161,10 @@ class MatrixProductStateImpl {
       return partial_expectation(m, i1, i2, L, R);
     }
 
+    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const {
+      // TODO
+    }
+
     PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& supports, std::minstd_rand& rng) {
       if (left_ortho_lim != 0 || right_ortho_lim != 0) {
         throw std::runtime_error(fmt::format("Cannot sample_pauli; not properly orthogonalized. ortho lims = ({}, {}). Called mps.orthogonalize(0) before sampling paulis.", left_ortho_lim, right_ortho_lim));
@@ -2406,6 +2410,10 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
   return impl->process_bipartite_pauli_samples(pauli_samples);
 }
 
+std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(size_t num_samples) const {
+  return impl->sample_bitstrings(num_samples);
+}
+
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
   if (use_parent) {
     return QuantumState::sample_paulis(supports, num_samples);
@@ -2646,7 +2654,7 @@ PauliString PauliExpectationTree::to_pauli_string() const {
 bool inspect_svd_error() {
   ITensor theta;
   readFromFile("theta.h5", theta);
-  print(theta);
+  PrintData(theta);
 
   size_t q = 94;
   std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
@@ -2662,6 +2670,8 @@ bool inspect_svd_error() {
       {"Cutoff=",threshold,"MaxDim=",bond_dimension,
       "LeftTags=",fmt::format("Internal,Left,n={}", q),
       "RightTags=",fmt::format("Internal,Right,n={}", q)});
+  PrintData(U);
+  PrintData(V);
   //std::string filename = "";
   //MatrixProductStateImpl::inspect_svd_error(filename);
   //return true;
