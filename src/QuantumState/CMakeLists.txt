@@ -11,13 +11,10 @@ set_target_properties(quantum_state PROPERTIES
 )
 
 find_package(OpenBLAS CONFIG REQUIRED)
-find_library(ITENSOR NAMES itensor STATIC)
-
 find_library(ITENSOR
     NAMES itensor
     HINTS "$ENV{ITENSOR_DIR}/lib"
 )
-include_directories("$ENV{ITENSOR_DIR}")
 
 set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
 if (gfortran)
@@ -25,3 +22,4 @@ if (gfortran)
 endif()
 
 target_link_libraries(quantum_state PRIVATE quantum_circuit ${ITENSOR_DEPS})
+target_include_directories(quantum_state PRIVATE $ENV{ITENSOR_DIR})
