@@ -134,7 +134,7 @@ struct BitString {
   }
 
   static inline constexpr size_t binary_word_size() {
-    return sizeof(binary_word);
+    return 8u*sizeof(binary_word);
   }
 
   inline bool get(uint32_t i) const {
@@ -402,8 +402,7 @@ class PauliString {
 
       p.set_r(PauliString::get_multiplication_phase(*this, other));
 
-      p.bit_string ^= other.bit_string;
-      std::cout << fmt::format("{} * {} = {}\n", this->to_string_ops(), other.to_string_ops(), p.to_string_ops());
+      p.bit_string = bit_string ^ other.bit_string;
 
       return p;
     }
@@ -443,14 +442,6 @@ class PauliString {
       stream << p.to_string_ops();
       return stream;
     }
-
-    //std::vector<uint32_t>::iterator begin() {
-    //  return bit_string.begin();
-    //}
-
-    //std::vector<uint32_t>::iterator end() {
-    //  return bit_string.end();
-    //}
 
     Eigen::Matrix2cd to_matrix(uint32_t i) const {
       std::string s = to_op(i);
