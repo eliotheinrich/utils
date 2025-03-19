@@ -96,7 +96,7 @@ std::complex<double> Statevector::expectation(const PauliString& p) const {
     } else if (op == Pauli::Y) {
       s.evolve(gates::Y::value, i);
     } else if (op == Pauli::Z) {
-      s.evolve(gates::Z::value, i);
+      s.evolve_diagonal(gates::Z::value, {i});
     }
   }
 

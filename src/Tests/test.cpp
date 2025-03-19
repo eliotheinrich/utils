@@ -1273,6 +1273,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  test_statevector_();
+
   ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_mpo_constructor);

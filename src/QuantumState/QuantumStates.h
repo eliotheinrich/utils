@@ -64,52 +64,59 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 
 		virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits)=0;
 
+    void _evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+      size_t r = gate.rows();
+      size_t c = gate.cols();
+      if (r == c) {
+        evolve(gate, qubits);
+      } else if (c == 1) {
+        evolve_diagonal(gate, qubits);
+      } else {
+        throw std::runtime_error(fmt::format("Invalid gate shape: {}x{}", r, c));
+      }
+    }
+
     template <typename G>
     void evolve_one_qubit_gate(uint32_t q) {
       validate_qubits({q});
-      evolve(G::value, q);
+      _evolve(G::value, {q});
     }
 
     #define DEFINE_ONE_QUBIT_GATE(name, struct)             \
     void name(uint32_t q) {                                 \
-      evolve_one_qubit_gate<gates::struct>(q); \
+      evolve_one_qubit_gate<gates::struct>(q);              \
     }
 
-    #define DEFINE_ALL_ONE_QUBIT_GATES     \
-    DEFINE_ONE_QUBIT_GATE(h, H);           \
-    DEFINE_ONE_QUBIT_GATE(x, X);           \
-    DEFINE_ONE_QUBIT_GATE(y, Y);           \
-    DEFINE_ONE_QUBIT_GATE(z, Z);           \
-    DEFINE_ONE_QUBIT_GATE(sqrtX, sqrtX);   \
-    DEFINE_ONE_QUBIT_GATE(sqrtY, sqrtY);   \
-    DEFINE_ONE_QUBIT_GATE(sqrtZ, sqrtZ);   \
-    DEFINE_ONE_QUBIT_GATE(sqrtXd, sqrtXd); \
-    DEFINE_ONE_QUBIT_GATE(sqrtYd, sqrtYd); \
-    DEFINE_ONE_QUBIT_GATE(sqrtZd, sqrtZd); \
-    DEFINE_ONE_QUBIT_GATE(s, sqrtZ);       \
-    DEFINE_ONE_QUBIT_GATE(sd, sqrtZd);     \
-    DEFINE_ONE_QUBIT_GATE(t, T);       \
-    DEFINE_ONE_QUBIT_GATE(td, Td);     \
+    DEFINE_ONE_QUBIT_GATE(h, H);
+    DEFINE_ONE_QUBIT_GATE(x, X);
+    DEFINE_ONE_QUBIT_GATE(y, Y);
+    DEFINE_ONE_QUBIT_GATE(z, Z);
+    DEFINE_ONE_QUBIT_GATE(sqrtX, sqrtX);
+    DEFINE_ONE_QUBIT_GATE(sqrtY, sqrtY);
+    DEFINE_ONE_QUBIT_GATE(sqrtZ, sqrtZ);
+    DEFINE_ONE_QUBIT_GATE(sqrtXd, sqrtXd);
+    DEFINE_ONE_QUBIT_GATE(sqrtYd, sqrtYd);
+    DEFINE_ONE_QUBIT_GATE(sqrtZd, sqrtZd);
+    DEFINE_ONE_QUBIT_GATE(s, sqrtZ);
+    DEFINE_ONE_QUBIT_GATE(sd, sqrtZd);
+    DEFINE_ONE_QUBIT_GATE(t, T);
+    DEFINE_ONE_QUBIT_GATE(td, Td);
 
     template <typename G>
     void evolve_two_qubit_gate(uint32_t q1, uint32_t q2) { 
       validate_qubits({q1, q2});
-      evolve(G::value, {q1, q2});
+      _evolve(G::value, {q1, q2});
     }
 
     #define DEFINE_TWO_QUBIT_GATE(name, struct)                  \
     void name(uint32_t q1, uint32_t q2) {                        \
-      evolve_two_qubit_gate<gates::struct>(q1, q2); \
+      evolve_two_qubit_gate<gates::struct>(q1, q2);              \
     }
 
-    #define DEFINE_ALL_TWO_QUBIT_GATES       \
-    DEFINE_TWO_QUBIT_GATE(cx, CX)     \
-    DEFINE_TWO_QUBIT_GATE(cy, CY)     \
-    DEFINE_TWO_QUBIT_GATE(cz, CZ)     \
-    DEFINE_TWO_QUBIT_GATE(swap, SWAP)
-
-    DEFINE_ALL_ONE_QUBIT_GATES
-    DEFINE_ALL_TWO_QUBIT_GATES
+    DEFINE_TWO_QUBIT_GATE(cx, CX);
+    DEFINE_TWO_QUBIT_GATE(cy, CY);
+    DEFINE_TWO_QUBIT_GATE(cz, CZ);
+    DEFINE_TWO_QUBIT_GATE(swap, SWAP);
 
     void random_clifford(const Qubits& qubits) {
       random_clifford_impl(qubits, *this);
@@ -118,12 +125,12 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		virtual void evolve(const Eigen::MatrixXcd& gate) {
 			Qubits qubits(num_qubits);
 			std::iota(qubits.begin(), qubits.end(), 0);
-			evolve(gate, qubits);
+			_evolve(gate, qubits);
 		}
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t q) {
 			Qubits qubit{q};
-			evolve(gate, qubit); 
+			_evolve(gate, qubit); 
 		}
 
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate, const Qubits& qubits) { 
@@ -137,7 +144,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		virtual void evolve(const Instruction& inst) {
 			std::visit(quantumcircuit_utils::overloaded{
 				[this](std::shared_ptr<Gate> gate) { 
-					evolve(gate->define(), gate->qubits); 
+					_evolve(gate->define(), gate->qubits); 
 				},
 				[this](Measurement m) { 
           measure(m);

@@ -162,13 +162,13 @@ std::complex<double> tensor_to_scalar(const ITensor& A) {
 
 ITensor pauli_tensor(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
-    return matrix_to_tensor(gates::I::value, {i1}, {i2});
+    return matrix_to_tensor(gates::I::value.asDiagonal(), {i1}, {i2});
   } else if (p == Pauli::X) {
     return matrix_to_tensor(gates::X::value, {i1}, {i2});
   } else if (p == Pauli::Y) {
     return matrix_to_tensor(gates::Y::value, {i1}, {i2});
   } else if (p == Pauli::Z) {
-    return matrix_to_tensor(gates::Z::value, {i1}, {i2});
+    return matrix_to_tensor(gates::Z::value.asDiagonal(), {i1}, {i2});
   }
 
   throw std::runtime_error("Invalid Pauli index.");
@@ -1168,8 +1168,7 @@ class MatrixProductStateImpl {
       Eigen::Matrix2cd P0; P0 << 1.0, 0.0, 0.0, 0.0;
       Eigen::Matrix2cd P1; P1 << 0.0, 0.0, 0.0, 1.0;
       for (size_t i = 0; i < num_samples; i++) {
-        double p;
-        double pl = 1.0;
+        double p = 1.0;
         BitString bits(num_qubits);
         ITensor L(left_boundary_index, prime(left_boundary_index));
         L.set(1, 1, 1.0);
@@ -1178,7 +1177,7 @@ class MatrixProductStateImpl {
           std::vector<ITensor> M = {matrix_to_tensor(P0, {prime(ext)}, {ext})};
           ITensor R = right_boundary_tensor(qubit_indices[q] + 1);
           ITensor L0 = partial_contraction(q, q+1, &M, &L, nullptr);
-          double p0 = std::abs(tensor_to_scalar(L0*right_boundary_tensor(qubit_indices[q] + 1)))/pl;
+          double p0 = std::abs(tensor_to_scalar(L0*right_boundary_tensor(qubit_indices[q] + 1)))/p;
           
           bool v = (randf() >= p0);
           bits.set(q, v);
@@ -1186,13 +1185,11 @@ class MatrixProductStateImpl {
             M = {matrix_to_tensor(P1, {prime(ext)}, {ext})};
             ITensor L1 = partial_contraction(q, q+1, &M, &L, nullptr);
             L = L1;
-            p = (1.0 - p0) * pl;
+            p *= 1.0 - p0;
           } else {
             L = L0;
-            p = p0*pl;
+            p *= p0;
           }
-
-          pl = p;
         }
 
         samples.push_back({bits, p});
