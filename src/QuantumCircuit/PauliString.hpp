@@ -920,26 +920,6 @@ namespace fmt {
   };
 }
 
-
-//namespace fmt {
-//  template <>
-//  struct formatter<BitString> {
-//    constexpr auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
-//      return ctx.begin();
-//    }
-//
-//    // Format function
-//    template <typename FormatContext>
-//    auto format(const BitString& bs, FormatContext& ctx) const -> decltype(ctx.out()) {
-//        std::string bit_str;
-//        for (auto it = bs.bits.rbegin(); it != bs.bits.rend(); ++it) {
-//            bit_str += fmt::format("{:032b}", *it);
-//        }
-//        return fmt::format_to(ctx.out(), "{}", bit_str);
-//    }
-//  };
-//}
-
 template<>
 struct glz::meta<PauliString> {
   static constexpr auto value = glz::object(
