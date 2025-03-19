@@ -1161,8 +1161,44 @@ class MatrixProductStateImpl {
       return partial_expectation(m, i1, i2, L, R);
     }
 
-    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const {
-      // TODO
+    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) {
+      orthogonalize(0);
+      std::vector<BitAmplitudes> samples;
+      
+      Eigen::Matrix2cd P0; P0 << 1.0, 0.0, 0.0, 0.0;
+      Eigen::Matrix2cd P1; P1 << 0.0, 0.0, 0.0, 1.0;
+      for (size_t i = 0; i < num_samples; i++) {
+        double p;
+        double pl = 1.0;
+        BitString bits(num_qubits);
+        ITensor L(left_boundary_index, prime(left_boundary_index));
+        L.set(1, 1, 1.0);
+        for (size_t q = 0; q < num_qubits; q++) {
+          Index ext = external_idx(q);
+          std::vector<ITensor> M = {matrix_to_tensor(P0, {prime(ext)}, {ext})};
+          ITensor R = right_boundary_tensor(qubit_indices[q] + 1);
+          ITensor L0 = partial_contraction(q, q+1, &M, &L, nullptr);
+          double p0 = std::abs(tensor_to_scalar(L0*right_boundary_tensor(qubit_indices[q] + 1)))/pl;
+          
+          bool v = (randf() >= p0);
+          bits.set(q, v);
+          if (v) {
+            M = {matrix_to_tensor(P1, {prime(ext)}, {ext})};
+            ITensor L1 = partial_contraction(q, q+1, &M, &L, nullptr);
+            L = L1;
+            p = (1.0 - p0) * pl;
+          } else {
+            L = L0;
+            p = p0*pl;
+          }
+
+          pl = p;
+        }
+
+        samples.push_back({bits, p});
+      }
+
+      return samples;
     }
 
     PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& supports, std::minstd_rand& rng) {

@@ -191,6 +191,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       return weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }
 
+
+    virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const;
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
 
@@ -433,7 +435,7 @@ class MatrixProductState : public QuantumState {
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
     std::vector<double> singular_values(uint32_t i) const;
 
-    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const;
+    virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const override;
 
     virtual std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) override;
     virtual std::vector<PauliAmplitudes> sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;

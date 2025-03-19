@@ -869,7 +869,84 @@ class PauliString {
         set_z(i, true);
       }
     }
+};
 
+#include <glaze/glaze.hpp>
+
+template<>
+struct glz::meta<BitString> {
+  static constexpr auto value = glz::object(
+    "num_bits", &BitString::num_bits,
+    "bits", &BitString::bits
+  );
+};
+
+namespace fmt {
+  template <>
+  struct formatter<BitString> {
+    size_t total_width = 0;  // Store parsed width
+
+    constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+      auto it = ctx.begin(), end = ctx.end();
+
+      if (it != end && *it >= '0' && *it <= '9') {
+        total_width = 0;
+        while (it != end && *it >= '0' && *it <= '9') {
+          total_width = total_width * 10 + (*it - '0');
+          ++it;
+        }
+      }
+
+      return it;
+    }
+
+    template <typename FormatContext>
+    auto format(const BitString& bs, FormatContext& ctx) -> decltype(ctx.out()) {
+      std::string bit_str;
+      for (auto it = bs.bits.rbegin(); it != bs.bits.rend(); ++it) {
+        bit_str += fmt::format("{:032b}", *it);
+      }
+
+      size_t n = bit_str.size();
+      bit_str = bit_str.substr(n - total_width, n);
+
+      // Apply padding if total_width is specified and greater than bit_str size
+      if (total_width > bit_str.size()) {
+        bit_str.insert(0, total_width - bit_str.size(), '0');
+      }
+
+      return fmt::format_to(ctx.out(), "{}", bit_str);
+    }
+  };
+}
+
+
+//namespace fmt {
+//  template <>
+//  struct formatter<BitString> {
+//    constexpr auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
+//      return ctx.begin();
+//    }
+//
+//    // Format function
+//    template <typename FormatContext>
+//    auto format(const BitString& bs, FormatContext& ctx) const -> decltype(ctx.out()) {
+//        std::string bit_str;
+//        for (auto it = bs.bits.rbegin(); it != bs.bits.rend(); ++it) {
+//            bit_str += fmt::format("{:032b}", *it);
+//        }
+//        return fmt::format_to(ctx.out(), "{}", bit_str);
+//    }
+//  };
+//}
+
+template<>
+struct glz::meta<PauliString> {
+  static constexpr auto value = glz::object(
+    "num_qubits", &PauliString::num_qubits,
+    "phase", &PauliString::phase,
+    "bit_string", &PauliString::bit_string
+  );
 };
 
 namespace fmt {
@@ -886,7 +963,6 @@ namespace fmt {
       }
   };
 }
-
 
 template <class T>
 void single_qubit_clifford_impl(T& qobj, size_t q, size_t r) {

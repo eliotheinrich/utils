@@ -149,6 +149,7 @@ NB_MODULE(qutils_bindings, m) {
       return self.weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
     .def("entropy", &QuantumState::entropy, "qubits"_a, "index"_a)
+    .def("sample_bitstrings", &QuantumState::sample_paulis)
     .def("sample_paulis", &QuantumState::sample_paulis)
     .def("sample_paulis_exact", &QuantumState::sample_paulis_exact)
     .def("sample_paulis_exhaustive", &QuantumState::sample_paulis_exhaustive)

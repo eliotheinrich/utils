@@ -1235,6 +1235,21 @@ bool test_statevector_diagonal_gate() {
   return true;
 }
 
+bool test_mps_sample_bitstrings() {
+  constexpr size_t nqb = 3;
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  mps.h(0);
+  mps.h(1);
+  auto samples = mps.sample_bitstrings(100);
+  std::cout << fmt::format("MatrixProductState: \n");
+  for (const auto& [bits, p] : samples) {
+    std::cout << fmt::format("{:5}: {:.5f}\n", bits, p);
+  }
+
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1288,6 +1303,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_circuit_measurements);
   ADD_TEST(test_forced_measurement);
   ADD_TEST(test_statevector_diagonal_gate);
+  ADD_TEST(test_mps_sample_bitstrings);
 
   ADD_TEST(inspect_svd_error);
 
