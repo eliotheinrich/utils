@@ -16,11 +16,11 @@ find_library(ITENSOR
 )
 
 set(MKL_INTERFACE_FULL "intel_lp64")
-find_package(MKL CONFIG REQUIRED)
+find_package(MKL CONFIG)
 if (${MKL_FOUND})
     set(ITENSOR_DEPS MKL::MKL ${ITENSOR})
 else()
-    find_package(OpenBLAS CONFIG)
+    find_package(OpenBLAS CONFIG REQUIRED)
     set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
 endif()
 
