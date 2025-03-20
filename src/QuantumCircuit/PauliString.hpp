@@ -884,7 +884,7 @@ struct glz::meta<BitString> {
 namespace fmt {
   template <>
   struct formatter<BitString> {
-    size_t total_width = 0;  // Store parsed width
+    size_t total_width = 0;
 
     constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
       auto it = ctx.begin(), end = ctx.end();
@@ -901,16 +901,15 @@ namespace fmt {
     }
 
     template <typename FormatContext>
-    auto format(const BitString& bs, FormatContext& ctx) -> decltype(ctx.out()) {
-      std::string bit_str;
-      for (auto it = bs.bits.rbegin(); it != bs.bits.rend(); ++it) {
-        bit_str += fmt::format("{:032b}", *it);
+    auto format(const BitString& bs, FormatContext& ctx) const -> decltype(ctx.out()) {
+      std::string bit_str = "";
+      for (size_t i = 0; i < bs.size(); i++) {
+        bit_str += fmt::format("{:032b}", bs.bits[i]);
       }
 
       size_t n = bit_str.size();
       bit_str = bit_str.substr(n - total_width, n);
 
-      // Apply padding if total_width is specified and greater than bit_str size
       if (total_width > bit_str.size()) {
         bit_str.insert(0, total_width - bit_str.size(), '0');
       }

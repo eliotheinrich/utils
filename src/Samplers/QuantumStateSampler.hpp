@@ -50,7 +50,7 @@ class QuantumStateSampler {
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
         spin_glass_order_basis = dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z")[0];
-        spin_glass_order_assume_symmetry = dataframe::utils::get<int>(params, "spin_glass_assume_symmetry", false);
+        spin_glass_order_assume_symmetry = dataframe::utils::get<int>(params, "spin_glass_order_assume_symmetry", false);
         if (!(spin_glass_order_basis == 'X' || spin_glass_order_basis == 'Y' || spin_glass_order_basis == 'Z')) {
           throw std::runtime_error(fmt::format("Could not compute spin glass order for provided basis: {}", spin_glass_order_basis));
         }

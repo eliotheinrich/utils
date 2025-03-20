@@ -100,6 +100,17 @@ QubitInterval random_interval(size_t num_qubits, size_t k) {
   return std::make_pair(q1, q2);
 }
 
+void benchmark_mps_evolution() {
+  constexpr size_t nqb = 64;
+
+  MatrixProductState mps(nqb, 64);
+  size_t depth = 64;
+
+  for (size_t i = 0; i < depth; i++) {
+    randomize_state_haar(mps);
+  }
+}
+
 void benchmark_magic_mutual_information_montecarlo() {
   constexpr size_t nqb = 16;
 
@@ -165,8 +176,6 @@ void benchmark_clifford_circuit() {
       double entropy = chp.entropy(qubits, 2);
     }
   }
-
-  std::cout << fmt::format("Finished benchmark_clifford_circuit!");
 }
 
 #define DO_BENCHMARK(x)                                                           \
@@ -190,6 +199,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  DO_BENCHMARK(benchmark_mps_evolution);
   DO_BENCHMARK(benchmark_magic_mutual_information_montecarlo);
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy);
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy_montecarlo);
