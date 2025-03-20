@@ -1493,6 +1493,11 @@ class MatrixProductStateImpl {
 
       ITensor U, S, V;
       try {
+        theta = apply(theta, [](Cplx c) { 
+          double mask = std::abs(c) >= 1e-14;
+          return Cplx(c.real() * mask, c.imag() * mask);
+        });
+
         std::tie(U, S, V) = svd(theta, u_inds, v_inds, 
             {"Cutoff=",threshold,"MaxDim=",bond_dimension,
              "LeftTags=",fmt::format("Internal,Left,n={}", q),
@@ -1504,35 +1509,9 @@ class MatrixProductStateImpl {
         }
         svd_error error{Random::get_seed(), t, to_bytes(), q, truncate};
         uint32_t r = randi();
-
         write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
-
         std::cout << "There was a LAPACK error!\n";
-        std::cout << fmt::format("j1, j2  = ({}, {}), bond_dimension = {}, threshold = {:.20f}\n", j1, j2, bond_dimension, threshold);
-        std::cout << "\n\n ============================================================================= \n";
-        print_mps();
-        print(U);
-        print(S);
-        print(V);
-        if (T) {
-          PrintData(*T);
-        }
-        std:: cout << " ============================================================================= \n";
         writeToFile("theta.h5", theta);
-
-        PrintData(theta);
-        //std:: cout << " ============================================================================= \n";
-        //PrintData(singular_values[j1]);
-        //std:: cout << " ============================================================================= \n";
-        //if (j2 != num_blocks() - 1) {
-        //  PrintData(singular_values[j2]);
-        //}
-
-        //std:: cout << " ============================================================================= \n";
-        //if (j1 != 0) {
-        //  PrintData(singular_values[j1 - 1]);
-        //}
-        
         throw e;
       }
 
@@ -2683,15 +2662,54 @@ PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
 }
 
+#include <cfenv>
+#include <fenv.h>
+
+#include <iostream>
+#include <limits>
 
 bool inspect_svd_error() {
+    std::cout << "Epsilon for float: " << std::numeric_limits<float>::epsilon() << std::endl;
+    std::cout << "Epsilon for double: " << std::numeric_limits<double>::epsilon() << std::endl;
+    std::cout << "Epsilon for long double: " << std::numeric_limits<long double>::epsilon() << std::endl;
+  feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW); 
   ITensor theta;
   readFromFile("theta.h5", theta);
-  PrintData(theta);
+    double m = 1.0;
+  auto filter = [&m](Cplx c) {
+    double r = std::abs(c);
+    if (r < m) {
+      m = r;
+    }
+    if (r < std::numeric_limits<double>::epsilon() * 2) {
+      return Cplx(0.0, 0.0);
+    } else {
+      return c;
+    }
+  };
+
+  theta = apply(theta, filter);
+
+  Index i1 = findIndex(theta, "i=94");
+  Index i1_ = Index(dim(i1), "i1");
+  Index i2 = findIndex(theta, "i=95");
+  Index i2_ = Index(dim(i2), "i2");
+
+  Index n1 = findIndex(theta, "n=93");
+  Index n1_ = Index(dim(n1), "n1");
+  Index n2 = findIndex(theta, "n=95");
+  Index n2_ = Index(dim(n2), "n2");
+
+  theta.replaceInds({i1, i2, n1, n2}, {i1_, i2_, n1_, n2_});
+
+  //std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
+  //std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
+  std::vector<Index> u_inds{i1_, n1_};
+  std::vector<Index> v_inds{i2_, n2_};
+
+  print(theta);
 
   size_t q = 94;
-  std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
-  std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
 
   size_t bond_dimension = 128;
   double threshold = 1e-4;
@@ -2701,13 +2719,12 @@ bool inspect_svd_error() {
   std::cout << "\n";
   auto [U, S, V] = svd(theta, u_inds, v_inds, 
       {"Cutoff=",threshold,"MaxDim=",bond_dimension,
-      "LeftTags=",fmt::format("Internal,Left,n={}", q),
-      "RightTags=",fmt::format("Internal,Right,n={}", q)});
-  PrintData(U);
-  PrintData(V);
+      "LeftTags=",fmt::format("n={}", q),
+      "RightTags=",fmt::format("n={}", q+1)});
+  PrintData(S);
   //std::string filename = "";
   //MatrixProductStateImpl::inspect_svd_error(filename);
-  //return true;
+  return true;
 }
 
 int load_seed(const std::string& filename) {

@@ -10,13 +10,20 @@ set_target_properties(quantum_state PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-find_package(OpenBLAS CONFIG REQUIRED)
 find_library(ITENSOR
     NAMES itensor
     HINTS "$ENV{ITENSOR_DIR}/lib"
 )
 
-set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
+set(MKL_INTERFACE_FULL "intel_lp64")
+find_package(MKL CONFIG REQUIRED)
+if (${MKL_FOUND})
+    set(ITENSOR_DEPS MKL::MKL ${ITENSOR})
+else()
+    find_package(OpenBLAS CONFIG)
+    set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
+endif()
+
 if (gfortran)
     set(ITENSOR_DEPS gfortran ${ITENSOR_DEPS})
 endif()
