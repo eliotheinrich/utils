@@ -1,6 +1,21 @@
 #include "QuantumStates.h"
 #include <stdexcept>
 
+std::vector<BitAmplitudes> QuantumState::sample_bitstrings(size_t num_samples) const {
+  std::vector<double> probs = probabilities();
+
+  std::minstd_rand rng(randi());
+  std::discrete_distribution<> dist(probs.begin(), probs.end());
+
+  std::vector<BitAmplitudes> samples;
+  for (size_t i = 0; i < num_samples; i++) {
+    uint32_t z = dist(rng);
+    samples.push_back({BitString::from_bits(num_qubits, z), probs[z]});
+  }
+
+  return samples;
+}
+
 void single_qubit_random_mutation(PauliString& p) {
   size_t j = randi() % p.num_qubits;
   size_t g = randi() % 4;

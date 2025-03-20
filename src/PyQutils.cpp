@@ -6,6 +6,17 @@ inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
 }
 
 NB_MODULE(qutils_bindings, m) {
+  nanobind::class_<BitString>(m, "BitString")
+    .def(nanobind::init<uint32_t>())
+    .def_static("from_bits", [](uint32_t num_bits, uint32_t z) { return BitString::from_bits(num_bits, z); })
+    .def_ro("bits", &BitString::bits)
+    .def_ro("num_bits", &BitString::num_bits)
+    .def("__str__", [](BitString& bs) { return fmt::format("{}", bs); })
+    .def("hamming_weight", &BitString::hamming_weight)
+    .def("get", &BitString::get)
+    .def("set", &BitString::set)
+    .def("size", &BitString::size);
+
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
     .def_ro("num_qubits", &PauliString::num_qubits)
@@ -149,6 +160,7 @@ NB_MODULE(qutils_bindings, m) {
       return self.weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
     .def("entropy", &QuantumState::entropy, "qubits"_a, "index"_a)
+    .def("sample_bitstrings", &QuantumState::sample_bitstrings)
     .def("sample_paulis", &QuantumState::sample_paulis)
     .def("sample_paulis_exact", &QuantumState::sample_paulis_exact)
     .def("sample_paulis_exhaustive", &QuantumState::sample_paulis_exhaustive)

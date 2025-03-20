@@ -41,6 +41,12 @@ class QuantumStateSampler {
 
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", false);
 
+      sample_configurational_entropy = dataframe::utils::get<int>(params, "sample_configurational_entropy", false);
+      if (sample_configurational_entropy) {
+        configurational_entropy_method = dataframe::utils::get<std::string>(params, "configurational_entropy_method", "sampled");
+        num_configurational_entropy_samples = dataframe::utils::get<int>(params, "num_configurational_entropy_samples", 1000);
+      }
+
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
         spin_glass_order_basis = dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z")[0];
@@ -122,6 +128,24 @@ class QuantumStateSampler {
 
       std::vector<double> probabilities = state->probabilities();
       dataframe::utils::emplace(samples, "bitstring_distribution", probabilities);
+    }
+
+    void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
+      double W = 0.0;
+      if (configurational_entropy_method == "sampled") {
+        auto bitstrings = state->sample_bitstrings(num_configurational_entropy_samples);
+        for (const auto& [bits, prob] : bitstrings) {
+          W -= std::log(prob);
+        }
+        W /= bitstrings.size();
+      } else {
+        auto probs = state->probabilities();
+        for (auto p : probs) {
+          W -= p * std::log(p);
+        }
+      }
+
+      dataframe::utils::emplace(samples, "configurational_entropy", W);
     }
 
     void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
@@ -211,6 +235,10 @@ class QuantumStateSampler {
 
       if (sample_bitstring_distribution) {
         add_bitstring_distribution(samples, state);
+      }
+
+      if (sample_configurational_entropy) {
+        add_configurational_entropy_samples(samples, state);
       }
       
       if (sample_spin_glass_order) {
@@ -357,6 +385,10 @@ class QuantumStateSampler {
     bool sample_probabilities;
 
     bool sample_bitstring_distribution;
+
+    bool sample_configurational_entropy;
+    std::string configurational_entropy_method;
+    size_t num_configurational_entropy_samples;
 
     bool sample_spin_glass_order;
     char spin_glass_order_basis;

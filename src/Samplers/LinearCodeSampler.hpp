@@ -87,7 +87,7 @@ class LinearCodeSampler {
       slide.push_samples_to_data("locality", s);
     }
 
-    void add_leaf_removal_samples(dataframe::DataSlide& slide, std::shared_ptr<ParityCheckMatrix> matrix, std::minstd_rand& rng) const {
+    void add_leaf_removal_samples(dataframe::DataSlide& slide, std::shared_ptr<ParityCheckMatrix> matrix) const {
       ParityCheckMatrix H(*matrix.get());
       size_t _num_steps = num_steps ? num_steps : H.num_rows;
       size_t _max_size = max_size ? max_size : H.num_rows;
@@ -97,7 +97,7 @@ class LinearCodeSampler {
       std::vector<size_t> s;
       size_t n = 0;
       while (r.has_value() && n < _num_steps) {
-        std::tie(r, s) = H.leaf_removal_iteration(rng);
+        std::tie(r, s) = H.leaf_removal_iteration();
         s.resize(_max_size, 0u);
         sizes[n] = s;
 
@@ -146,7 +146,7 @@ class LinearCodeSampler {
       }
     }
 
-    void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, std::minstd_rand& rng, const std::optional<std::vector<size_t>>& sites1 = std::nullopt, const std::optional<std::vector<size_t>>& sites2 = std::nullopt) {
+    void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, const std::optional<std::vector<size_t>>& sites1 = std::nullopt, const std::optional<std::vector<size_t>>& sites2 = std::nullopt) {
       std::shared_ptr<GeneratorMatrix> G;
       std::shared_ptr<ParityCheckMatrix> H;
       if (matrix.index() == 0) {
@@ -199,7 +199,7 @@ class LinearCodeSampler {
       }
 
       if (sample_leaf_removal) {
-        add_leaf_removal_samples(slide, H, rng);
+        add_leaf_removal_samples(slide, H);
       }
 
       if (sample_generator_weights) {

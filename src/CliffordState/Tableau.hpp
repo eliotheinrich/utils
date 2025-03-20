@@ -417,13 +417,3 @@ struct glz::meta<Tableau> {
     "rows", &Tableau::rows
   );
 };
-
-template<>
-struct glz::meta<PauliString> {
-  static constexpr auto value = glz::object(
-    "num_qubits", &PauliString::num_qubits,
-    "phase", &PauliString::phase,
-    "width", &PauliString::width,
-    "bit_string", &PauliString::bit_string
-  );
-};

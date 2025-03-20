@@ -162,13 +162,13 @@ std::complex<double> tensor_to_scalar(const ITensor& A) {
 
 ITensor pauli_tensor(Pauli p, Index i1, Index i2) {
   if (p == Pauli::I) {
-    return matrix_to_tensor(gates::I::value, {i1}, {i2});
+    return matrix_to_tensor(gates::I::value.asDiagonal(), {i1}, {i2});
   } else if (p == Pauli::X) {
     return matrix_to_tensor(gates::X::value, {i1}, {i2});
   } else if (p == Pauli::Y) {
     return matrix_to_tensor(gates::Y::value, {i1}, {i2});
   } else if (p == Pauli::Z) {
-    return matrix_to_tensor(gates::Z::value, {i1}, {i2});
+    return matrix_to_tensor(gates::Z::value.asDiagonal(), {i1}, {i2});
   }
 
   throw std::runtime_error("Invalid Pauli index.");
@@ -1161,6 +1161,43 @@ class MatrixProductStateImpl {
       return partial_expectation(m, i1, i2, L, R);
     }
 
+    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) {
+      orthogonalize(0);
+      std::vector<BitAmplitudes> samples;
+      
+      Eigen::Matrix2cd P0; P0 << 1.0, 0.0, 0.0, 0.0;
+      Eigen::Matrix2cd P1; P1 << 0.0, 0.0, 0.0, 1.0;
+      for (size_t i = 0; i < num_samples; i++) {
+        double p = 1.0;
+        BitString bits(num_qubits);
+        ITensor L(left_boundary_index, prime(left_boundary_index));
+        L.set(1, 1, 1.0);
+        for (size_t q = 0; q < num_qubits; q++) {
+          Index ext = external_idx(q);
+          std::vector<ITensor> M = {matrix_to_tensor(P0, {prime(ext)}, {ext})};
+          ITensor R = right_boundary_tensor(qubit_indices[q] + 1);
+          ITensor L0 = partial_contraction(q, q+1, &M, &L, nullptr);
+          double p0 = std::abs(tensor_to_scalar(L0*right_boundary_tensor(qubit_indices[q] + 1)))/p;
+          
+          bool v = (randf() >= p0);
+          bits.set(q, v);
+          if (v) {
+            M = {matrix_to_tensor(P1, {prime(ext)}, {ext})};
+            ITensor L1 = partial_contraction(q, q+1, &M, &L, nullptr);
+            L = L1;
+            p *= 1.0 - p0;
+          } else {
+            L = L0;
+            p *= p0;
+          }
+        }
+
+        samples.push_back({bits, p});
+      }
+
+      return samples;
+    }
+
     PauliAmplitudes sample_pauli(const std::vector<QubitSupport>& supports, std::minstd_rand& rng) {
       if (left_ortho_lim != 0 || right_ortho_lim != 0) {
         throw std::runtime_error(fmt::format("Cannot sample_pauli; not properly orthogonalized. ortho lims = ({}, {}). Called mps.orthogonalize(0) before sampling paulis.", left_ortho_lim, right_ortho_lim));
@@ -1471,23 +1508,30 @@ class MatrixProductStateImpl {
         write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
 
         std::cout << "There was a LAPACK error!\n";
+        std::cout << fmt::format("j1, j2  = ({}, {}), bond_dimension = {}, threshold = {:.20f}\n", j1, j2, bond_dimension, threshold);
         std::cout << "\n\n ============================================================================= \n";
+        print_mps();
+        print(U);
+        print(S);
+        print(V);
         if (T) {
           PrintData(*T);
         }
         std:: cout << " ============================================================================= \n";
-        PrintData(theta);
-        std:: cout << " ============================================================================= \n";
-        PrintData(singular_values[j1]);
-        std:: cout << " ============================================================================= \n";
-        if (j2 != num_blocks() - 1) {
-          PrintData(singular_values[j2]);
-        }
+        writeToFile("theta.h5", theta);
 
-        std:: cout << " ============================================================================= \n";
-        if (j1 != 0) {
-          PrintData(singular_values[j1 - 1]);
-        }
+        PrintData(theta);
+        //std:: cout << " ============================================================================= \n";
+        //PrintData(singular_values[j1]);
+        //std:: cout << " ============================================================================= \n";
+        //if (j2 != num_blocks() - 1) {
+        //  PrintData(singular_values[j2]);
+        //}
+
+        //std:: cout << " ============================================================================= \n";
+        //if (j1 != 0) {
+        //  PrintData(singular_values[j1 - 1]);
+        //}
         
         throw e;
       }
@@ -2399,6 +2443,10 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
   return impl->process_bipartite_pauli_samples(pauli_samples);
 }
 
+std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(size_t num_samples) const {
+  return impl->sample_bitstrings(num_samples);
+}
+
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
   if (use_parent) {
     return QuantumState::sample_paulis(supports, num_samples);
@@ -2637,9 +2685,29 @@ PauliString PauliExpectationTree::to_pauli_string() const {
 
 
 bool inspect_svd_error() {
-  std::string filename = "";
-  MatrixProductStateImpl::inspect_svd_error(filename);
-  return true;
+  ITensor theta;
+  readFromFile("theta.h5", theta);
+  PrintData(theta);
+
+  size_t q = 94;
+  std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
+  std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
+
+  size_t bond_dimension = 128;
+  double threshold = 1e-4;
+  print(u_inds);
+  std::cout << "\n";
+  print(v_inds);
+  std::cout << "\n";
+  auto [U, S, V] = svd(theta, u_inds, v_inds, 
+      {"Cutoff=",threshold,"MaxDim=",bond_dimension,
+      "LeftTags=",fmt::format("Internal,Left,n={}", q),
+      "RightTags=",fmt::format("Internal,Right,n={}", q)});
+  PrintData(U);
+  PrintData(V);
+  //std::string filename = "";
+  //MatrixProductStateImpl::inspect_svd_error(filename);
+  //return true;
 }
 
 int load_seed(const std::string& filename) {

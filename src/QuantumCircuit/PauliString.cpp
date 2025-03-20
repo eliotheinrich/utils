@@ -62,9 +62,6 @@ void PauliString::evolve(const QuantumCircuit& qc) {
   }
 }
 
-//void PauliString::evolve(const Instruction& inst) {
-//}
-
 QuantumCircuit PauliString::transform(PauliString const &p) const {
   Qubits qubits(p.num_qubits);
   std::iota(qubits.begin(), qubits.end(), 0);
