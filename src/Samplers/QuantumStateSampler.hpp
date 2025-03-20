@@ -7,6 +7,26 @@
 #include <iostream>
 #include <string>
 
+enum Basis {
+  X, Y, Z
+};
+
+static inline Basis parse_basis(const std::string& s) {
+  if (s.size() != 1) {
+    throw std::runtime_error(fmt::format("Invalid string {} provided as basis.", s));
+  }
+
+  if (s[0] == 'X' || s[0] == 'x') {
+    return Basis::X;
+  } else if (s[0] == 'Y' || s[0] == 'y') {
+    return Basis::Y;
+  } else if (s[0] == 'Z' || s[0] == 'z') {
+    return Basis::Z;
+  } else {
+    throw std::runtime_error(fmt::format("Invalid string {} provided as basis.", s));
+  }
+}
+
 class QuantumStateSampler {
   public:
     enum sre_method_t {
@@ -44,16 +64,17 @@ class QuantumStateSampler {
       sample_configurational_entropy = dataframe::utils::get<int>(params, "sample_configurational_entropy", false);
       if (sample_configurational_entropy) {
         configurational_entropy_method = dataframe::utils::get<std::string>(params, "configurational_entropy_method", "sampled");
+        if (configurational_entropy_method != "sampled" && configurational_entropy_method != "exhaustive") {
+          throw std::runtime_error(fmt::format("Invalid configurational entropy method: {}\n", configurational_entropy_method));
+        }
         num_configurational_entropy_samples = dataframe::utils::get<int>(params, "num_configurational_entropy_samples", 1000);
+        configurational_entropy_basis = parse_basis(dataframe::utils::get<std::string>(params, "configurational_entropy_basis", "Z"));
       }
 
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
-        spin_glass_order_basis = dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z")[0];
         spin_glass_order_assume_symmetry = dataframe::utils::get<int>(params, "spin_glass_order_assume_symmetry", false);
-        if (!(spin_glass_order_basis == 'X' || spin_glass_order_basis == 'Y' || spin_glass_order_basis == 'Z')) {
-          throw std::runtime_error(fmt::format("Could not compute spin glass order for provided basis: {}", spin_glass_order_basis));
-        }
+        spin_glass_order_basis = parse_basis(dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z"));
       }
 
       sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
@@ -131,6 +152,22 @@ class QuantumStateSampler {
     }
 
     void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
+      switch (configurational_entropy_basis) {
+        case Basis::X:
+          for (size_t q = 0; q < state->num_qubits; q++) {
+            state->h(q);
+          }
+          break;
+        case Basis::Y:
+          for (size_t q = 0; q < state->num_qubits; q++) {
+            state->s(q);
+            state->h(q);
+          }
+          break;
+        case Basis::Z:
+          break;
+      }
+
       double W = 0.0;
       if (configurational_entropy_method == "sampled") {
         auto bitstrings = state->sample_bitstrings(num_configurational_entropy_samples);
@@ -145,6 +182,22 @@ class QuantumStateSampler {
         }
       }
 
+      switch (configurational_entropy_basis) {
+        case Basis::X:
+          for (size_t q = 0; q < state->num_qubits; q++) {
+            state->h(q);
+          }
+          break;
+        case Basis::Y:
+          for (size_t q = 0; q < state->num_qubits; q++) {
+            state->h(q);
+            state->sd(q);
+          }
+          break;
+        case Basis::Z:
+          break;
+      }
+
       dataframe::utils::emplace(samples, "configurational_entropy", W);
     }
 
@@ -152,25 +205,29 @@ class QuantumStateSampler {
       size_t num_qubits = state->num_qubits;
       double O = 0.0;
 
-      char basis = spin_glass_order_basis;
+      Basis basis = spin_glass_order_basis;
 
       // Returns a PauliString with P at each specified site, where P = X, Y, Z depending on
       // the spin_glass_order_basis.
       auto make_pauli = [num_qubits, basis](const std::vector<size_t>& sites) {
         PauliString P(num_qubits);
-        if (basis == 'X') {
-          for (const auto q : sites) {
-            P.set_x(q, 1);
-          }
-        } else if (basis == 'Y') {
-          for (const auto q : sites) {
-            P.set_x(q, 1);
-            P.set_z(q, 1);
-          }
-        } else {
-          for (const auto q : sites) {
-            P.set_z(q, 1);
-          }
+        switch (basis) {
+          case Basis::X:
+            for (const auto q : sites) {
+              P.set_x(q, 1);
+            }
+            break;
+          case Basis::Y:
+            for (const auto q : sites) {
+              P.set_x(q, 1);
+              P.set_z(q, 1);
+            }
+            break;
+          case Basis::Z:
+            for (const auto q : sites) {
+              P.set_z(q, 1);
+            }
+            break;
         }
 
         return P;
@@ -389,10 +446,11 @@ class QuantumStateSampler {
     bool sample_configurational_entropy;
     std::string configurational_entropy_method;
     size_t num_configurational_entropy_samples;
+    Basis configurational_entropy_basis;
 
     bool sample_spin_glass_order;
-    char spin_glass_order_basis;
     bool spin_glass_order_assume_symmetry;
+    Basis spin_glass_order_basis;
 
     bool sre_use_parent_methods;
 
