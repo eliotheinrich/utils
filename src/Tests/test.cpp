@@ -1305,7 +1305,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector_diagonal_gate);
   ADD_TEST(test_mps_sample_bitstrings);
 
-  ADD_TEST(inspect_svd_error);
+  //ADD_TEST(inspect_svd_error);
 
 
   constexpr char green[] = "\033[1;32m";

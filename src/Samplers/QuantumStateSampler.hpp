@@ -8,7 +8,7 @@
 #include <string>
 
 enum Basis {
-  X, Y, Z
+  x, y, z
 };
 
 static inline Basis parse_basis(const std::string& s) {
@@ -17,11 +17,11 @@ static inline Basis parse_basis(const std::string& s) {
   }
 
   if (s[0] == 'X' || s[0] == 'x') {
-    return Basis::X;
+    return Basis::x;
   } else if (s[0] == 'Y' || s[0] == 'y') {
-    return Basis::Y;
+    return Basis::y;
   } else if (s[0] == 'Z' || s[0] == 'z') {
-    return Basis::Z;
+    return Basis::z;
   } else {
     throw std::runtime_error(fmt::format("Invalid string {} provided as basis.", s));
   }
@@ -153,52 +153,59 @@ class QuantumStateSampler {
 
     void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
       switch (configurational_entropy_basis) {
-        case Basis::X:
+        case Basis::x:
           for (size_t q = 0; q < state->num_qubits; q++) {
             state->h(q);
           }
           break;
-        case Basis::Y:
+        case Basis::y:
           for (size_t q = 0; q < state->num_qubits; q++) {
             state->s(q);
             state->h(q);
           }
           break;
-        case Basis::Z:
+        case Basis::z:
           break;
       }
 
-      double W = 0.0;
+      std::vector<double> Ws;
       if (configurational_entropy_method == "sampled") {
         auto bitstrings = state->sample_bitstrings(num_configurational_entropy_samples);
+        Ws = std::vector<double>(bitstrings.size());
+        size_t n = 0;
         for (const auto& [bits, prob] : bitstrings) {
-          W -= std::log(prob);
+          Ws[n++] = -std::log(prob);
         }
-        W /= bitstrings.size();
       } else {
         auto probs = state->probabilities();
+        double w = 0.0;
         for (auto p : probs) {
-          W -= p * std::log(p);
+          if (p > 1e-10) {
+            w -= p * std::log(p);
+          }
         }
+
+        Ws = {w};
       }
 
       switch (configurational_entropy_basis) {
-        case Basis::X:
+        case Basis::x:
           for (size_t q = 0; q < state->num_qubits; q++) {
             state->h(q);
           }
           break;
-        case Basis::Y:
+        case Basis::y:
           for (size_t q = 0; q < state->num_qubits; q++) {
             state->h(q);
             state->sd(q);
           }
           break;
-        case Basis::Z:
+        case Basis::z:
           break;
       }
 
-      dataframe::utils::emplace(samples, "configurational_entropy", W);
+      std::vector<std::vector<double>> Wss = {Ws};
+      dataframe::utils::emplace(samples, "configurational_entropy", Wss);
     }
 
     void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
@@ -212,18 +219,18 @@ class QuantumStateSampler {
       auto make_pauli = [num_qubits, basis](const std::vector<size_t>& sites) {
         PauliString P(num_qubits);
         switch (basis) {
-          case Basis::X:
+          case Basis::x:
             for (const auto q : sites) {
               P.set_x(q, 1);
             }
             break;
-          case Basis::Y:
+          case Basis::y:
             for (const auto q : sites) {
               P.set_x(q, 1);
               P.set_z(q, 1);
             }
             break;
-          case Basis::Z:
+          case Basis::z:
             for (const auto q : sites) {
               P.set_z(q, 1);
             }
