@@ -231,8 +231,9 @@ bool test_mps_vs_statevector() {
     std::vector<uint32_t> qubits(q);
     std::iota(qubits.begin(), qubits.end(), 0);
 
-    double s1 = s.entropy(qubits, 1);
-    double s2 = mps.entropy(qubits, 1);
+    size_t index = randi() % 4 + 1;
+    double s1 = s.entropy(qubits, index);
+    double s2 = mps.entropy(qubits, index);
 
     Statevector s_(mps);
     double inner = std::abs(s_.inner(s));
@@ -1305,7 +1306,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector_diagonal_gate);
   ADD_TEST(test_mps_sample_bitstrings);
 
-  ADD_TEST(inspect_svd_error);
+  //ADD_TEST(inspect_svd_error);
 
 
   constexpr char green[] = "\033[1;32m";

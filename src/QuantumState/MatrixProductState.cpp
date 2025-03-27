@@ -333,34 +333,6 @@ class MatrixProductStateImpl {
       return e;
     }
 
-    static void inspect_svd_error(const std::string& filename) {
-      svd_error e = read_svd_error(filename);    
-
-      auto bytes = e.mps_bytes;
-      MatrixProductStateImpl mps;
-      glz::read_beve(mps, bytes);
-      mps.set_debug_level(2);
-      size_t nqb = mps.num_qubits;
-      std::cout << fmt::format("crashed when applying operation to {} (truncate = {}). initial seed = {}, chi = {}\n", e.q, e.truncate, e.seed, mps.bond_dimension);
-      if (e.T) {
-        std::cout << "T = \n";
-        print(e.T.value());
-      } else {
-        std::cout << "T = nullopt\n";
-      }
-
-      //for (size_t i = 0; i < mps.num_qubits - 1; i++) {
-      //  print(mps.singular_values[i]);
-      //}
-
-      size_t q = e.q;
-
-      print(mps.tensors[q]);
-      print(mps.tensors[q+1]);
-      std::cout << mps.print_orthogonal_sites();
-      mps.assert_state_valid("Failed!");
-    }
-
     uint32_t num_qubits;
     uint32_t bond_dimension;
     double sv_threshold;
@@ -903,7 +875,7 @@ class MatrixProductStateImpl {
           s += std::pow(v, index);
         }
         
-        s /= 1.0 - index;
+        s = std::log(s)/(1.0 - index);
       }
 
       return s;
@@ -2343,10 +2315,10 @@ std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }
 
-double MatrixProductState::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
-  if (index != 1) {
-    throw std::runtime_error("Cannot compute Renyi entanglement entropy with index other than 1 for MatrixProductState.");
-  }
+double MatrixProductState::entropy(const Qubits& qubits, uint32_t index) {
+  //if (index != 1) {
+  //  throw std::runtime_error("Cannot compute Renyi entanglement entropy with index other than 1 for MatrixProductState.");
+  //}
 
 	if (qubits.size() == 0) {
 		return 0.0;
@@ -2662,50 +2634,13 @@ PauliString PauliExpectationTree::to_pauli_string() const {
   return impl->to_pauli_string();
 }
 
-#include <cfenv>
-#include <fenv.h>
-
-#include <iostream>
-#include <limits>
-
 bool inspect_svd_error() {
-    std::cout << "Epsilon for float: " << std::numeric_limits<float>::epsilon() << std::endl;
-    std::cout << "Epsilon for double: " << std::numeric_limits<double>::epsilon() << std::endl;
-    std::cout << "Epsilon for long double: " << std::numeric_limits<long double>::epsilon() << std::endl;
-  feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW); 
   ITensor theta;
   readFromFile("theta.h5", theta);
-    double m = 1.0;
-  auto filter = [&m](Cplx c) {
-    double r = std::abs(c);
-    if (r < m) {
-      m = r;
-    }
-    if (r < std::numeric_limits<double>::epsilon() * 2) {
-      return Cplx(0.0, 0.0);
-    } else {
-      return c;
-    }
-  };
 
-  theta = apply(theta, filter);
 
-  Index i1 = findIndex(theta, "i=94");
-  Index i1_ = Index(dim(i1), "i1");
-  Index i2 = findIndex(theta, "i=95");
-  Index i2_ = Index(dim(i2), "i2");
-
-  Index n1 = findIndex(theta, "n=93");
-  Index n1_ = Index(dim(n1), "n1");
-  Index n2 = findIndex(theta, "n=95");
-  Index n2_ = Index(dim(n2), "n2");
-
-  theta.replaceInds({i1, i2, n1, n2}, {i1_, i2_, n1_, n2_});
-
-  //std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
-  //std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
-  std::vector<Index> u_inds{i1_, n1_};
-  std::vector<Index> v_inds{i2_, n2_};
+  std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
+  std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
 
   print(theta);
 
@@ -2713,17 +2648,11 @@ bool inspect_svd_error() {
 
   size_t bond_dimension = 128;
   double threshold = 1e-4;
-  print(u_inds);
-  std::cout << "\n";
-  print(v_inds);
-  std::cout << "\n";
   auto [U, S, V] = svd(theta, u_inds, v_inds, 
       {"Cutoff=",threshold,"MaxDim=",bond_dimension,
       "LeftTags=",fmt::format("n={}", q),
       "RightTags=",fmt::format("n={}", q+1)});
   PrintData(S);
-  //std::string filename = "";
-  //MatrixProductStateImpl::inspect_svd_error(filename);
   return true;
 }
 

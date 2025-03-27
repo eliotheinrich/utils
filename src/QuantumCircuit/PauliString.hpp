@@ -26,31 +26,35 @@ enum Pauli {
 };
 
 static int multiplication_phase(uint8_t xz1, uint8_t xz2) {
-  bool x1 = (xz1 >> 0u) & 1u;
-  bool z1 = (xz1 >> 1u) & 1u;
-  bool x2 = (xz2 >> 0u) & 1u;
-  bool z2 = (xz2 >> 1u) & 1u;
-  if (!x1 && !z1) { 
-    return 0; 
-  } else if (x1 && z1) {
-    if (z2) { 
-      return x2 ? 0 : 1;
-    } else { 
-      return x2 ? -1 : 0;
-    }
-  } else if (x1 && !z1) {
-    if (z2) { 
-      return x2 ? 1 : -1;
-    } else { 
-      return 0; 
-    }
-  } else {
-    if (x2) {
-      return z2 ? -1 : 1;
-    } else { 
-      return 0; 
-    }
-  }
+  constexpr int results[] = {0, 0, 0, 0, 0, 0, -1, 1, 0, 1, 0, -1, 0, -1, 1, 0};
+  return results[xz2 + (xz1 << 2u)];
+
+  // This is an optimized (hardcoded) version of the following equivalent function:
+  //bool x1 = (xz1 >> 0u) & 1u;
+  //bool z1 = (xz1 >> 1u) & 1u;
+  //bool x2 = (xz2 >> 0u) & 1u;
+  //bool z2 = (xz2 >> 1u) & 1u;
+  //if (!x1 && !z1) { 
+  //  return 0; 
+  //} else if (x1 && z1) {
+  //  if (z2) { 
+  //    return x2 ? 0 : 1;
+  //  } else { 
+  //    return x2 ? -1 : 0;
+  //  }
+  //} else if (x1 && !z1) {
+  //  if (z2) { 
+  //    return x2 ? 1 : -1;
+  //  } else { 
+  //    return 0; 
+  //  }
+  //} else {
+  //  if (x2) {
+  //    return z2 ? -1 : 1;
+  //  } else { 
+  //    return 0; 
+  //  }
+  //}
 }
 
 constexpr static std::pair<Pauli, uint8_t> multiply_pauli(Pauli p1, Pauli p2) {
