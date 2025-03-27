@@ -59,7 +59,7 @@ using namespace nanobind::literals;
     })                                                                                    \
     .def("take_samples", &A::take_samples)                                                \
     .def("serialize", [](A& self) {                                                       \
-      return self.serialize();                                                            \
+      return convert_bytes(self.serialize());                                             \
     });
 
 #define EXPORT_CONFIG(A)                                              \
