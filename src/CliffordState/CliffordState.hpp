@@ -28,7 +28,7 @@ class CliffordState : public EntropyState {
     virtual ~CliffordState() {}
 
     void evolve(const QuantumCircuit& qc, const Qubits& qubits) {
-      if (qubits.size() != qc.num_qubits) {
+      if (qubits.size() != qc.get_num_qubits()) {
         throw std::runtime_error("Provided qubits do not match size of circuit.");
       }
 

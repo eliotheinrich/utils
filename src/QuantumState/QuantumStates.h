@@ -19,8 +19,6 @@ class QuantumState;
 using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
 using BitAmplitudes = std::pair<BitString, double>;
 
-using PartialState = std::pair<std::shared_ptr<QuantumState>, QubitSupport>;
-
 using PauliMutationFunc = std::function<void(PauliString&)>;
 using ProbabilityFunc = std::function<double(double)>;
 
@@ -37,30 +35,31 @@ struct MeasurementResult {
 };
 
 class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
-	protected:
-    bool use_parent;
+  protected:
+    uint32_t num_qubits;
 
 	public:
-		uint32_t num_qubits;
 		uint32_t basis;
 
 		QuantumState()=default;
     ~QuantumState()=default;
 
-		QuantumState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits), use_parent(false) {}
+		QuantumState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {}
 
-    std::vector<PartialState> get_partial_states(const std::vector<QubitSupport>& qubits) const;
+    uint32_t get_num_qubits() const {
+      return num_qubits;
+    }
+
+		virtual std::string to_string() const=0;
+
+    void validate_qubits(const Qubits& qubits) const;
+
+    virtual std::complex<double> expectation(const PauliString& pauli) const=0;
 
     virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const=0;
     virtual std::shared_ptr<QuantumState> partial_trace(const QubitSupport& support) const {
       return partial_trace(to_qubits(support));
     }
-
-    virtual std::complex<double> expectation(const PauliString& p) const=0;
-
-		virtual std::string to_string() const=0;
-
-    void validate_qubits(const Qubits& qubits) const;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits)=0;
 
@@ -166,7 +165,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		}
 
     virtual void evolve(const QuantumCircuit& qc, const Qubits& qubits) {
-      if (qubits.size() != qc.num_qubits) {
+      if (qubits.size() != qc.get_num_qubits()) {
         throw std::runtime_error("Provided qubits do not match size of circuit.");
       }
 
@@ -198,17 +197,36 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       return weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }
 
-
     virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const;
+    virtual std::vector<double> sample_bitstring_amplitudes(size_t num_samples) const {
+      auto bit_amplitudes = sample_bitstrings(num_samples);
+      std::vector<double> amplitudes(bit_amplitudes.size());
+
+      size_t n = 0;
+      for (const auto& [bits, p] : bit_amplitudes) {
+        amplitudes[n++] = p;
+      }
+      return amplitudes;
+    }
+
+    //virtual std::vector<std::vector<double>> bipartite_bitstring_amplitudes(size_t num_samples) const;
+
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
 
     virtual std::vector<char> serialize() const=0;
     virtual void deserialize(const std::vector<char>& bytes)=0;
+};
 
-    //                                                                                                          //
-    // ---------------------------- STABILIZER RENYI ENTROPY FUNCTIONS ---------------------------------------- //
-    //                                                                                                          //
+class MagicQuantumState : public QuantumState {
+	protected:
+    bool use_parent;
+
+  public:
+    MagicQuantumState()=default;
+    ~MagicQuantumState()=default;
+    MagicQuantumState(uint32_t num_qubits) : QuantumState(num_qubits), use_parent(false) {}
+
     virtual std::vector<PauliAmplitudes> sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt);
     virtual std::vector<PauliAmplitudes> sample_paulis_exhaustive(const std::vector<QubitSupport>& qubits);
     virtual std::vector<PauliAmplitudes> sample_paulis_exact(const std::vector<QubitSupport>& qubits, size_t num_samples, ProbabilityFunc prob);
@@ -242,10 +260,6 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     virtual std::vector<MutualMagicData> bipartite_magic_mutual_information_samples_exact(size_t num_samples);
     virtual std::vector<double> bipartite_magic_mutual_information_exact(size_t num_samples);
     virtual std::vector<double> bipartite_magic_mutual_information_exhaustive();
-
-    //                                                                                                          //
-    // -------------------------------------------------------------------------------------------------------- //
-    //                                                                                                          //
 };
 
 class DensityMatrix;
@@ -253,7 +267,7 @@ class Statevector;
 class MatrixProductState;
 class MatrixProductMixedState;
 
-class DensityMatrix : public QuantumState {
+class DensityMatrix : public MagicQuantumState {
 	public:
 		Eigen::MatrixXcd data;
 
@@ -323,7 +337,7 @@ class DensityMatrix : public QuantumState {
     virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
-class Statevector : public QuantumState {
+class Statevector : public MagicQuantumState {
 	public:
 		Eigen::VectorXcd data;
 
@@ -419,7 +433,7 @@ class PauliExpectationTree {
 
 class MatrixProductStateImpl;
 
-class MatrixProductState : public QuantumState {
+class MatrixProductState : public MagicQuantumState {
   friend class PauliExpectationTree;
 
 	private:
@@ -429,18 +443,19 @@ class MatrixProductState : public QuantumState {
     MatrixProductState();
     ~MatrixProductState();
 
-		MatrixProductState(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold=1e-8);
+		MatrixProductState(uint32_t num_qubits, uint32_t max_bond_dimension, double sv_threshold=1e-8);
     MatrixProductState(const MatrixProductState& other);
-    MatrixProductState(const Statevector& other, uint32_t bond_dimension, double sv_threshold=1e-8);
+    MatrixProductState(const Statevector& other, uint32_t max_bond_dimension, double sv_threshold=1e-8);
     MatrixProductState(const std::unique_ptr<MatrixProductStateImpl>& impl);
     MatrixProductState& operator=(const MatrixProductState& other);
 
-    static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
+    static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t max_bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
 
 		virtual std::string to_string() const override;
 
 		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
     std::vector<double> singular_values(uint32_t i) const;
+    std::vector<std::vector<std::vector<std::complex<double>>>> tensor(uint32_t q) const;
 
     virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const override;
 

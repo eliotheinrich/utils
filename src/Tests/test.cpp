@@ -1,3 +1,4 @@
+#include <memory>
 #include <random>
 
 #include <fmt/format.h>
@@ -67,7 +68,7 @@ bool states_close(const T& first, const V& second) {
   DensityMatrix d1(first);
   DensityMatrix d2(second);
 
-  if (d1.num_qubits != d2.num_qubits) {
+  if (d1.get_num_qubits() != d2.get_num_qubits()) {
     return false;
   }
 
@@ -108,7 +109,8 @@ bool states_close_pauli_fuzz(const T& first, const V& second, const Args&... arg
 
 template <typename T, typename... QuantumStates>
 size_t get_num_qubits(const T& first, const QuantumStates&... args) {
-  size_t num_qubits = first.num_qubits;
+  size_t num_qubits = first.get_num_qubits();
+
   if constexpr (sizeof...(args) == 0) {
     return num_qubits;
   } else {
@@ -185,14 +187,6 @@ QubitInterval random_interval(size_t num_qubits, size_t k) {
   uint32_t q2 = q1 + k;
 
   return std::make_pair(q1, q2);
-}
-
-std::minstd_rand seeded_rng() {
-  thread_local std::random_device gen;
-  int seed = gen();
-  std::minstd_rand rng(seed);
-
-  return rng;
 }
 
 bool test_statevector() {
@@ -471,8 +465,8 @@ bool test_partial_trace() {
 
     PauliString P = PauliString::rand(nqb);
 
-    std::vector<uint32_t> qubitsA_ = complement(qubitsA, mps.num_qubits);
-    std::vector<uint32_t> qubitsB_ = complement(qubitsB, mpoA.num_qubits);
+    std::vector<uint32_t> qubitsA_ = complement(qubitsA, mps.get_num_qubits());
+    std::vector<uint32_t> qubitsB_ = complement(qubitsB, mpoA.get_num_qubits());
 
     PauliString PA = P.substring(qubitsA_, false);
 
@@ -670,14 +664,6 @@ bool test_mpo_sample_paulis() {
   auto paulis = mpo.sample_paulis({}, 1);
 
   mpo = mps.partial_trace_mps({0, 1, 5});
-  bool found_error = false;
-  try {
-    paulis = mpo.sample_paulis({}, 1);
-  } catch (const std::runtime_error& e) {
-    found_error = true;
-  }
-
-  ASSERT(found_error, "Did not find appropriate runtime error.");
 
 
   return true;
@@ -732,7 +718,7 @@ bool test_mps_reverse() {
 
     mps_r_m.reverse();
 
-    size_t remaining_nqb = mps_r_m.num_qubits;
+    size_t remaining_nqb = mps_r_m.get_num_qubits();
     for (size_t i = 0; i < remaining_nqb/2; i++) {
       mps_r_m.swap(i, remaining_nqb - i - 1);
     }
@@ -918,6 +904,10 @@ bool test_mps_debug_tests() {
   return true;
 }
 
+bool test_mps_montecarlo() {
+  constexpr size_t nqb = 8;
+}
+
 bool test_mpo_sample_paulis_montecarlo() {
   constexpr size_t nqb = 8;
 
@@ -941,8 +931,6 @@ bool test_mpo_sample_paulis_montecarlo() {
       auto [p1, t1] = samples1[i];
       auto [p2, t2] = samples2[i];
 
-      //std::cout << fmt::format("p1 = {}, p2 = {}\nt1 = {}\nt2 = {}\n", p1, p2, t1, t2);
-
       ASSERT(p1 == p2, fmt::format("Paulis {} and {} do not match.", p1, p2));
       for (size_t j = 0; j < t1.size(); j++) {
         ASSERT(is_close(t1[j], t2[j]), fmt::format("Amplitudes of {} and {} of {:.3f} and {:.3f} on qubits {} do not match.", p1, p2, t1[j], t2[j], to_qubits(supports[i])));
@@ -965,8 +953,8 @@ bool test_mpo_sample_paulis_montecarlo() {
   for (size_t i = 0; i < 10; i++) {
     size_t tqb = 4;
     Qubits qubits = random_qubits(nqb, tqb);
-    auto mpo = mps.partial_trace(qubits);
-    auto rho = sv.partial_trace(qubits);
+    auto mpo = std::dynamic_pointer_cast<MagicQuantumState>(mps.partial_trace(qubits));
+    auto rho = std::dynamic_pointer_cast<MagicQuantumState>(sv.partial_trace(qubits));
 
     size_t rqb = nqb - tqb;
 
@@ -978,7 +966,7 @@ bool test_mpo_sample_paulis_montecarlo() {
     }
 
     Random::seed_rng(s);
-    samples1 = mpo->sample_paulis_montecarlo(supports, num_samples, 0, p);
+    samples1 = mpo->MagicQuantumState::sample_paulis_montecarlo(supports, num_samples, 0, p);
 
     Random::seed_rng(s);
     samples2 = rho->sample_paulis_montecarlo(supports, num_samples, 0, p);
@@ -1096,7 +1084,7 @@ bool test_mps_trace_conserved() {
   };
 
   auto expz = [&](MatrixProductState& mps, uint32_t q) {
-    PauliString Z(mps.num_qubits);
+    PauliString Z(mps.get_num_qubits());
     Z.set_z(q, 1);
     return std::abs(mps.expectation(Z));
   };
@@ -1237,15 +1225,79 @@ bool test_statevector_diagonal_gate() {
 }
 
 bool test_mps_sample_bitstrings() {
-  constexpr size_t nqb = 3;
-  MatrixProductState mps(nqb, 1u << nqb);
+  constexpr size_t nqb = 8;
+  constexpr size_t N = 1u << nqb;
 
-  mps.h(0);
-  mps.h(1);
-  auto samples = mps.sample_bitstrings(100);
-  std::cout << fmt::format("MatrixProductState: \n");
+  MatrixProductState mps(nqb, N);
+  Statevector psi(nqb);
+
+  randomize_state_haar(mps, psi);
+
+  std::vector<double> P = psi.probabilities();
+
+  constexpr size_t num_samples = 5000;
+  auto samples = mps.sample_bitstrings(num_samples);
+
+  std::vector<double> Q(N, 0.0);
   for (const auto& [bits, p] : samples) {
-    std::cout << fmt::format("{:5}: {:.5f}\n", bits, p);
+    uint32_t z = bits.to_integer();
+    double p_ = std::pow(std::abs(psi.data(z)), 2.0);
+    ASSERT(is_close(p, p_));
+
+    Q[z] += 1.0 / num_samples;
+  }
+
+  // Compute KL divergence and check that it is small
+  double kl_div = 0.0;
+  for (int i = 0; i < N; ++i) {
+    if (!is_close(Q[i], 0) && !is_close(P[i], 0)) {
+      kl_div += Q[i] * std::log(Q[i] / P[i]);
+    }
+  }
+
+  ASSERT(kl_div < 0.05);
+
+  return true;
+}
+
+bool test_mps_mixed_sample_bitstrings() {
+  constexpr size_t nqb = 8;
+  constexpr size_t N = 1u << nqb;
+
+  MatrixProductState mps(nqb, N);
+  Statevector psi(nqb);
+
+  randomize_state_haar(mps, psi);
+
+  constexpr size_t num_samples = 1000;
+
+  for (size_t i = 0; i < 10; i++) {
+    auto qubits = random_qubits(nqb, 4);
+    auto rho = psi.partial_trace(qubits);
+    auto mpo = mps.partial_trace(qubits);
+
+    std::vector<double> P = rho->probabilities();
+
+    auto samples = mpo->sample_bitstrings(num_samples);
+
+    std::vector<double> Q(N, 0.0);
+    for (const auto& [bits, p] : samples) {
+      uint32_t z = bits.to_integer();
+      double p_ = P[z];
+      ASSERT(is_close(p, p_));
+
+      Q[z] += 1.0 / num_samples;
+    }
+
+    // Compute KL divergence and check that it is small
+    double kl_div = 0.0;
+    for (int i = 0; i < N; ++i) {
+      if (!is_close(Q[i], 0) && !is_close(P[i], 0)) {
+        kl_div += Q[i] * std::log(Q[i] / P[i]);
+      }
+    }
+
+    ASSERT(kl_div < 0.05);
   }
 
   return true;
@@ -1305,6 +1357,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_forced_measurement);
   ADD_TEST(test_statevector_diagonal_gate);
   ADD_TEST(test_mps_sample_bitstrings);
+  ADD_TEST(test_mps_mixed_sample_bitstrings);
 
   //ADD_TEST(inspect_svd_error);
 

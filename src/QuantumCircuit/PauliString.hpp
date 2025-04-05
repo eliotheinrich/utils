@@ -116,6 +116,14 @@ struct BitString {
     bits = std::vector<binary_word>(width, 0);
   }
 
+  binary_word to_integer() const {
+    if (bits.size() > 1) {
+      throw std::runtime_error(fmt::format("Cannot convert a bitstring containing more than {} bits.", binary_word_size()));
+    }
+
+    return bits[0];
+  }
+
   static BitString from_bits(size_t num_bits, binary_word bits) {
     if (num_bits >= binary_word_size()) {
       throw std::runtime_error(fmt::format("Cannot create a >{} BitString from a {}-bit integer.", binary_word_size(), sizeof(bits)));

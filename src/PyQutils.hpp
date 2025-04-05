@@ -6,6 +6,7 @@
 #include "LinearCode.h"
 #include "FreeFermion.h"
 #include "Simulator.hpp"
+#include "Samplers.h"
 
 #include <PyDataFrame.hpp>
 

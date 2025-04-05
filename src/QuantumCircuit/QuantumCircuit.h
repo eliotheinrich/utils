@@ -11,8 +11,10 @@
 // --- Definitions for QuantumCircuit --- //
 
 class QuantumCircuit {
-  public:
+  private:
     uint32_t num_qubits;
+
+  public:
     std::vector<Instruction> instructions;
 
     QuantumCircuit() : num_qubits(0) {}
@@ -22,6 +24,10 @@ class QuantumCircuit {
     QuantumCircuit(const QuantumCircuit& qc) : num_qubits(qc.num_qubits) { 
       append(qc); 
     };
+
+    uint32_t get_num_qubits() const {
+      return num_qubits;
+    }
 
     void resize(uint32_t num_qubits) {
       this->num_qubits = num_qubits;

@@ -3,24 +3,24 @@
 
 #include <glaze/glaze.hpp>
 
-DensityMatrix::DensityMatrix(uint32_t num_qubits) : QuantumState(num_qubits) {
+DensityMatrix::DensityMatrix(uint32_t num_qubits) : MagicQuantumState(num_qubits) {
 	data = Eigen::MatrixXcd::Zero(basis, basis);
 	data(0, 0) = 1;
 }
 
-DensityMatrix::DensityMatrix(const Statevector& state) : QuantumState(state.num_qubits) {	
+DensityMatrix::DensityMatrix(const Statevector& state) : MagicQuantumState(state.get_num_qubits()) {	
 	data = Eigen::kroneckerProduct(state.data.adjoint(), state.data);
 }
 
-DensityMatrix::DensityMatrix(const QuantumCircuit& circuit) : DensityMatrix(circuit.num_qubits) {
+DensityMatrix::DensityMatrix(const QuantumCircuit& circuit) : DensityMatrix(circuit.get_num_qubits()) {
 	evolve(circuit);
 }
 
-DensityMatrix::DensityMatrix(const DensityMatrix& rho) : QuantumState(rho.num_qubits) {
+DensityMatrix::DensityMatrix(const DensityMatrix& rho) : MagicQuantumState(rho.num_qubits) {
 	data = rho.data;
 }
 
-DensityMatrix::DensityMatrix(const MatrixProductState& mps) : QuantumState(mps.num_qubits) {
+DensityMatrix::DensityMatrix(const MatrixProductState& mps) : MagicQuantumState(mps.get_num_qubits()) {
   if (mps.is_pure_state()) {
     Statevector state(mps.coefficients_pure());
 	  data = Eigen::kroneckerProduct(state.data.adjoint(), state.data);

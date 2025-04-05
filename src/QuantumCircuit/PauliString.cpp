@@ -7,8 +7,8 @@ void PauliString::evolve(const QuantumCircuit& qc) {
     throw std::runtime_error("Provided circuit is not Clifford.");
   }
 
-  if (qc.num_qubits != num_qubits) {
-    throw std::runtime_error(fmt::format("Cannot evolve a Paulistring with {} qubits with a QuantumCircuit with {} qubits.", num_qubits, qc.num_qubits));
+  if (qc.get_num_qubits() != num_qubits) {
+    throw std::runtime_error(fmt::format("Cannot evolve a Paulistring with {} qubits with a QuantumCircuit with {} qubits.", num_qubits, qc.get_num_qubits()));
   }
 
   for (auto const &inst : qc.instructions) {

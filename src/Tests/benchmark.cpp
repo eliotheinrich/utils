@@ -26,7 +26,8 @@ struct fmt::formatter<std::complex<double>> {
 
 template <typename T, typename... QuantumStates>
 size_t get_num_qubits(const T& first, const QuantumStates&... args) {
-  size_t num_qubits = first.num_qubits;
+  size_t num_qubits = first.get_num_qubits();
+
   if constexpr (sizeof...(args) == 0) {
     return num_qubits;
   } else {

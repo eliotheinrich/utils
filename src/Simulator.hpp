@@ -24,8 +24,6 @@ struct std::formatter<Color> : std::formatter<std::string> {
 };
 
 class Texture {
-  private:
-
   public:
     size_t n;
     size_t m;

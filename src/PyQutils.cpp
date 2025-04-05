@@ -1,8 +1,13 @@
 #include <PyQutils.hpp>
+#include <memory>
 
 using PyMutationFunc = std::function<PauliString(PauliString)>;
 inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
   return [func](PauliString& p) { p = func(p); };
+}
+
+inline std::vector<dataframe::byte_t> concat_bytes(const std::vector<dataframe::byte_t>& bytes) {
+  return std::vector<dataframe::byte_t>(bytes.begin(), bytes.begin() + bytes.size() - 1);
 }
 
 NB_MODULE(qutils_bindings, m) {
@@ -64,7 +69,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<QuantumCircuit>(m, "QuantumCircuit")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit&>())
-    .def_ro("num_qubits", &QuantumCircuit::num_qubits)
+    .def("num_qubits", &QuantumCircuit::get_num_qubits)
     .def("__str__", &QuantumCircuit::to_string)
     .def("num_params", &QuantumCircuit::num_params)
     .def("length", &QuantumCircuit::length)
@@ -124,68 +129,73 @@ NB_MODULE(qutils_bindings, m) {
   m.def("hardware_efficient_ansatz", &hardware_efficient_ansatz);
   m.def("haar_unitary", [](uint32_t num_qubits) { return haar_unitary(num_qubits); });
 
-  nanobind::class_<QuantumState>(m, "QuantumState")
-    .def_ro("num_qubits", &QuantumState::num_qubits)
-    .def("__str__", &QuantumState::to_string)
-    .def("h", &QuantumState::h)
-    .def("x", &QuantumState::x)
-    .def("y", &QuantumState::y)
-    .def("z", &QuantumState::z)
-    .def("s", &QuantumState::s)
-    .def("sd", &QuantumState::sd)
-    .def("t", &QuantumState::t)
-    .def("td", &QuantumState::td)
-    .def("sqrtX", &QuantumState::sqrtX)
-    .def("sqrtY", &QuantumState::sqrtY)
-    .def("sqrtZ", &QuantumState::sqrtZ)
-    .def("sqrtXd", &QuantumState::sqrtXd)
-    .def("sqrtYd", &QuantumState::sqrtYd)
-    .def("sqrtZd", &QuantumState::sqrtZd)
-    .def("cx", &QuantumState::cx)
-    .def("cy", &QuantumState::cy)
-    .def("cz", &QuantumState::cz)
-    .def("swap", &QuantumState::swap)
-    .def("random_clifford", &QuantumState::random_clifford)
-    .def("partial_trace", [](QuantumState& self, const Qubits& qubits) { return self.partial_trace(qubits); })
-    .def("expectation", &QuantumState::expectation)
-    .def("probabilities", &QuantumState::probabilities)
-    .def("purity", &QuantumState::purity)
-    .def("mzr", [](QuantumState& self, uint32_t q, std::optional<bool> outcome) {
+  nanobind::class_<MagicQuantumState>(m, "QuantumState")
+    .def("num_qubits", &MagicQuantumState::get_num_qubits)
+    .def("__str__", &MagicQuantumState::to_string)
+    .def("__getstate__", [](const MagicQuantumState& self) { return convert_bytes(self.serialize()); })
+    .def("h", &MagicQuantumState::h)
+    .def("x", &MagicQuantumState::x)
+    .def("y", &MagicQuantumState::y)
+    .def("z", &MagicQuantumState::z)
+    .def("s", &MagicQuantumState::s)
+    .def("sd", &MagicQuantumState::sd)
+    .def("t", &MagicQuantumState::t)
+    .def("td", &MagicQuantumState::td)
+    .def("sqrtX", &MagicQuantumState::sqrtX)
+    .def("sqrtY", &MagicQuantumState::sqrtY)
+    .def("sqrtZ", &MagicQuantumState::sqrtZ)
+    .def("sqrtXd", &MagicQuantumState::sqrtXd)
+    .def("sqrtYd", &MagicQuantumState::sqrtYd)
+    .def("sqrtZd", &MagicQuantumState::sqrtZd)
+    .def("cx", &MagicQuantumState::cx)
+    .def("cy", &MagicQuantumState::cy)
+    .def("cz", &MagicQuantumState::cz)
+    .def("swap", &MagicQuantumState::swap)
+    .def("random_clifford", &MagicQuantumState::random_clifford)
+    .def("partial_trace", [](MagicQuantumState& self, const Qubits& qubits) { return std::dynamic_pointer_cast<MagicQuantumState>(self.partial_trace(qubits)); })
+    .def("expectation", &MagicQuantumState::expectation)
+    .def("probabilities", [](MagicQuantumState& self) { return to_nbarray(self.probabilities()); } )
+    .def("purity", &MagicQuantumState::purity)
+    .def("mzr", [](MagicQuantumState& self, uint32_t q, std::optional<bool> outcome) {
       return self.measure(Measurement::computational_basis(q, outcome));
     }, "qubit"_a, "outcome"_a=std::nullopt)
-    .def("measure", [](QuantumState& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
+    .def("measure", [](MagicQuantumState& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) {
       return self.measure(Measurement(qubits, pauli, outcome));
     }, "qubits"_a, "pauli"_a, "outcome"_a=std::nullopt)
-    .def("weak_measure", [](QuantumState& self, const Qubits& qubits, double beta, const PauliString& pauli, std::optional<bool> outcome) {
+    .def("weak_measure", [](MagicQuantumState& self, const Qubits& qubits, double beta, const PauliString& pauli, std::optional<bool> outcome) {
       return self.weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
-    .def("entropy", &QuantumState::entropy, "qubits"_a, "index"_a)
-    .def("sample_bitstrings", &QuantumState::sample_bitstrings)
-    .def("sample_paulis", &QuantumState::sample_paulis)
-    .def("sample_paulis_exact", &QuantumState::sample_paulis_exact)
-    .def("sample_paulis_exhaustive", &QuantumState::sample_paulis_exhaustive)
-    .def("sample_paulis_montecarlo", [](QuantumState& self, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PyMutationFunc py_mutation) {
+    .def("entropy", &MagicQuantumState::entropy, "qubits"_a, "index"_a)
+    .def("sample_bitstrings", &MagicQuantumState::sample_bitstrings)
+    .def("sample_paulis", &MagicQuantumState::sample_paulis)
+    .def("sample_paulis_exact", &MagicQuantumState::sample_paulis_exact)
+    .def("sample_paulis_exhaustive", &MagicQuantumState::sample_paulis_exhaustive)
+    .def("sample_paulis_montecarlo", [](MagicQuantumState& self, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, PyMutationFunc py_mutation) {
       auto mutation = convert_from_pyfunc(py_mutation);
       return self.sample_paulis_montecarlo({}, num_samples, equilibration_timesteps, prob, mutation);
     })
-    .def("stabilizer_renyi_entropy", &QuantumState::stabilizer_renyi_entropy)
-    .def_static("calculate_magic_mutual_information_from_samples", [](QuantumState& self, const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
+    .def("stabilizer_renyi_entropy", &MagicQuantumState::stabilizer_renyi_entropy)
+    .def_static("calculate_magic_mutual_information_from_samples", [](MagicQuantumState& self, const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
       return self.calculate_magic_mutual_information_from_samples(samples2, samples4);
     })
-    .def_static("calculate_magic_mutual_information_from_samples2", &QuantumState::calculate_magic_mutual_information_from_samples2)
-    .def("magic_mutual_information_samples_exact", &QuantumState::magic_mutual_information_samples_exact)
-    .def("magic_mutual_information_samples", &QuantumState::magic_mutual_information_samples_montecarlo)
-    .def("magic_mutual_information_exhaustive", &QuantumState::magic_mutual_information_exhaustive)
-    .def("magic_mutual_information", &QuantumState::magic_mutual_information)
-    .def("bipartite_magic_mutual_information_samples_exact", &QuantumState::bipartite_magic_mutual_information_samples_exact)
-    .def("bipartite_magic_mutual_information_samples_montecarlo", &QuantumState::bipartite_magic_mutual_information_samples_montecarlo)
-    .def("bipartite_magic_mutual_information_exhaustive", &QuantumState::bipartite_magic_mutual_information_exhaustive)
-    .def("bipartite_magic_mutual_information", &QuantumState::bipartite_magic_mutual_information);
+    .def_static("calculate_magic_mutual_information_from_samples2", &MagicQuantumState::calculate_magic_mutual_information_from_samples2)
+    .def("magic_mutual_information_samples_exact", &MagicQuantumState::magic_mutual_information_samples_exact)
+    .def("magic_mutual_information_samples", &MagicQuantumState::magic_mutual_information_samples_montecarlo)
+    .def("magic_mutual_information_exhaustive", &MagicQuantumState::magic_mutual_information_exhaustive)
+    .def("magic_mutual_information", &MagicQuantumState::magic_mutual_information)
+    .def("bipartite_magic_mutual_information_samples_exact", &MagicQuantumState::bipartite_magic_mutual_information_samples_exact)
+    .def("bipartite_magic_mutual_information_samples_montecarlo", &MagicQuantumState::bipartite_magic_mutual_information_samples_montecarlo)
+    .def("bipartite_magic_mutual_information_exhaustive", &MagicQuantumState::bipartite_magic_mutual_information_exhaustive)
+    .def("bipartite_magic_mutual_information", &MagicQuantumState::bipartite_magic_mutual_information);
 
-  nanobind::class_<Statevector, QuantumState>(m, "Statevector")
+  nanobind::class_<Statevector, MagicQuantumState>(m, "Statevector")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
     .def(nanobind::init<MatrixProductState>())
+    .def("__setstate__", [](Statevector& self, const nanobind::bytes& bytes) { 
+      new (&self) Statevector();
+      self.deserialize(convert_bytes(bytes)); 
+    })
     .def_ro("data", &Statevector::data)
     .def("normalize", &Statevector::normalize)
     .def("inner", &Statevector::inner)
@@ -194,27 +204,36 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<DensityMatrix, QuantumState>(m, "DensityMatrix")
+  nanobind::class_<DensityMatrix, MagicQuantumState>(m, "DensityMatrix")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
+    .def("__setstate__", [](DensityMatrix& self, const nanobind::bytes& bytes) { 
+      new (&self) DensityMatrix();
+      self.deserialize(convert_bytes(bytes)); 
+    })
     .def_ro("data", &DensityMatrix::data)
     .def("expectation_matrix", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
-  nanobind::class_<MatrixProductState, QuantumState>(m, "MatrixProductState")
-    .def(nanobind::init<uint32_t, uint32_t, double>(), "num_qubits"_a, "bond_dimension"_a, "sv_threshold"_a=1e-4)
+  nanobind::class_<MatrixProductState, MagicQuantumState>(m, "MatrixProductState")
+    .def(nanobind::init<uint32_t, uint32_t, double>(), "num_qubits"_a, "max_bond_dimension"_a, "sv_threshold"_a=1e-4)
     .def("__str__", &MatrixProductState::to_string)
+    .def("__setstate__", [](MatrixProductState& self, const nanobind::bytes& bytes) { 
+      new (&self) MatrixProductState(1, 2);
+      self.deserialize(convert_bytes(bytes)); 
+    })
     .def("print_mps", &MatrixProductState::print_mps)
     .def("set_debug_level", &MatrixProductState::set_debug_level)
     .def("set_orthogonality_level", &MatrixProductState::set_orthogonality_level)
-    .def("singular_values", &MatrixProductState::singular_values)
-    .def("get_logged_truncerr", &MatrixProductState::get_logged_truncerr)
+    .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)
+    .def("singular_values", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.singular_values(q)); })
+    .def("tensor", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.tensor(q)); })
+    .def("get_logged_truncerr", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.get_logged_truncerr()); })
     .def("trace", &MatrixProductState::trace)
     .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
-    .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -253,11 +272,24 @@ NB_MODULE(qutils_bindings, m) {
       QuantumStateSampler sampler(params);
       return std::make_pair(sampler, params);
     })
-    .def("set_sre_montecarlo_update", [](QuantumStateSampler& self, PyMutationFunc func) {
+    .def("take_samples", [](QuantumStateSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
+      std::shared_ptr<QuantumState> qstate = std::dynamic_pointer_cast<QuantumState>(state);
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, qstate);
+      return samples;
+    });
+
+  nanobind::class_<MagicStateSampler>(m, "MagicStateSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      MagicStateSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("set_sre_montecarlo_update", [](MagicStateSampler& self, PyMutationFunc func) {
       auto mutation = convert_from_pyfunc(func);
       self.set_montecarlo_update(mutation);
     })
-    .def("take_samples", [](QuantumStateSampler& sampler, const std::shared_ptr<QuantumState>& state) {
+    .def("take_samples", [](MagicStateSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;
@@ -267,6 +299,10 @@ NB_MODULE(qutils_bindings, m) {
     .def(nanobind::init<uint32_t>())
     .def_ro("num_qubits", &QuantumCHPState::num_qubits)
     .def("__str__", &QuantumCHPState::to_string)
+    .def("__getstate__", [](const QuantumCHPState& self) { return convert_bytes(self.serialize()); })
+    .def("__setstate__", [](QuantumCHPState& self, const nanobind::bytes& bytes) { 
+      new (&self) QuantumCHPState();
+      self.deserialize(convert_bytes(bytes)); })
     .def("set_x", &QuantumCHPState::set_x)
     .def("set_x", [](QuantumCHPState& self, size_t i, size_t j, size_t v) { self.set_x(i, j, static_cast<bool>(v)); })
     .def("set_z", &QuantumCHPState::set_z)
@@ -304,8 +340,6 @@ NB_MODULE(qutils_bindings, m) {
       return self.get_entropy_surface<int>(2u);
     })
     .def("random_clifford", &QuantumCHPState::random_clifford)
-    .def("serialize", [](QuantumCHPState& self) { return convert_bytes(self.serialize()); })
-    .def("deserialize", [](QuantumCHPState& self, const nanobind::bytes& bytes) { self.deserialize(convert_bytes(bytes)); })
     .def("get_texture", [](QuantumCHPState& state, 
         const std::vector<float>& color_x, const std::vector<float>& color_z, const std::vector<float>& color_y
     ) -> std::tuple<std::vector<float>, size_t, size_t> {
@@ -398,7 +432,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("partial_rank", [](BinaryMatrix& self, const std::vector<int>& sites, bool inplace) { 
         std::vector<size_t> _sites(sites.size());
         std::transform(sites.begin(), sites.end(), _sites.begin(),
-            [](int value) { return static_cast<size_t>(value); });
+          [](int value) { return static_cast<size_t>(value); });
         return self.partial_rank(_sites, inplace); 
       }, "sites"_a, "inplace_"_a=false);
 

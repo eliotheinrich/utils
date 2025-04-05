@@ -1,5 +1,6 @@
 add_library(quantum_state 
     QuantumStates.cpp
+    MagicQuantumState.cpp
     Statevector.cpp
     DensityMatrix.cpp
     MatrixProductState.cpp
