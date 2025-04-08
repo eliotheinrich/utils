@@ -265,7 +265,6 @@ class MagicQuantumState : public QuantumState {
 class DensityMatrix;
 class Statevector;
 class MatrixProductState;
-class MatrixProductMixedState;
 
 class DensityMatrix : public MagicQuantumState {
 	public:
@@ -282,8 +281,6 @@ class DensityMatrix : public MagicQuantumState {
 		DensityMatrix(const DensityMatrix& rho);
 
     DensityMatrix(const MatrixProductState& mps);
-
-    DensityMatrix(const MatrixProductMixedState& mpo);
 
 		DensityMatrix(const Eigen::MatrixXcd& data);
 
@@ -507,7 +504,6 @@ class MatrixProductState : public MagicQuantumState {
 
     bool state_valid();
     void set_debug_level(int i);
-    void set_orthogonality_level(int i);
 
     struct glaze;
     virtual std::vector<char> serialize() const override;

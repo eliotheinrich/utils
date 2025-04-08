@@ -40,6 +40,14 @@ inline static uint32_t randi() {
   return Random::get_instance().rand();
 }
 
+inline static uint32_t randi(uint32_t min, uint32_t max) {
+  return randi() % (max - min) + min;
+}
+
 inline static double randf() {
   return static_cast<double>(randi())/static_cast<double>(RAND_MAX);
+}
+
+inline static double randf(double min, double max) {
+  return randf() * (max - min) + min;
 }

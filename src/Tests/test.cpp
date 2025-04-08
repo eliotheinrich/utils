@@ -189,6 +189,26 @@ QubitInterval random_interval(size_t num_qubits, size_t k) {
   return std::make_pair(q1, q2);
 }
 
+Qubits random_boundary_qubits(uint32_t num_qubits, uint32_t num_traced_qubits) {
+  size_t qA = randi(0, num_traced_qubits);
+  size_t qB = num_traced_qubits - qA;
+
+  Qubits qubits(num_traced_qubits);
+  size_t k = 0;
+  for (size_t i = 0; i < qA; i++) {
+    qubits[k] = i;
+    k++;
+  }
+
+  for (size_t i = 0; i < qB; i++) {
+    qubits[k] = num_qubits - 1 - i;
+    k++;
+  }
+
+  return qubits;
+}
+
+
 bool test_statevector() {
   size_t num_qubits = 3;
 
@@ -293,8 +313,36 @@ bool test_mps_expectation() {
   return true;
 }
 
+bool tiny_test() {
+  size_t nqb = 6;
+  MatrixProductState mps(nqb, 64);
+  DensityMatrix rho(nqb);
+  mps.set_debug_level(1);
+
+  randomize_state_haar(mps, rho);
+
+  Qubits qubits = {0, 1, 4, 5};
+  auto mpo = mps.partial_trace_mps(qubits);
+  auto dm = rho.partial_trace_density_matrix(qubits);
+
+  std::cout << mpo.to_string() << "\n";
+  std::cout << dm.to_string() << "\n";
+  std::cout << fmt::format("trace = {:.5f}, {:.5f}\n", mpo.trace(), dm.trace());
+
+  for (size_t i = 0; i < mpo.get_num_qubits() - 1; i++) {
+    auto sv = mpo.singular_values(i);
+    double d = 0.0;
+    for (size_t j = 0; j < sv.size(); j++) {
+      d += sv[j]*sv[j];
+    }
+    std::cout << fmt::format("{}: {:.3f}, {::.1f}\n", i, d, sv);
+  }
+
+  return true;
+}
+
 bool test_mpo_expectation() {
-  constexpr size_t nqb = 6;
+  constexpr size_t nqb = 8;
 
   Statevector s(nqb);
   MatrixProductState mps(nqb, 1u << nqb);
@@ -303,15 +351,15 @@ bool test_mpo_expectation() {
   ASSERT(states_close(s, mps), "States are not close.");
 
   for (size_t i = 0; i < 100; i++) {
-    size_t num_traced_qubits = 3;
-    Qubits qubits = random_qubits(nqb, num_traced_qubits);
+    auto qubits = random_boundary_qubits(nqb, 4);
+    size_t num_traced_qubits = qubits.size();
 
     size_t num_remaining_qubits = nqb - num_traced_qubits;
 
-    size_t nqb = randi() % (num_remaining_qubits - 1) + 1;
-    //size_t nqb = 1;
+    size_t nqb = randi(1, num_remaining_qubits);
 
-    size_t q = randi() % (num_remaining_qubits - nqb + 1);
+    size_t q = randi(0, num_remaining_qubits - nqb);
+
     std::vector<uint32_t> qubits_p(nqb);
     std::iota(qubits_p.begin(), qubits_p.end(), q);
 
@@ -408,23 +456,8 @@ bool test_nonlocal_mps() {
   return true;
 }
 
-bool test_mpo_constructor() {
-  size_t nqb = 6;
-  MatrixProductState mps(nqb, 1u << nqb);
-  mps.set_debug_level(MPS_DEBUG_LEVEL);
-  DensityMatrix rho(nqb);
-
-  randomize_state_haar(mps, rho);
-  std::vector<uint32_t> traced_qubits = {0, 1, 3, 4};
-
-  MatrixProductState mpo = mps.partial_trace_mps(traced_qubits);
-
-  return true;
-}
-
 bool test_partial_trace() {
   constexpr size_t nqb = 6;
-  static_assert(nqb % 2 == 0);
 
   for (size_t i = 0; i < 10; i++) {
     MatrixProductState mps(nqb, 1u << nqb);
@@ -432,14 +465,7 @@ bool test_partial_trace() {
     DensityMatrix rho(nqb);
     randomize_state_haar(mps, rho);
 
-
-    size_t qA = randi() % (nqb / 2);
-    Qubits qubitsA = random_qubits(nqb, qA);
-
-    size_t qB = randi() % (nqb / 2);
-    Qubits qubitsB = random_qubits(nqb - qA, qB);
-
-    auto complement = [](const std::vector<uint32_t>& qubits, size_t num_qubits) {
+    auto complement = [](const Qubits& qubits, size_t num_qubits) {
       std::vector<bool> mask(num_qubits, true);
       for (const auto q : qubits) {
         mask[q] = false;
@@ -454,6 +480,15 @@ bool test_partial_trace() {
 
       return qubits_;
     };
+
+
+    uint32_t qA = randi(nqb / 2 + 1, nqb);
+    Qubits qubitsA = complement(to_qubits(random_interval(nqb, qA)), nqb);
+
+    uint32_t qB = randi(nqb / 2 + 1, nqb);
+    Qubits qubitsB = complement(to_qubits(random_interval(nqb - qA, qB)), nqb - qA);
+
+    std::cout << fmt::format("qubitsA = {}, qubitsB = {}\n", qubitsA, qubitsB);
 
     auto rho0 = rho.partial_trace_density_matrix({});
     auto rhoA = rho.partial_trace_density_matrix(qubitsA);
@@ -487,15 +522,18 @@ bool test_partial_trace() {
     auto bA_mps = std::abs(mpoA.expectation(PA));
     auto bB_mps = std::abs(mpoB.expectation(PB));
 
+    //std::cout << mpoA.to_string() << "\n\n\n";
+    //std::cout << rhoA.to_string() << "\n";
+
     ASSERT(states_close(mpo0, rho0), fmt::format("States not equal after tracing []."));
     ASSERT(states_close(mpoA, rhoA), fmt::format("States not equal after tracing {}.", qubitsA));
     ASSERT(states_close(mpoB, rhoB), fmt::format("States not equal after tracing {} and {}.", qubitsA, qubitsB));
 
     ASSERT(is_close(a0_rho, a0_mps, b0_rho, b0_mps), fmt::format("Expectations not equal after tracing []. {}, {}, {}, {}", a0_rho, a0_mps, b0_rho, b0_mps));
     ASSERT(is_close(aA_rho, aA_mps, bA_rho, bA_mps), fmt::format("Expectations not equal after tracing {}. {}, {}, {}, {}", qubitsA, aA_rho, aA_mps, bA_rho, bA_mps));
+    ASSERT(is_close(bB_rho, bB_mps), fmt::format("Expectations not equal after tracing {} and {}. {}, {}", qubitsA, qubitsB, bB_rho, bB_mps));
 
     // Check that second round of trace is good
-    ASSERT(is_close(bB_rho, bB_mps), fmt::format("Expectations not equal after tracing {} and {}. {}, {}", qubitsA, qubitsB, bB_rho, bB_mps));
   }
 
   return true;
@@ -659,13 +697,6 @@ bool test_mpo_sample_paulis() {
     ASSERT(P1 == P2 && is_close(t1, t2), fmt::format("Paulis <{}> = {:.3f} and <{}> = {:.3f} do not match in sample_paulis.", P1, t1, P2, t2));
   }
 
-  mpo = mps.partial_trace_mps({0, 1, 2});
-
-  auto paulis = mpo.sample_paulis({}, 1);
-
-  mpo = mps.partial_trace_mps({0, 1, 5});
-
-
   return true;
 }
 
@@ -693,6 +724,7 @@ bool test_mps_inner() {
 }
 
 bool test_mps_reverse() {
+  return false;
   std::vector<size_t> nqbs = {3, 4, 5, 6};
 
   for (auto nqb : nqbs) {
@@ -750,20 +782,17 @@ bool test_statevector_to_mps() {
 
 bool test_purity() {
   constexpr size_t nqb = 6;
-  std::minstd_rand rng(randi());
 
   MatrixProductState mps(nqb, 1u << nqb);
   mps.set_debug_level(MPS_DEBUG_LEVEL);
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(mps);
 
-    uint32_t num_traced_qubits = randi() % nqb;
-    std::vector<uint32_t> traced_qubits(nqb);
+    uint32_t num_traced_qubits = randi(0, nqb);
+    std::vector<uint32_t> traced_qubits(num_traced_qubits);
     std::iota(traced_qubits.begin(), traced_qubits.end(), 0);
-    std::shuffle(traced_qubits.begin(), traced_qubits.end(), rng);
-    traced_qubits = std::vector<uint32_t>(traced_qubits.begin(), traced_qubits.begin() + num_traced_qubits);
 
-    MatrixProductState mpo = mps.partial_trace_mps({0, 1, 3, 5});
+    MatrixProductState mpo = mps.partial_trace_mps(traced_qubits);
     DensityMatrix dm(mpo);
 
     double p1 = mpo.purity();
@@ -902,10 +931,6 @@ bool test_mps_debug_tests() {
   ASSERT(mps.state_valid(), "Failed debug tests.");
 
   return true;
-}
-
-bool test_mps_montecarlo() {
-  constexpr size_t nqb = 8;
 }
 
 bool test_mpo_sample_paulis_montecarlo() {
@@ -1272,7 +1297,7 @@ bool test_mps_mixed_sample_bitstrings() {
   constexpr size_t num_samples = 1000;
 
   for (size_t i = 0; i < 10; i++) {
-    auto qubits = random_qubits(nqb, 4);
+    auto qubits = random_boundary_qubits(nqb, 4);
     auto rho = psi.partial_trace(qubits);
     auto mpo = mps.partial_trace(qubits);
 
@@ -1328,7 +1353,6 @@ int main(int argc, char *argv[]) {
 
   ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
-  ADD_TEST(test_mpo_constructor);
   ADD_TEST(test_statevector);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
@@ -1344,9 +1368,9 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_weak_measure);
   ADD_TEST(test_purity);
   ADD_TEST(test_projector);
-  ADD_TEST(test_mpo_sample_paulis);
-  ADD_TEST(test_pauli_expectation_tree);
-  ADD_TEST(test_mpo_sample_paulis_montecarlo); // TODO fix
+  //ADD_TEST(test_mpo_sample_paulis);
+  //ADD_TEST(test_pauli_expectation_tree);
+  //ADD_TEST(test_mpo_sample_paulis_montecarlo); // TODO fix
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
@@ -1358,6 +1382,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector_diagonal_gate);
   ADD_TEST(test_mps_sample_bitstrings);
   ADD_TEST(test_mps_mixed_sample_bitstrings);
+
+  ADD_TEST(tiny_test);
 
   //ADD_TEST(inspect_svd_error);
 

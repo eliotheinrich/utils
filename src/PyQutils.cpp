@@ -226,7 +226,6 @@ NB_MODULE(qutils_bindings, m) {
     })
     .def("print_mps", &MatrixProductState::print_mps)
     .def("set_debug_level", &MatrixProductState::set_debug_level)
-    .def("set_orthogonality_level", &MatrixProductState::set_orthogonality_level)
     .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)
     .def("singular_values", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.singular_values(q)); })
     .def("tensor", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.tensor(q)); })
