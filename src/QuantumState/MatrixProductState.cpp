@@ -777,9 +777,6 @@ class MatrixProductStateImpl {
         return 0.0;
       }
 
-      orthogonalize(q);
-      assert_state_valid(fmt::format("State invalid after applying entropy({})\n", q));
-
       auto singular_vals = orthogonalize(q-1);
       int d = dim(inds(singular_vals)[0]);
 
