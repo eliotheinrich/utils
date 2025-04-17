@@ -67,3 +67,25 @@ QubitSupport support_complement(const QubitSupport& support, size_t n) {
 
   return QubitSupport{qubits_};
 }
+
+double renyi_entropy(size_t index, const std::vector<double>& samples) {
+  if (index == 1) {
+    double q = 0.0;
+    for (size_t i = 0; i < samples.size(); i++) {
+      double p = samples[i]*samples[i];
+      q += std::log(p);
+    }
+
+    q = q/samples.size();
+    return -q;
+  } else {
+    double q = 0.0;
+    for (size_t i = 0; i < samples.size(); i++) {
+      double p = samples[i]*samples[i];
+      q += std::pow(p, index - 1.0);
+    }
+
+    q = q/samples.size();
+    return 1.0/(1.0 - index) * std::log(q);
+  }
+}

@@ -235,8 +235,6 @@ class MagicQuantumState : public QuantumState {
       throw std::runtime_error("Attempted to call virtual sample_paulis on state which does not provide an implementation.");
     }
 
-    double stabilizer_renyi_entropy(size_t index, const std::vector<double>& samples) const;
-
     void set_use_parent_implementation(bool use_parent) {
       this->use_parent = use_parent;
     }
@@ -523,6 +521,8 @@ std::tuple<Qubits, Qubits, Qubits> get_traced_qubits(
 );
 
 std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmplitudes>& pauli_samples);
+
+double renyi_entropy(size_t index, const std::vector<double>& samples);
 
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};

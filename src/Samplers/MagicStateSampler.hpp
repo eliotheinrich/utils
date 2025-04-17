@@ -61,7 +61,7 @@ class MagicStateSampler {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
-          double M = state->stabilizer_renyi_entropy(index, amplitudes);
+          double M = renyi_entropy(index, amplitudes);
           stabilizer_renyi_entropy.push_back(M);
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);

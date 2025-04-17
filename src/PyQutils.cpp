@@ -13,11 +13,14 @@ inline std::vector<dataframe::byte_t> concat_bytes(const std::vector<dataframe::
 NB_MODULE(qutils_bindings, m) {
   nanobind::class_<BitString>(m, "BitString")
     .def(nanobind::init<uint32_t>())
+    .def("to_integer", &BitString::to_integer)
     .def_static("from_bits", [](uint32_t num_bits, uint32_t z) { return BitString::from_bits(num_bits, z); })
     .def_ro("bits", &BitString::bits)
     .def_ro("num_bits", &BitString::num_bits)
     .def("__str__", [](BitString& bs) { return fmt::format("{}", bs); })
     .def("hamming_weight", &BitString::hamming_weight)
+    .def("substring", [](const BitString& self, const std::vector<uint32_t>& sites, bool keep_sites) { return self.substring(sites, keep_sites); }, "sites"_a, "keep"_a = true)
+    .def("superstring", &BitString::superstring)
     .def("get", &BitString::get)
     .def("set", &BitString::set)
     .def("size", &BitString::size);
@@ -33,6 +36,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
     .def("substring", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, true); })
     .def("substring_retain", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, false); })
+    .def("superstring", &PauliString::superstring)
     .def("x", &PauliString::x)
     .def("y", &PauliString::y)
     .def("z", &PauliString::z)
@@ -174,7 +178,6 @@ NB_MODULE(qutils_bindings, m) {
       auto mutation = convert_from_pyfunc(py_mutation);
       return self.sample_paulis_montecarlo({}, num_samples, equilibration_timesteps, prob, mutation);
     })
-    .def("stabilizer_renyi_entropy", &MagicQuantumState::stabilizer_renyi_entropy)
     .def_static("calculate_magic_mutual_information_from_samples", [](MagicQuantumState& self, const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
       return self.calculate_magic_mutual_information_from_samples(samples2, samples4);
     })
@@ -188,9 +191,12 @@ NB_MODULE(qutils_bindings, m) {
     .def("bipartite_magic_mutual_information_exhaustive", &MagicQuantumState::bipartite_magic_mutual_information_exhaustive)
     .def("bipartite_magic_mutual_information", &MagicQuantumState::bipartite_magic_mutual_information);
 
+  m.def("renyi_entropy", &renyi_entropy);
+
   nanobind::class_<Statevector, MagicQuantumState>(m, "Statevector")
     .def(nanobind::init<uint32_t>())
     .def(nanobind::init<QuantumCircuit>())
+    .def(nanobind::init<Statevector>())
     .def(nanobind::init<MatrixProductState>())
     .def("__setstate__", [](Statevector& self, const nanobind::bytes& bytes) { 
       new (&self) Statevector();

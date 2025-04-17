@@ -75,16 +75,17 @@ constexpr static std::pair<Pauli, uint8_t> multiply_pauli(Pauli p1, Pauli p2) {
   uint8_t p2_bits = static_cast<uint8_t>(p2);
 
   int phase = multiplication_phase(p1_bits, p2_bits);
-  uint8_t phase_bits = 0b10; // 2 -> -1 (should never happen in this context)
-  if (phase == 0) {
-    phase_bits = 0b00; // 0 -> 1
-  } else if (phase == -1) {
-    phase_bits = 0b11; // 3 -> -i
-  } else if (phase == 1) {
-    phase_bits = 0b01; // 1 -> i
-  }
+  constexpr uint8_t phase_bits[] = {0b11, 0b00, 0b01};
+  //uint8_t phase_bits = 0b10; // 2 -> -1 (should never happen in this context)
+  //if (phase == 0) { // 1
+  //  phase_bits = 0b00; // 0 -> 1
+  //} else if (phase == -1) { // 0
+  //  phase_bits = 0b11; // 3 -> -i
+  //} else if (phase == 1) { // 2
+  //  phase_bits = 0b01; // 1 -> i
+  //}
 
-  return {static_cast<Pauli>(p1_bits ^ p2_bits), phase_bits};
+  return {static_cast<Pauli>(p1_bits ^ p2_bits), phase_bits[phase + 1]};
 }
 
 static char pauli_to_char(Pauli p) {
@@ -212,6 +213,36 @@ struct BitString {
     }
 
     return *this;
+  }
+
+  BitString substring(const std::vector<uint32_t>& kept_bits, bool remove_bits=false) const {
+    size_t n = remove_bits ? kept_bits.size() : num_bits;
+    BitString b(n);
+
+    if (remove_bits) {
+      for (size_t i = 0; i < kept_bits.size(); i++) {
+        b.set(i, get(kept_bits[i]));
+      }
+    } else {
+      for (const auto i : kept_bits) {
+        b.set(i, get(i));
+      }
+    }
+
+    return b;
+  }
+
+  BitString superstring(const std::vector<uint32_t>& sites, size_t new_num_bits) const {
+    if (sites.size() != num_bits) {
+      throw std::runtime_error(fmt::format("When constructing a superstring bitstring, provided sites must have same size as num_qubits."));
+    }
+    BitString b(new_num_bits);
+    
+    for (size_t i = 0; i < sites.size(); i++) {
+      b.set(i, get(sites[i]));
+    }
+
+    return b;
   }
 };
 
@@ -909,17 +940,18 @@ struct glz::meta<BitString> {
 namespace fmt {
   template <>
   struct formatter<BitString> {
-    size_t total_width = 0;
+    std::optional<size_t> width;
 
     constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
       auto it = ctx.begin(), end = ctx.end();
 
       if (it != end && *it >= '0' && *it <= '9') {
-        total_width = 0;
+        size_t k = 0;
         while (it != end && *it >= '0' && *it <= '9') {
-          total_width = total_width * 10 + (*it - '0');
+          k = k * 10 + (*it - '0');
           ++it;
         }
+        width = k;
       }
 
       return it;
@@ -933,10 +965,11 @@ namespace fmt {
       }
 
       size_t n = bit_str.size();
-      bit_str = bit_str.substr(n - total_width, n);
+      size_t k = width ? width.value() : bs.num_bits;
+      bit_str = bit_str.substr(n - k, n);
 
-      if (total_width > bit_str.size()) {
-        bit_str.insert(0, total_width - bit_str.size(), '0');
+      if (width && width.value() > bit_str.size()) {
+        bit_str.insert(0, width.value() - bit_str.size(), '0');
       }
 
       return fmt::format_to(ctx.out(), "{}", bit_str);

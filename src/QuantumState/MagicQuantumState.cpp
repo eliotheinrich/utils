@@ -195,29 +195,6 @@ std::vector<PauliAmplitudes> MagicQuantumState::sample_paulis_montecarlo(const s
   return samples;
 }
 
-// amplitude sampled according to p = Tr(ρP)^2/(2^N * Tr(ρ^2))
-double MagicQuantumState::stabilizer_renyi_entropy(size_t index, const std::vector<double>& amplitude_samples) const {
-  if (index == 1) {
-    double q = 0.0;
-    for (size_t i = 0; i < amplitude_samples.size(); i++) {
-      double p = amplitude_samples[i]*amplitude_samples[i];
-      q += std::log(p);
-    }
-
-    q = q/amplitude_samples.size();
-    return -q;
-  } else {
-    double q = 0.0;
-    for (size_t i = 0; i < amplitude_samples.size(); i++) {
-      double p = amplitude_samples[i]*amplitude_samples[i];
-      q += std::pow(p, index - 1.0);
-    }
-
-    q = q/amplitude_samples.size();
-    return 1.0/(1.0 - index) * std::log(q);
-  }
-}
-
 double MagicQuantumState::magic_mutual_information_exhaustive(const Qubits& qubitsA, const Qubits& qubitsB) {
   auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
 
@@ -493,4 +470,3 @@ std::vector<double> MagicQuantumState::bipartite_magic_mutual_information(size_t
   
   return magic;
 }
-
