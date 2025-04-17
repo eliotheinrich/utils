@@ -140,7 +140,7 @@ void benchmark_stabilizer_renyi_entropy() {
   size_t num_samples = 100;
   auto samples = mps.sample_paulis({}, num_samples);
   auto amplitudes = extract_amplitudes(samples);
-  auto s = mps.stabilizer_renyi_entropy(2, amplitudes[0]);
+  auto s = estimate_renyi_entropy(2, amplitudes[0]);
 }
 
 void benchmark_stabilizer_renyi_entropy_montecarlo() {
@@ -156,7 +156,7 @@ void benchmark_stabilizer_renyi_entropy_montecarlo() {
   size_t num_samples = 100;
   auto samples = mps.sample_paulis_montecarlo({}, num_samples, 100, [](double t) { return t*t; });
   auto amplitudes = extract_amplitudes(samples);
-  auto s = mps.stabilizer_renyi_entropy(2, amplitudes[0]);
+  auto s = estimate_renyi_entropy(2, amplitudes[0]);
 }
 
 void benchmark_clifford_circuit() {

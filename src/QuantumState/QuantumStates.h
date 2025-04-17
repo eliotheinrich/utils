@@ -208,8 +208,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       }
       return amplitudes;
     }
-
-    //virtual std::vector<std::vector<double>> bipartite_bitstring_amplitudes(size_t num_samples) const;
+    virtual std::vector<std::vector<BitAmplitudes>> sample_bitstrings_bipartite(size_t num_samples) const;
 
 		virtual std::vector<double> probabilities() const=0;
     virtual double purity() const=0;
@@ -523,6 +522,7 @@ std::tuple<Qubits, Qubits, Qubits> get_traced_qubits(
 std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmplitudes>& pauli_samples);
 
 double renyi_entropy(size_t index, const std::vector<double>& samples);
+double estimate_renyi_entropy(size_t index, const std::vector<double>& samples);
 
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};

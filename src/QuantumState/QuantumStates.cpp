@@ -16,6 +16,21 @@ std::vector<BitAmplitudes> QuantumState::sample_bitstrings(size_t num_samples) c
   return samples;
 }
 
+std::vector<std::vector<BitAmplitudes>> QuantumState::sample_bitstrings_bipartite(size_t num_samples) const {
+  auto supports = get_bipartite_supports(num_qubits);
+  size_t N = num_qubits/2 - 1;
+
+  std::vector<std::vector<BitAmplitudes>> samples(N);
+
+  for (size_t i = 0; i < supports.size(); i++) {
+    auto _qubits = complement(to_qubits(supports[i]), num_qubits);
+    auto mixed_state = partial_trace(_qubits);
+    samples[i] = sample_bitstrings(num_samples);
+  }
+
+  return samples;
+}
+
 void single_qubit_random_mutation(PauliString& p) {
   size_t j = randi() % p.num_qubits;
   size_t g = randi() % 4;
@@ -68,11 +83,10 @@ QubitSupport support_complement(const QubitSupport& support, size_t n) {
   return QubitSupport{qubits_};
 }
 
-double renyi_entropy(size_t index, const std::vector<double>& samples) {
+double estimate_renyi_entropy(size_t index, const std::vector<double>& samples) {
   if (index == 1) {
     double q = 0.0;
-    for (size_t i = 0; i < samples.size(); i++) {
-      double p = samples[i]*samples[i];
+    for (auto p : samples) {
       q += std::log(p);
     }
 
@@ -80,12 +94,28 @@ double renyi_entropy(size_t index, const std::vector<double>& samples) {
     return -q;
   } else {
     double q = 0.0;
-    for (size_t i = 0; i < samples.size(); i++) {
-      double p = samples[i]*samples[i];
+    for (auto p : samples) {
       q += std::pow(p, index - 1.0);
     }
 
     q = q/samples.size();
     return 1.0/(1.0 - index) * std::log(q);
+  }
+}
+
+double renyi_entropy(size_t index, const std::vector<double>& probs) {
+  double s = 0.0;
+  if (index == 1) {
+    for (auto p : probs) {
+      if (p > 1e-6) {
+        s += p * std::log(p);
+      }
+    }
+    return -s;
+  } else {
+    for (auto p : probs) {
+      s += std::pow(p, index);
+    }
+    return std::log(s)/(1.0 - index);
   }
 }

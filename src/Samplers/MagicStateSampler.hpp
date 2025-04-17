@@ -29,24 +29,26 @@ class MagicStateSampler {
     MagicStateSampler(dataframe::ExperimentParams& params) {
       sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
 
-      sample_stabilizer_renyi_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_renyi_entropy", false);
-      save_sre_samples = dataframe::utils::get<int>(params, "save_sre_samples", 0);
+      sample_stabilizer_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_entropy", false);
+      sre_save_samples = dataframe::utils::get<int>(params, "sre_save_samples", 0);
       sre_num_samples = dataframe::utils::get<int>(params, "sre_num_samples", 1000);
       sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "virtual"));
-      sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps");
-
-      if (sample_stabilizer_renyi_entropy) {
-        renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "stabilizer_renyi_indices", "1"));
+      if (sre_method == sre_method_t::MonteCarlo) {
+        sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps");
       }
 
-      sample_magic_mutual_information = dataframe::utils::get<int>(params, "sample_magic_mutual_information", false);
-      if (sample_magic_mutual_information) {
-        magic_mutual_information_subsystem_size = dataframe::utils::get<int>(params, "magic_mutual_information_subsystem_size");
+      if (sample_stabilizer_entropy) {
+        renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "stabilizer_entropy_indices", "1"));
       }
 
-      sample_bipartite_magic_mutual_information = dataframe::utils::get<int>(params, "sample_bipartite_magic_mutual_information", false);
-      if (sample_magic_mutual_information || sample_bipartite_magic_mutual_information) {
-        save_mmi_samples = dataframe::utils::get<int>(params, "save_mmi_samples", false);
+      sample_stabilizer_entropy_mutual = dataframe::utils::get<int>(params, "sample_stabilizer_entropy_mutual", false);
+      if (sample_stabilizer_entropy_mutual) {
+        stabilizer_entropy_mutual_subsystem_size = dataframe::utils::get<int>(params, "stabilizer_entropy_mutual_subsystem_size");
+      }
+
+      sample_stabilizer_entropy_bipartite = dataframe::utils::get<int>(params, "sample_stabilizer_entropy_bipartite", false);
+      if (sample_stabilizer_entropy_mutual || sample_stabilizer_entropy_bipartite) {
+        sre_mmi_save_samples = dataframe::utils::get<int>(params, "sre_mmi_save_samples", false);
       }
     }
 
@@ -56,7 +58,7 @@ class MagicStateSampler {
       mutation = f;
     }
 
-    void add_stabilizer_renyi_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
+    void add_stabilizer_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
       auto compute_sre_montecarlo = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
         std::vector<double> stabilizer_renyi_entropy;
@@ -71,25 +73,13 @@ class MagicStateSampler {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
         std::vector<double> stabilizer_renyi_entropy;
         double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
-        for (auto index : indices) {
-          double M = 0.0;
-          if (index == 1) {
-            for (auto p : amplitudes) {
-              double prob = p*p/purity;
-              if (p > 1e-6) {
-                M += prob * std::log(prob);
-              }
-            }
-            M = -M;
-          } else {
-            for (auto p : amplitudes) {
-              double prob = p*p/purity;
-              M += std::pow(prob, index);
-            }
-            M = std::log(M)/(1.0 - index);
-          }
+        for (auto& p : amplitudes) {
+          p = p*p/purity;
+        }
 
-          stabilizer_renyi_entropy.push_back(M);
+        for (auto index : indices) {
+          double s = estimate_renyi_entropy(index, amplitudes);
+          stabilizer_renyi_entropy.push_back(s);
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
@@ -113,7 +103,7 @@ class MagicStateSampler {
         std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
       }
 
-      if (save_sre_samples) {
+      if (sre_save_samples) {
         dataframe::utils::emplace(samples, "stabilizer_renyi_entropy_amplitudes", amplitudes);
       }
 
@@ -151,24 +141,24 @@ class MagicStateSampler {
       dataframe::utils::emplace(samples, "magic_mutual_information_tAB4", tAB4);
     }
 
-    void add_magic_mutual_information_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
+    void add_stabilizer_entropy_mutual_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
       size_t num_qubits = state->get_num_qubits();
-      if (magic_mutual_information_subsystem_size > num_qubits/2) {
-        throw std::runtime_error(fmt::format("magic_mutual_information_subsystem_size = {}, but num_qubits = {}", magic_mutual_information_subsystem_size, num_qubits));
+      if (stabilizer_entropy_mutual_subsystem_size > num_qubits/2) {
+        throw std::runtime_error(fmt::format("stabilizer_entropy_mutual_subsystem_size = {}, but num_qubits = {}", stabilizer_entropy_mutual_subsystem_size, num_qubits));
       }
 
-      std::vector<uint32_t> qubitsA(magic_mutual_information_subsystem_size);
-      std::vector<uint32_t> qubitsB(magic_mutual_information_subsystem_size);
-      for (size_t i = 0; i < magic_mutual_information_subsystem_size; i++) {
+      std::vector<uint32_t> qubitsA(stabilizer_entropy_mutual_subsystem_size);
+      std::vector<uint32_t> qubitsB(stabilizer_entropy_mutual_subsystem_size);
+      for (size_t i = 0; i < stabilizer_entropy_mutual_subsystem_size; i++) {
         qubitsA[i] = i;
-        qubitsB[i] = i + num_qubits - magic_mutual_information_subsystem_size;
+        qubitsB[i] = i + num_qubits - stabilizer_entropy_mutual_subsystem_size;
       }
 
       double mmi_sample;
       if (sre_method == sre_method_t::Exhaustive) {
         mmi_sample = state->magic_mutual_information_exhaustive(qubitsA, qubitsB);
       } else if (sre_method == sre_method_t::MonteCarlo) {
-        if (save_mmi_samples) {
+        if (sre_mmi_save_samples) {
           auto mmi_data = state->magic_mutual_information_samples_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           add_mmi_samples(samples, {mmi_data});
           mmi_sample = MagicQuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
@@ -176,7 +166,7 @@ class MagicStateSampler {
           mmi_sample = state->magic_mutual_information_montecarlo(qubitsA, qubitsB, sre_num_samples, sre_mc_equilibration_timesteps, mutation);
         }
       } else if (sre_method == sre_method_t::Exact) {
-        if (save_mmi_samples) {
+        if (sre_mmi_save_samples) {
           auto mmi_data = state->magic_mutual_information_samples_exact(qubitsA, qubitsB, sre_num_samples);
           add_mmi_samples(samples, {mmi_data});
           mmi_sample = MagicQuantumState::calculate_magic_mutual_information_from_samples(mmi_data);
@@ -190,13 +180,13 @@ class MagicStateSampler {
       dataframe::utils::emplace(samples, "magic_mutual_information", mmi_sample);
     }
     
-    void add_bipartite_magic_mutual_information_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
+    void add_stabilizer_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
       std::vector<double> mmi_samples;
 
       if (sre_method == sre_method_t::Exhaustive) {
         mmi_samples = state->bipartite_magic_mutual_information_exhaustive();
       } else if (sre_method == sre_method_t::MonteCarlo) {
-        if (save_mmi_samples) {
+        if (sre_mmi_save_samples) {
           auto mmi_data = state->bipartite_magic_mutual_information_samples_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
           add_mmi_samples(samples, mmi_data);
           mmi_samples.resize(mmi_data.size());
@@ -205,7 +195,7 @@ class MagicStateSampler {
           mmi_samples = state->bipartite_magic_mutual_information_montecarlo(sre_num_samples, sre_mc_equilibration_timesteps, mutation);
         }
       } else if (sre_method == sre_method_t::Exact) {
-        if (save_mmi_samples) {
+        if (sre_mmi_save_samples) {
           auto mmi_data = state->bipartite_magic_mutual_information_samples_exact(sre_num_samples);
           add_mmi_samples(samples, mmi_data);
           mmi_samples.resize(mmi_data.size());
@@ -221,34 +211,34 @@ class MagicStateSampler {
     }
 
     void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
-      if (sample_stabilizer_renyi_entropy) {
-        add_stabilizer_renyi_entropy_samples(samples, state);
+      if (sample_stabilizer_entropy) {
+        add_stabilizer_entropy_samples(samples, state);
       }
 
-      if (sample_magic_mutual_information) {
-        add_magic_mutual_information_samples(samples, state);
+      if (sample_stabilizer_entropy_mutual) {
+        add_stabilizer_entropy_mutual_samples(samples, state);
       }
 
-      if (sample_bipartite_magic_mutual_information) {
-        add_bipartite_magic_mutual_information_samples(samples, state);
+      if (sample_stabilizer_entropy_bipartite) {
+        add_stabilizer_entropy_bipartite_samples(samples, state);
       }
     }
 
   private:	
     bool sre_use_parent_methods;
 
-    bool sample_stabilizer_renyi_entropy;
+    bool sample_stabilizer_entropy;
     std::vector<size_t> renyi_indices;
 
     sre_method_t sre_method;
-    bool save_sre_samples;
+    bool sre_save_samples;
     size_t sre_num_samples;
     size_t sre_mc_equilibration_timesteps;
 
-    bool sample_magic_mutual_information;
-    bool save_mmi_samples;
-    size_t magic_mutual_information_subsystem_size;
-    bool sample_bipartite_magic_mutual_information;
+    bool sample_stabilizer_entropy_mutual;
+    bool sre_mmi_save_samples;
+    size_t stabilizer_entropy_mutual_subsystem_size;
+    bool sample_stabilizer_entropy_bipartite;
 
     std::optional<PauliMutationFunc> mutation;
 

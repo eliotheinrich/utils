@@ -1,4 +1,4 @@
-add_library(quantum_state 
+add_library(quantum_state STATIC
     QuantumStates.cpp
     MagicQuantumState.cpp
     Statevector.cpp
@@ -22,12 +22,8 @@ if (${MKL_FOUND})
     set(ITENSOR_DEPS MKL::MKL ${ITENSOR})
 else()
     find_package(OpenBLAS CONFIG REQUIRED)
-    set(ITENSOR_DEPS ${OpenBLAS_LIBRARIES} ${ITENSOR})
+    set(ITENSOR_DEPS ${ITENSOR} ${OpenBLAS_LIBRARIES})
 endif()
 
-if (gfortran)
-    set(ITENSOR_DEPS gfortran ${ITENSOR_DEPS})
-endif()
-
-target_link_libraries(quantum_state PRIVATE quantum_circuit ${ITENSOR_DEPS})
+target_link_libraries(quantum_state PUBLIC quantum_circuit ${ITENSOR_DEPS})
 target_include_directories(quantum_state PRIVATE $ENV{ITENSOR_DIR})

@@ -239,7 +239,7 @@ struct BitString {
     BitString b(new_num_bits);
     
     for (size_t i = 0; i < sites.size(); i++) {
-      b.set(i, get(sites[i]));
+      b.set(sites[i], get(i));
     }
 
     return b;
@@ -263,6 +263,9 @@ class PauliString {
 
     PauliString()=default;
     PauliString(uint32_t num_qubits) : num_qubits(num_qubits), phase(0) {
+      if (num_qubits == 0) {
+        throw std::runtime_error("Cannot create a 0-qubit PauliString.");
+      }
       bit_string = BitString(2u * num_qubits);
     }
 

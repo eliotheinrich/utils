@@ -48,7 +48,9 @@ class QuantumStateSampler {
       }
       num_configurational_entropy_samples = dataframe::utils::get<int>(params, "num_configurational_entropy_samples", 1000);
 
-      sample_configurational_mutual_entropy = dataframe::utils::get<int>(params, "sample_configurational_mutual_entropy", false);
+      sample_configurational_entropy_mutual = dataframe::utils::get<int>(params, "sample_configurational_entropy_mutual", false);
+
+      sample_configurational_entropy_bipartite = dataframe::utils::get<int>(params, "sample_configurational_entropy_bipartite", false);
 
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
@@ -59,7 +61,7 @@ class QuantumStateSampler {
 
     ~QuantumStateSampler()=default;
 
-    void add_probability_samples(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_probability_samples(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) const {
       if (state->get_num_qubits() > 31) {
         throw std::runtime_error("Cannot generate probabilities for n > 31 qubits.");
       }
@@ -90,7 +92,7 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "probabilities", probability_probs);
     }
 
-    void add_bitstring_distribution(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) {
+    void add_bitstring_distribution(dataframe::SampleMap &samples, const std::shared_ptr<QuantumState>& state) const {
       if (state->get_num_qubits() > 31) {
         throw std::runtime_error("Cannot generate bitstring distribution for n > 31 qubits.");
       }
@@ -99,44 +101,20 @@ class QuantumStateSampler {
       dataframe::utils::emplace(samples, "bitstring_distribution", probabilities);
     }
 
-    void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
-      std::vector<double> Ws;
+    void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
+      double W;
       if (configurational_entropy_method == "sampled") {
-        auto bitstrings = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
-        Ws = std::vector<double>(bitstrings.size());
-        size_t n = 0;
-        for (const auto prob : bitstrings) {
-          Ws[n++] = -std::log(prob);
-        }
+        auto samples = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+        W = estimate_renyi_entropy(1, samples);
       } else {
         auto probs = state->probabilities();
-        double w = 0.0;
-        for (auto p : probs) {
-          if (p > 1e-10) {
-            w -= p * std::log(p);
-          }
-        }
-
-        Ws = {w};
+        W = renyi_entropy(1, probs);
       }
 
-      std::vector<std::vector<double>> Wss = {Ws};
-      dataframe::utils::emplace(samples, "configurational_entropy", Wss);
+      dataframe::utils::emplace(samples, "configurational_entropy", W);
     }
 
-    void add_configurational_mutual_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
-      size_t nsamples = num_configurational_entropy_samples;
-      auto estimate_configurational_entropy = [nsamples](const std::shared_ptr<QuantumState>& state) {
-        std::vector<double> samples = state->sample_bitstring_amplitudes(nsamples);
-        std::vector<double> log_samples(samples.size());
-        
-        for (size_t i = 0; i < samples.size(); i++) {
-          log_samples[i] = -std::log(samples[i]);
-        }
-
-        return dataframe::Sample(log_samples).get_mean();
-      };
-
+    void add_configurational_entropy_mutual_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
       size_t nqb = state->get_num_qubits();
 
       Qubits qubitsA(nqb/2);
@@ -148,14 +126,61 @@ class QuantumStateSampler {
       auto stateA = state->partial_trace(qubitsB);
       auto stateB = state->partial_trace(qubitsA);
 
-      double WA = estimate_configurational_entropy(stateA);
-      double WB = estimate_configurational_entropy(stateB);
-      double W = estimate_configurational_entropy(state);
 
-      dataframe::utils::emplace(samples, "mutual_configurational_entropy", WA + WB - W);
+      double WA, WB, W;
+      if (configurational_entropy_method == "sampled") {
+        auto samplesA = stateA->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+        auto samplesB = stateB->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+        auto samplesAB = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+
+        WA = estimate_renyi_entropy(1, samplesA);
+        WB = estimate_renyi_entropy(1, samplesB);
+        W = estimate_renyi_entropy(1, samplesAB);
+      } else {
+        auto pAB = state->probabilities();
+        auto pA = stateA->probabilities();
+        auto pB = stateB->probabilities();
+
+        WA = renyi_entropy(2, pA);
+        WB = renyi_entropy(2, pB);
+        W = renyi_entropy(2, pAB);
+      }
+
+      dataframe::utils::emplace(samples, "configurational_entropy_mutual", WA + WB - W);
     }
 
-    void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
+    void add_configurational_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
+      size_t num_qubits = state->get_num_qubits();
+      auto supports = get_bipartite_supports(num_qubits);
+      size_t N = num_qubits/2 - 1;
+      std::vector<double> entropy(N);
+
+      if (configurational_entropy_method == "sampled") {
+        auto samples = state->sample_bitstrings_bipartite(num_configurational_entropy_samples);
+
+        for (size_t i = 0; i < N; i++) {
+          entropy[i] = 0.0;
+        }
+      } else {
+        std::vector<double> entropy_(N);
+
+        double W = renyi_entropy(2, state->probabilities());
+
+        for (size_t i = 0; i < supports.size(); i++) {
+          auto qubits = to_qubits(supports[i]);
+          auto state_ = state->partial_trace(complement(qubits, num_qubits));
+          entropy_[i] = renyi_entropy(2, state_->probabilities());
+        }
+
+        for (size_t i = 0; i < N; i++) {
+          entropy[i] = entropy_[i] + entropy_[i + N] - W;
+        }
+      }
+
+      dataframe::utils::emplace(samples, "configurational_entropy_bipartite", entropy);
+    }
+
+    void add_spin_glass_order_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
       size_t num_qubits = state->get_num_qubits();
       double O = 0.0;
 
@@ -223,8 +248,12 @@ class QuantumStateSampler {
         add_configurational_entropy_samples(samples, state);
       }
 
-      if (sample_configurational_mutual_entropy) {
-        add_configurational_mutual_entropy_samples(samples, state);
+      if (sample_configurational_entropy_mutual) {
+        add_configurational_entropy_mutual_samples(samples, state);
+      }
+
+      if (sample_configurational_entropy_bipartite) {
+        add_configurational_entropy_bipartite_samples(samples, state);
       }
       
       if (sample_spin_glass_order) {
@@ -244,7 +273,9 @@ class QuantumStateSampler {
     std::string configurational_entropy_method;
     size_t num_configurational_entropy_samples;
 
-    bool sample_configurational_mutual_entropy;
+    bool sample_configurational_entropy_mutual;
+
+    bool sample_configurational_entropy_bipartite;
 
     bool sample_spin_glass_order;
     bool spin_glass_order_assume_symmetry;
