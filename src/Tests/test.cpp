@@ -1236,13 +1236,13 @@ bool test_mps_sample_bitstrings() {
   std::vector<double> P = psi.probabilities();
 
   constexpr size_t num_samples = 5000;
-  auto samples = mps.sample_bitstrings(num_samples);
+  auto samples = mps.sample_bitstrings({}, num_samples);
 
   std::vector<double> Q(N, 0.0);
   for (const auto& [bits, p] : samples) {
     uint32_t z = bits.to_integer();
     double p_ = std::pow(std::abs(psi.data(z)), 2.0);
-    ASSERT(is_close(p, p_));
+    ASSERT(is_close(p[0], p_));
 
     Q[z] += 1.0 / num_samples;
   }
@@ -1278,13 +1278,13 @@ bool test_mps_mixed_sample_bitstrings() {
 
     std::vector<double> P = rho->probabilities();
 
-    auto samples = mpo->sample_bitstrings(num_samples);
+    auto samples = mpo->sample_bitstrings({}, num_samples);
 
     std::vector<double> Q(N, 0.0);
     for (const auto& [bits, p] : samples) {
       uint32_t z = bits.to_integer();
       double p_ = P[z];
-      ASSERT(is_close(p, p_));
+      ASSERT(is_close(p[0], p_));
 
       Q[z] += 1.0 / num_samples;
     }
@@ -1298,6 +1298,61 @@ bool test_mps_mixed_sample_bitstrings() {
     }
 
     ASSERT(kl_div < 0.05);
+  }
+
+  return true;
+}
+
+bool test_marginal_distributions() {
+  constexpr size_t nqb = 8;
+
+  Statevector psi(nqb);
+  randomize_state_haar(psi);
+
+  for (size_t i = 0; i < 10; i++) {
+    std::vector<QubitSupport> supports;
+
+    size_t num_supports = 5;
+    for (size_t j = 0; j < num_supports; j++) {
+      size_t k = randi(0, nqb);
+      auto qubits = random_qubits(nqb, k);
+      supports.push_back(qubits);
+    }
+
+    auto marginals = psi.marginal_probabilities(supports);
+    for (size_t j = 0; j < num_supports; j++) {
+      auto qubits = to_qubits(supports[j]);
+      std::sort(qubits.begin(), qubits.end());
+      auto _qubits = to_qubits(support_complement(qubits, nqb));
+      auto rho = psi.partial_trace(_qubits);
+
+      auto prob_s = rho->probabilities();
+
+      for (uint32_t z = 0; z < (1u << nqb); z++) {
+        uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
+        ASSERT(is_close(prob_s[zA], marginals[j + 1][z]));
+      }
+    }
+  }
+
+  return true;
+}
+
+bool test_bitstring_expectation() {
+  constexpr size_t nqb = 6;
+  DensityMatrix rho(nqb);
+  Statevector psi(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  randomize_state_haar(rho, psi, mps);
+
+  for (size_t i = 0; i < 100; i++) {
+    BitString bits = BitString::random(nqb);
+    auto d1 = rho.expectation(bits);
+    auto d2 = psi.expectation(bits);
+    auto d3 = mps.expectation(bits);
+
+    ASSERT(is_close(d1, d2, d3), fmt::format("Bits {} disagree: {:.6f}, {:.6f}, {:.6f}", bits, d1, d2, d3));
   }
 
   return true;
@@ -1358,7 +1413,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector_diagonal_gate);
   ADD_TEST(test_mps_sample_bitstrings);
   ADD_TEST(test_mps_mixed_sample_bitstrings);
-
+  ADD_TEST(test_marginal_distributions);
+  ADD_TEST(test_bitstring_expectation);
   //ADD_TEST(inspect_svd_error);
 
 

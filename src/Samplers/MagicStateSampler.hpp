@@ -61,9 +61,12 @@ class MagicStateSampler {
     void add_stabilizer_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
       auto compute_sre_montecarlo = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
+        double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
+        std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
+
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
-          double M = renyi_entropy(index, amplitudes);
+          double M = estimate_renyi_entropy(index, amplitudes);
           stabilizer_renyi_entropy.push_back(M);
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
@@ -71,15 +74,13 @@ class MagicStateSampler {
 
       auto compute_sre_exhaustive = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
-        std::vector<double> stabilizer_renyi_entropy;
         double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
-        for (auto& p : amplitudes) {
-          p = p*p/purity;
-        }
+        std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
 
+        std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
-          double s = estimate_renyi_entropy(index, amplitudes);
-          stabilizer_renyi_entropy.push_back(s);
+          double M = renyi_entropy(index, amplitudes);
+          stabilizer_renyi_entropy.push_back(M);
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };

@@ -40,6 +40,20 @@ inline static uint32_t randi() {
   return Random::get_instance().rand();
 }
 
+inline static uint32_t randi(uint32_t min, uint32_t max) {
+  if (max <= min) {
+    throw std::runtime_error(fmt::format("Max must be greater then min for generating random integers."));
+  }
+  return randi() % (max - min) + min;
+}
+
 inline static double randf() {
   return static_cast<double>(randi())/static_cast<double>(RAND_MAX);
+}
+
+inline static double randf(double min, double max) {
+  if (max <= min) {
+    throw std::runtime_error(fmt::format("Max must be greater then min for generating random floats."));
+  }
+  return randf() * (max - min) + min;
 }

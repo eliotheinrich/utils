@@ -1088,23 +1088,18 @@ class MatrixProductStateImpl {
       return tensor_to_scalar(contraction);
     }
 
-    std::complex<double> partial_expectation(const PauliString& p, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
-      std::vector<ITensor> paulis;
-      size_t k = 0;
-      for (size_t i = i1; i < i2; i++) {
-        if (qubit_map.contains(i)) {
-          size_t q = qubit_map.at(i);
-          Index idx = external_idx(q);
-          paulis.push_back(pauli_tensor(p.to_pauli(k++), prime(idx), idx));
-        }
-      }
+    std::complex<double> partial_expectation(const std::vector<ITensor>& operators, uint32_t i1, uint32_t i2, const ITensor& L, const ITensor& R) const {
+      ITensor contraction = partial_contraction(i1, i2, &operators, &L, &R);
+      return tensor_to_scalar(contraction);
+    }
 
-      if (paulis.size() != p.num_qubits) {
-        throw std::runtime_error(fmt::format("Mismatched size of PauliString of {} qubits with number of external qubits between blocks {} and {}.", p.num_qubits, i1, i2));
+    std::pair<ITensor, ITensor> get_boundary_tensors(size_t i1, size_t i2) {
+      if (orthogonality_level == 0) {
+        return {left_environment_tensor(i1), right_environment_tensor(i2)};
+      } else {
+        orthogonalize(i1, i2);
+        return {left_boundary_tensor(i1), right_boundary_tensor(i2)};
       }
-      
-      ITensor contraction = partial_contraction(i1, i2, &paulis, &L, &R);
-      return p.sign() * tensor_to_scalar(contraction);
     }
 
     std::complex<double> expectation(const PauliString& p) {
@@ -1124,21 +1119,58 @@ class MatrixProductStateImpl {
       size_t i1 = qubit_indices[q1];
       size_t i2 = qubit_indices[q2 - 1] + 1;
 
-      Qubits qubits(q2 - q1);
-      std::iota(qubits.begin(), qubits.end(), q1);
-      PauliString p_sub = p.substring(qubits, true);
+      auto [L, R] = get_boundary_tensors(i1, i2);
 
-      ITensor L, R;
-      if (orthogonality_level == 0) {
-        L = left_environment_tensor(i1);
-        R = right_environment_tensor(i2);
-      } else {
-        orthogonalize(i1, i2);
-        L = left_boundary_tensor(i1);
-        R = right_boundary_tensor(i2);
+      std::vector<ITensor> paulis;
+      for (size_t i = i1; i < i2; i++) {
+        if (qubit_map.contains(i)) {
+          size_t q = qubit_map.at(i);
+          Index idx = external_idx(q);
+          paulis.push_back(pauli_tensor(p.to_pauli(q), prime(idx), idx));
+        }
       }
 
-      return partial_expectation(p_sub, i1, i2, L, R);
+      return p.sign() * partial_expectation(paulis, i1, i2, L, R);
+    }
+
+    // TODO make this provide marginal probabilities when Qubits are passed
+    double expectation(const BitString& bits, std::optional<QubitSupport>& support) {
+      size_t i1, i2;
+      size_t q1, q2;
+      if (support) {
+        QubitInterval interval = to_interval(support.value());
+        if (interval) {
+          std::tie(q1, q2) = interval.value();
+        } else {
+          return 1.0;
+        }
+      } else {
+        q1 = 0;
+        q2 = num_qubits;
+      }
+
+      size_t i1 = qubit_indices[q1];
+      size_t i2 = qubit_indices[q2 - 1] + 1;
+
+      auto [L, R] = get_boundary_tensors(i1, i2);
+
+      std::vector<ITensor> projectors;
+      Eigen::Matrix2cd P1; P1 << 0, 0, 0, 1;
+      Eigen::Matrix2cd P0; P0 << 1, 0, 0, 0;
+      for (size_t i = i1; i < i2; i++) {
+        if (qubit_map.contains(i)) {
+          size_t q = qubit_map.at(i);
+          Index idx = external_idx(q);
+          if (q >
+          if (bits.get(q)) {
+            projectors.push_back(matrix_to_tensor(P1, {prime(idx)}, {idx}));
+          } else {
+            projectors.push_back(matrix_to_tensor(P0, {prime(idx)}, {idx}));
+          }
+        }
+      }
+
+      return partial_expectation(projectors, i1, i2, L, R).real();
     }
 
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) {
@@ -1158,20 +1190,12 @@ class MatrixProductStateImpl {
       size_t i1 = qubit_indices[q1];
       size_t i2 = qubit_indices[q2 - 1] + 1;
       
-      ITensor L, R;
-      if (orthogonality_level == 0) {
-        L = left_environment_tensor(i1);
-        R = right_environment_tensor(i2);
-      } else {
-        orthogonalize(i1, i2);
-        L = left_boundary_tensor(i1);
-        R = right_boundary_tensor(i2);
-      }
+      auto [L, R] = get_boundary_tensors(i1, i2);
 
       return partial_expectation(m, i1, i2, L, R);
     }
 
-    std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) {
+    std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) {
       int i = orthogonality_level;
       set_orthogonality_level(1);
       orthogonalize(0);
@@ -1211,7 +1235,8 @@ class MatrixProductStateImpl {
           }
         }
 
-        samples.push_back({bits, p});
+        // TODO support for supports
+        samples.push_back({bits, {p}});
       }
 
       return samples;
@@ -1362,6 +1387,69 @@ class MatrixProductStateImpl {
 
       for (size_t j = 0; j < num_samples; j++) {
         auto const [P, t] = pauli_samples[j];
+
+        std::vector<double> tA(N);
+        ITensor L = left_boundary_tensor(qubit_indices[0]);
+        for (size_t q = 0; q < N; q++) {
+          Index idx = external_idx(q);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = index_of_next_qubit(q);
+          extend_left_environment_tensor(L, i1, i2, p);
+
+          ITensor contraction = L * right_boundary_tensor(i2);
+          samplesA[q][j] = std::abs(tensor_to_scalar(contraction));
+        }
+
+        std::vector<double> tB(N);
+        ITensor R = right_boundary_tensor(num_blocks());
+        std::vector<ITensor> paulis;
+        for (size_t q = num_qubits/2; q < num_qubits; q++) {
+          Index idx = external_idx(q);
+          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
+        }
+        size_t i = qubit_indices[num_qubits/2];
+        extend_right_environment_tensor(R, num_blocks(), i, paulis);
+
+        for (size_t n = 0; n < N; n++) {
+          uint32_t q = num_qubits/2 - n;
+          Index idx = external_idx(q - 1);
+          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q - 1), prime(idx), idx)};
+          uint32_t i1 = qubit_indices[q];
+          uint32_t i2 = qubit_indices[q - 1];
+          extend_right_environment_tensor(R, i1, i2, p);
+
+          ITensor contraction = left_boundary_tensor(i2) * R;
+          samplesB[N - 1 - n][j] = std::abs(tensor_to_scalar(contraction));
+        }
+
+        for (size_t n = 0; n < N; n++) {
+          samplesAB[n][j] = t[0];
+        }
+      }
+
+      std::vector<double> magic(N);
+      for (size_t n = 0; n < N; n++) {
+        magic[n] = MagicQuantumState::calculate_magic_mutual_information_from_samples2({samplesAB[n], samplesA[n], samplesB[n]});
+      }
+
+      set_orthogonality_level(i);
+      return magic;
+    }
+
+    std::vector<double> process_bipartite_bit_samples(const std::vector<BitAmplitudes>& bit_samples) {
+      int i = orthogonality_level;
+      set_orthogonality_level(1);
+      orthogonalize(0);
+
+      size_t N = num_qubits/2 - 1;
+      size_t num_samples = bit_samples.size();
+      std::vector<std::vector<double>> samplesA(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesB(N, std::vector<double>(num_samples));
+      std::vector<std::vector<double>> samplesAB(N, std::vector<double>(num_samples));
+
+      for (size_t j = 0; j < num_samples; j++) {
+        auto const [b, t] = bit_samples[j];
 
         std::vector<double> tA(N);
         ITensor L = left_boundary_tensor(qubit_indices[0]);
@@ -1894,26 +1982,12 @@ class MatrixProductStateImpl {
       PauliString pauli = m.get_pauli();
       Qubits qubits = m.qubits;
 
-      auto [q1, q2] = to_interval(qubits).value();
-      size_t i1 = qubit_indices[q1];
-      size_t i2 = qubit_indices[q2 - 1] + 1;
-
-      ITensor L, R;
-      if (orthogonality_level == 0) {
-        L = left_environment_tensor(i1);
-        R = right_environment_tensor(i2);
-      } else {
-        orthogonalize(i1, i2);
-        L = left_boundary_tensor(i1);
-        R = right_boundary_tensor(i2);
-      }
-
       auto pm = pauli.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
       Eigen::MatrixXcd proj1 = (id - pm)/2.0;
 
-      double prob_zero = (1.0 + partial_expectation(pauli, i1, i2, L, R).real())/2.0;
+      double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
 
       bool b;
       if (m.is_forced()) {
@@ -1942,21 +2016,11 @@ class MatrixProductStateImpl {
       size_t i1 = qubit_indices[q1];
       size_t i2 = qubit_indices[q2 - 1] + 1;
 
-      ITensor L, R;
-      if (orthogonality_level == 0) {
-        L = left_environment_tensor(i1);
-        R = right_environment_tensor(i2);
-      } else {
-        orthogonalize(i1, i2);
-        L = left_boundary_tensor(i1);
-        R = right_boundary_tensor(i2);
-      }
-
       auto pm = pauli.to_matrix();
       auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      double prob_zero = (1.0 + partial_expectation(pauli, i1, i2, L, R).real())/2.0;
+      double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
 
       bool b;
       if (m.is_forced()) {
@@ -1972,7 +2036,7 @@ class MatrixProductStateImpl {
 
       Eigen::MatrixXcd proj = (m.beta*t).exp();
       Eigen::MatrixXcd P = proj.pow(2);
-      double norm = std::sqrt(std::abs(partial_expectation(P, i1, i2, L, R)));
+      double norm = std::sqrt(std::abs(expectation(P, qubits)));
 
       proj = proj / norm;
 
@@ -2456,8 +2520,8 @@ std::vector<double> MatrixProductState::bipartite_magic_mutual_information_monte
   return impl->process_bipartite_pauli_samples(pauli_samples);
 }
 
-std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(size_t num_samples) const {
-  return impl->sample_bitstrings(num_samples);
+std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
+  return impl->sample_bitstrings(supports, num_samples);
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
@@ -2514,6 +2578,10 @@ std::complex<double> MatrixProductState::expectation(const PauliString& p) const
 
 std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const {
   return impl->expectation(m, qubits);
+}
+
+double MatrixProductState::expectation(const BitString& bits, std::optional<QubitSupport>& support) const {
+  return impl->expectation(bits, support);
 }
 
 std::shared_ptr<QuantumState> MatrixProductState::partial_trace(const Qubits& qubits) const {

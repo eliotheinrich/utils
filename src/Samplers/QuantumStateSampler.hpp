@@ -133,9 +133,9 @@ class QuantumStateSampler {
         auto samplesB = stateB->sample_bitstring_amplitudes(num_configurational_entropy_samples);
         auto samplesAB = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
 
-        WA = estimate_renyi_entropy(1, samplesA);
-        WB = estimate_renyi_entropy(1, samplesB);
-        W = estimate_renyi_entropy(1, samplesAB);
+        WA = estimate_renyi_entropy(2, samplesA);
+        WB = estimate_renyi_entropy(2, samplesB);
+        W = estimate_renyi_entropy(2, samplesAB);
       } else {
         auto pAB = state->probabilities();
         auto pA = stateA->probabilities();
@@ -151,29 +151,38 @@ class QuantumStateSampler {
 
     void add_configurational_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
       size_t num_qubits = state->get_num_qubits();
-      auto supports = get_bipartite_supports(num_qubits);
       size_t N = num_qubits/2 - 1;
       std::vector<double> entropy(N);
 
       if (configurational_entropy_method == "sampled") {
         auto samples = state->sample_bitstrings_bipartite(num_configurational_entropy_samples);
 
+        double W = estimate_renyi_entropy(2, samples[0]);
         for (size_t i = 0; i < N; i++) {
-          entropy[i] = 0.0;
+          double WA = estimate_renyi_entropy(2, samples[i + 1]);
+          double WB = estimate_renyi_entropy(2, samples[i + 1 + N]);
+          entropy[i] = WA + WB - W;
         }
       } else {
         std::vector<double> entropy_(N);
 
         double W = renyi_entropy(2, state->probabilities());
 
-        for (size_t i = 0; i < supports.size(); i++) {
-          auto qubits = to_qubits(supports[i]);
-          auto state_ = state->partial_trace(complement(qubits, num_qubits));
-          entropy_[i] = renyi_entropy(2, state_->probabilities());
-        }
-
+        auto supports = get_bipartite_supports(num_qubits);
         for (size_t i = 0; i < N; i++) {
-          entropy[i] = entropy_[i] + entropy_[i + N] - W;
+          auto qubitsA = to_qubits(supports[i]);
+          auto qubitsB = complement(qubits, num_qubits);
+          if (qubitsA.size() + qubitsB.size() != num_qubits) {
+            throw std::runtime_error(fmt::format("Qubits {} and {} are not a bipartition!", qubitsA, qubitsB));
+          }
+
+          auto stateA = state->partial_trace(qubitsB);
+          auto stateB = state->partial_trace(qubitsA);
+
+          double WA = renyi_entropy(2, stateA->probabilities());
+          double WB = renyi_entropy(2, stateB->probabilities());
+
+          entropy[i] = WA + WB - W;
         }
       }
 

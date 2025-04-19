@@ -60,28 +60,6 @@ std::vector<QubitSupport> get_bipartite_supports(size_t num_qubits) {
   return supports;
 }
 
-std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmplitudes>& pauli_samples) {
-  size_t num_samples = pauli_samples.size();
-  if (num_samples == 0) {
-    return {};
-  }
-
-  size_t num_supports = pauli_samples[0].second.size();
-  std::vector<std::vector<double>> amplitudes(num_supports, std::vector<double>(num_samples));
-
-  for (size_t j = 0; j < num_samples; j++) {
-    auto [p, t] = pauli_samples[j];
-    if (t.size() != num_supports) {
-      throw std::runtime_error("Malformed PauliAmplitudes.");
-    }
-    for (size_t i = 0; i < num_supports; i++) {
-      amplitudes[i][j] = t[i];
-    }
-  }
-
-  return amplitudes;
-}
-
 QubitSupport combine_supports(const QubitSupport& s1, const QubitSupport& s2) {
   // TODO check for overlap
   Qubits qubits1 = to_qubits(s1);

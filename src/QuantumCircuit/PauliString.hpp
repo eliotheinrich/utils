@@ -151,12 +151,43 @@ struct BitString {
     return bit_string;
   }
 
+  static BitString random(size_t num_bits, double p = 0.5) {
+    BitString bits(num_bits);
+
+    for (size_t i = 0; i < num_bits; i++) {
+      bool v = randf() < p;
+      bits.set(i, v);
+    }
+
+    return bits;
+  }
+
   uint32_t hamming_weight() const {
     uint32_t r = 0;
     for (size_t i = 0; i < num_bits; i++) {
       r += get(i);
     }
     return r;
+  }
+
+  QubitInterval support_range() const {
+    uint32_t first = -1;
+    uint32_t last = -1;
+
+    for (size_t i = 0; i < num_bits; ++i) {
+      if (get(i)) {
+        if (first == -1) {
+          first = i;
+        }
+        last = i;
+      }
+    }
+
+    if (first == -1) {
+      return std::nullopt;
+    }
+
+    return std::make_pair(first, last + 1);
   }
 
   static inline constexpr size_t binary_word_size() {

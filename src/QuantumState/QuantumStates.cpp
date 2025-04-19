@@ -1,31 +1,51 @@
 #include "QuantumStates.h"
-#include <stdexcept>
 
-std::vector<BitAmplitudes> QuantumState::sample_bitstrings(size_t num_samples) const {
+std::vector<std::vector<double>> QuantumState::marginal_probabilities(const std::vector<QubitSupport>& supports) const {
   std::vector<double> probs = probabilities();
+
+  size_t num_supports = supports.size();
+
+  std::vector<std::vector<double>> marginals(num_supports + 1, std::vector<double>(basis, 0.0));
+  marginals[0] = probs;
+
+  for (size_t i = 0; i < num_supports; i++) {
+    auto qubits = to_qubits(supports[i]);
+    std::sort(qubits.begin(), qubits.end());
+
+    std::vector<double> marginal(1u << qubits.size());
+    for (uint32_t z = 0; z < basis; z++) {
+      uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
+      marginal[zA] += probs[z];
+    }
+
+    for (uint32_t z = 0; z < basis; z++) {
+      uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
+      marginals[i + 1][z] = marginal[zA];
+    }
+  }
+
+  return marginals;
+}
+
+std::vector<BitAmplitudes> QuantumState::sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
+  auto marginals = marginal_probabilities(supports);
+  auto probs = marginals[0];
 
   std::minstd_rand rng(randi());
   std::discrete_distribution<> dist(probs.begin(), probs.end());
 
   std::vector<BitAmplitudes> samples;
+
   for (size_t i = 0; i < num_samples; i++) {
     uint32_t z = dist(rng);
-    samples.push_back({BitString::from_bits(num_qubits, z), probs[z]});
-  }
+    BitString bits = BitString::from_bits(num_qubits, z);
 
-  return samples;
-}
+    std::vector<double> amplitudes = {probs[z]};
+    for (size_t j = 1; j < marginals.size(); j++) {
+      amplitudes.push_back(marginals[j][z]);
+    }
 
-std::vector<std::vector<BitAmplitudes>> QuantumState::sample_bitstrings_bipartite(size_t num_samples) const {
-  auto supports = get_bipartite_supports(num_qubits);
-  size_t N = num_qubits/2 - 1;
-
-  std::vector<std::vector<BitAmplitudes>> samples(N);
-
-  for (size_t i = 0; i < supports.size(); i++) {
-    auto _qubits = complement(to_qubits(supports[i]), num_qubits);
-    auto mixed_state = partial_trace(_qubits);
-    samples[i] = sample_bitstrings(num_samples);
+    samples.push_back({bits, amplitudes});
   }
 
   return samples;
@@ -56,31 +76,6 @@ void QuantumState::validate_qubits(const Qubits& qubits) const {
       throw std::runtime_error(fmt::format("Instruction called on qubit {}, which is not valid for a state with {} qubits.", q, num_qubits));
     }
   }
-}
-
-QubitSupport support_complement(const QubitSupport& support, size_t n) {
-  auto interval = support_range(support);
-  if (interval) {
-    auto [q1, q2] = interval.value();
-    if (q1 < 0 || q2 > n) {
-      throw std::runtime_error(fmt::format("Support on [{}, {}) cannot be complemented on {} qubits.", q1, q2, n));
-    }
-  }
-
-  std::vector<bool> mask(n, true);
-  auto qubits = to_qubits(support);
-  for (const auto q : qubits) {
-    mask[q] = false;
-  }
-
-  Qubits qubits_;
-  for (size_t i = 0; i < n; i++) {
-    if (mask[i]) {
-      qubits_.push_back(i);
-    }
-  }
-
-  return QubitSupport{qubits_};
 }
 
 double estimate_renyi_entropy(size_t index, const std::vector<double>& samples) {

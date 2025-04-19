@@ -79,6 +79,30 @@ static QubitInterval support_range(const QubitSupport& support) {
   }, support);
 }
 
+static QubitSupport support_complement(const QubitSupport& support, size_t n) {
+  auto interval = support_range(support);
+  if (interval) {
+    auto [q1, q2] = interval.value();
+    if (q1 < 0 || q2 > n) {
+      throw std::runtime_error(fmt::format("Support on [{}, {}) cannot be complemented on {} qubits.", q1, q2, n));
+    }
+  }
+
+  std::vector<bool> mask(n, true);
+  auto qubits = to_qubits(support);
+  for (const auto q : qubits) {
+    mask[q] = false;
+  }
+
+  Qubits qubits_;
+  for (size_t i = 0; i < n; i++) {
+    if (mask[i]) {
+      qubits_.push_back(i);
+    }
+  }
+
+  return QubitSupport{qubits_};
+}
 
 
 bool qargs_unique(const Qubits& qubits);

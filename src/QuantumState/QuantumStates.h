@@ -17,7 +17,7 @@
 class QuantumState;
 
 using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
-using BitAmplitudes = std::pair<BitString, double>;
+using BitAmplitudes = std::pair<BitString, std::vector<double>>;
 
 using PauliMutationFunc = std::function<void(PauliString&)>;
 using ProbabilityFunc = std::function<double(double)>;
@@ -55,6 +55,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     void validate_qubits(const Qubits& qubits) const;
 
     virtual std::complex<double> expectation(const PauliString& pauli) const=0;
+    virtual double expectation(const BitString& bits) const=0;
 
     virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const=0;
     virtual std::shared_ptr<QuantumState> partial_trace(const QubitSupport& support) const {
@@ -197,20 +198,10 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
       return weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }
 
-    virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const;
-    virtual std::vector<double> sample_bitstring_amplitudes(size_t num_samples) const {
-      auto bit_amplitudes = sample_bitstrings(num_samples);
-      std::vector<double> amplitudes(bit_amplitudes.size());
-
-      size_t n = 0;
-      for (const auto& [bits, p] : bit_amplitudes) {
-        amplitudes[n++] = p;
-      }
-      return amplitudes;
-    }
-    virtual std::vector<std::vector<BitAmplitudes>> sample_bitstrings_bipartite(size_t num_samples) const;
+    virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const;
 
 		virtual std::vector<double> probabilities() const=0;
+    virtual std::vector<std::vector<double>> marginal_probabilities(const std::vector<QubitSupport>& supports) const;
     virtual double purity() const=0;
 
     virtual std::vector<char> serialize() const=0;
@@ -294,6 +285,7 @@ class DensityMatrix : public MagicQuantumState {
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
+    virtual double expectation(const BitString& bits) const override;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) override;
 
@@ -361,6 +353,7 @@ class Statevector : public MagicQuantumState {
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
+    virtual double expectation(const BitString& bits) const override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const Qubits& qubits) override;
 
@@ -454,7 +447,7 @@ class MatrixProductState : public MagicQuantumState {
     std::vector<double> singular_values(uint32_t i) const;
     std::vector<std::vector<std::vector<std::complex<double>>>> tensor(uint32_t q) const;
 
-    virtual std::vector<BitAmplitudes> sample_bitstrings(size_t num_samples) const override;
+    virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const override;
 
     virtual std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) override;
     virtual std::vector<PauliAmplitudes> sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
@@ -470,6 +463,7 @@ class MatrixProductState : public MagicQuantumState {
 
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
+    virtual double expectation(const BitString& p) const override;
 
     bool is_pure_state() const;
     Eigen::MatrixXcd coefficients_mixed() const;
@@ -519,7 +513,28 @@ std::tuple<Qubits, Qubits, Qubits> get_traced_qubits(
   const Qubits& qubitsA, const Qubits& qubitsB, size_t num_qubits
 );
 
-std::vector<std::vector<double>> extract_amplitudes(const std::vector<PauliAmplitudes>& pauli_samples);
+template <typename T>
+std::vector<std::vector<double>> extract_amplitudes(const std::vector<T>& samples) {
+  size_t num_samples = samples.size();
+  if (num_samples == 0) {
+    return {};
+  }
+
+  size_t num_supports = samples[0].second.size();
+  std::vector<std::vector<double>> amplitudes(num_supports, std::vector<double>(num_samples));
+
+  for (size_t j = 0; j < num_samples; j++) {
+    auto [p, t] = samples[j];
+    if (t.size() != num_supports) {
+      throw std::runtime_error("Malformed Amplitudes.");
+    }
+    for (size_t i = 0; i < num_supports; i++) {
+      amplitudes[i][j] = t[i];
+    }
+  }
+
+  return amplitudes;
+}
 
 double renyi_entropy(size_t index, const std::vector<double>& samples);
 double estimate_renyi_entropy(size_t index, const std::vector<double>& samples);

@@ -114,6 +114,11 @@ std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m) const {
   return inner(other);
 }
 
+double Statevector::expectation(const BitString& bits) const {
+  uint32_t z = bits.to_integer();
+  return std::pow(std::abs(data(z)), 2.0);
+}
+
 double Statevector::mzr_prob(uint32_t q, bool outcome) const {
   uint32_t s = 1u << num_qubits;
 

@@ -185,6 +185,11 @@ std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m) const
   return (data * m).trace();
 }
 
+double DensityMatrix::expectation(const BitString& bits) const {
+  uint32_t z = bits.to_integer();
+  return data(z, z).real();
+}
+
 void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {
 	data = gate * data * gate.adjoint();
 }
