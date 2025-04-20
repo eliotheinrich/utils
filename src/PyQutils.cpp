@@ -157,7 +157,8 @@ NB_MODULE(qutils_bindings, m) {
     .def("swap", &MagicQuantumState::swap)
     .def("random_clifford", &MagicQuantumState::random_clifford)
     .def("partial_trace", [](MagicQuantumState& self, const Qubits& qubits) { return std::dynamic_pointer_cast<MagicQuantumState>(self.partial_trace(qubits)); })
-    .def("expectation", &MagicQuantumState::expectation)
+    .def("expectation", [](const MagicQuantumState& self, const PauliString& pauli) { return self.expectation(pauli); })
+    .def("expectation", [](const MagicQuantumState& self, const BitString& bits, std::optional<Qubits> support) { return self.expectation(bits, support); }, "bits"_a, "support"_a = nanobind::none())
     .def("probabilities", [](MagicQuantumState& self) { return to_nbarray(self.probabilities()); } )
     .def("purity", &MagicQuantumState::purity)
     .def("mzr", [](MagicQuantumState& self, uint32_t q, std::optional<bool> outcome) {

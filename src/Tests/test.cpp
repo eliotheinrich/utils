@@ -9,7 +9,12 @@
 #include "LinearCode.h"
 #include "Graph.hpp"
 #include "Display.h"
+#include "Samplers.h"
 #include <iostream>
+
+#include <Frame.h>
+using namespace dataframe;
+using namespace dataframe::utils;
 
 #define MPS_DEBUG_LEVEL 2
 
@@ -966,7 +971,7 @@ bool test_mpo_sample_paulis_montecarlo() {
     }
 
     Random::seed_rng(s);
-    samples1 = mpo->MagicQuantumState::sample_paulis_montecarlo(supports, num_samples, 0, p);
+    samples1 = mpo->sample_paulis_montecarlo(supports, num_samples, 0, p);
 
     Random::seed_rng(s);
     samples2 = rho->sample_paulis_montecarlo(supports, num_samples, 0, p);
@@ -1224,6 +1229,11 @@ bool test_statevector_diagonal_gate() {
   return true;
 }
 
+bool test_sample_bitstrings() {
+
+}
+
+
 bool test_mps_sample_bitstrings() {
   constexpr size_t nqb = 8;
   constexpr size_t N = 1u << nqb;
@@ -1358,6 +1368,26 @@ bool test_bitstring_expectation() {
   return true;
 }
 
+bool test_quantum_state_sampler() {
+  constexpr size_t nqb = 8;
+
+  std::shared_ptr<MatrixProductState> mps = std::make_shared<MatrixProductState>(nqb, 1u << nqb);
+  randomize_state_haar(*mps.get());
+
+  ExperimentParams params;
+  params["sample_configurational_entropy"] = 1;
+  params["sample_configurational_entropy_mutual"] = 1;
+  params["num_configurational_entropy_samples"] = 1000,
+  params["configurational_entropy_method"] = "sampled";
+
+  QuantumStateSampler sampler(params);
+
+  SampleMap samples;
+  sampler.add_samples(samples, mps);
+  std::cout << fmt::format("samples = \n{}\n", samples);
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1401,7 +1431,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
   ADD_TEST(test_pauli_expectation_tree);
-  ADD_TEST(test_mpo_sample_paulis_montecarlo); // TODO fix
+  ADD_TEST(test_mpo_sample_paulis_montecarlo);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
@@ -1415,6 +1445,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_mixed_sample_bitstrings);
   ADD_TEST(test_marginal_distributions);
   ADD_TEST(test_bitstring_expectation);
+  ADD_TEST(test_sample_bitstrings);
+  ADD_TEST(test_quantum_state_sampler);
   //ADD_TEST(inspect_svd_error);
 
 

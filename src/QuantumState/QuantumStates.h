@@ -55,7 +55,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     void validate_qubits(const Qubits& qubits) const;
 
     virtual std::complex<double> expectation(const PauliString& pauli) const=0;
-    virtual double expectation(const BitString& bits) const=0;
+    virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const=0;
 
     virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const=0;
     virtual std::shared_ptr<QuantumState> partial_trace(const QubitSupport& support) const {
@@ -285,7 +285,7 @@ class DensityMatrix : public MagicQuantumState {
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
-    virtual double expectation(const BitString& bits) const override;
+    virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const override;
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) override;
 
@@ -353,7 +353,7 @@ class Statevector : public MagicQuantumState {
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
-    virtual double expectation(const BitString& bits) const override;
+    virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const override;
 
 		virtual void evolve(const Eigen::MatrixXcd &gate, const Qubits& qubits) override;
 
@@ -379,7 +379,6 @@ class Statevector : public MagicQuantumState {
 		void normalize();
 		void fix_gauge();
 
-		double probabilities(uint32_t z, const Qubits& qubits) const;
 		std::map<uint32_t, double> probabilities_map() const;
 		virtual std::vector<double> probabilities() const override;
     virtual double purity() const override { 
@@ -463,7 +462,7 @@ class MatrixProductState : public MagicQuantumState {
 
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) const;
-    virtual double expectation(const BitString& p) const override;
+    virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const override;
 
     bool is_pure_state() const;
     Eigen::MatrixXcd coefficients_mixed() const;
@@ -482,10 +481,7 @@ class MatrixProductState : public MagicQuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
-		virtual std::vector<double> probabilities() const override {
-			Statevector statevector(*this);
-			return statevector.probabilities();
-		}
+		virtual std::vector<double> probabilities() const override;
 
     virtual double purity() const override;
 

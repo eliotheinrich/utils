@@ -114,9 +114,22 @@ std::complex<double> Statevector::expectation(const Eigen::MatrixXcd& m) const {
   return inner(other);
 }
 
-double Statevector::expectation(const BitString& bits) const {
-  uint32_t z = bits.to_integer();
-  return std::pow(std::abs(data(z)), 2.0);
+double Statevector::expectation(const BitString& bits, std::optional<QubitSupport> support) const {
+  if (support) {
+    Qubits qubits = to_qubits(support.value());
+    uint32_t zA = bits.to_integer();
+    double p = 0.0;
+    for (uint32_t z = 0; z < basis; z++) {
+      if (quantumstate_utils::bits_congruent(z, zA, qubits)) {
+        p += std::pow(std::abs(data(z)), 2.0);
+      }
+    }
+
+    return p;
+  } else {
+    uint32_t z = bits.to_integer();
+    return std::pow(std::abs(data(z)), 2.0);
+  }
 }
 
 double Statevector::mzr_prob(uint32_t q, bool outcome) const {
@@ -323,18 +336,18 @@ void Statevector::fix_gauge() {
   data = data/a;
 }
 
-double Statevector::probabilities(uint32_t z, const Qubits& qubits) const {
-  uint32_t s = 1u << num_qubits;
-  double p = 0.;
-  for (uint32_t i = 0; i < s; i++) {
-
-    if (quantumstate_utils::bits_congruent(i, z, qubits)) {
-      p += std::pow(std::abs(data(i)), 2);
-    }
-  }
-
-  return p;
-}
+//double Statevector::probabilities(uint32_t z, const Qubits& qubits) const {
+//  uint32_t s = 1u << num_qubits;
+//  double p = 0.;
+//  for (uint32_t i = 0; i < s; i++) {
+//
+//    if (quantumstate_utils::bits_congruent(i, z, qubits)) {
+//      p += std::pow(std::abs(data(i)), 2);
+//    }
+//  }
+//
+//  return p;
+//}
 
 std::map<uint32_t, double> Statevector::probabilities_map() const {
   std::vector<double> probs = probabilities();

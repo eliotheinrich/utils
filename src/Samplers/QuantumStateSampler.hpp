@@ -104,7 +104,7 @@ class QuantumStateSampler {
     void add_configurational_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
       double W;
       if (configurational_entropy_method == "sampled") {
-        auto samples = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+        auto samples = extract_amplitudes(state->sample_bitstrings({}, num_configurational_entropy_samples))[0];
         W = estimate_renyi_entropy(1, samples);
       } else {
         auto probs = state->probabilities();
@@ -127,26 +127,40 @@ class QuantumStateSampler {
       auto stateB = state->partial_trace(qubitsA);
 
 
-      double WA, WB, W;
+      double M;
       if (configurational_entropy_method == "sampled") {
-        auto samplesA = stateA->sample_bitstring_amplitudes(num_configurational_entropy_samples);
-        auto samplesB = stateB->sample_bitstring_amplitudes(num_configurational_entropy_samples);
-        auto samplesAB = state->sample_bitstring_amplitudes(num_configurational_entropy_samples);
+        auto samples = extract_amplitudes(state->sample_bitstrings({}, num_configurational_entropy_samples))[0];
+        auto samplesA = extract_amplitudes(stateA->sample_bitstrings({}, num_configurational_entropy_samples))[0];
+        auto samplesB = extract_amplitudes(stateB->sample_bitstrings({}, num_configurational_entropy_samples))[0];
 
-        WA = estimate_renyi_entropy(2, samplesA);
-        WB = estimate_renyi_entropy(2, samplesB);
-        W = estimate_renyi_entropy(2, samplesAB);
+        M = estimate_renyi_entropy(2, samplesA) + estimate_renyi_entropy(2, samplesB) - estimate_renyi_entropy(2, samples);
+
+
+        //auto samples = extract_amplitudes(state->sample_bitstrings({qubitsA, qubitsB}, num_configurational_entropy_samples));
+        //auto pAB = samples[0];
+        //auto pA = samples[1];
+        //auto pB = samples[2];
+
+        //double p1 = 0.0;
+        //double p2 = 0.0;
+        //for (size_t i = 0; i < num_configurational_entropy_samples; i++) {
+        //  p1 += std::pow(pA[i]*pB[i], 2.0)/pAB[i];
+        //  p2 += pAB[i];
+        //} 
+
+        //p1 /= num_configurational_entropy_samples;
+        //p2 /= num_configurational_entropy_samples;
+
+        //M = -std::log2(p1) + std::log2(p2);
       } else {
         auto pAB = state->probabilities();
         auto pA = stateA->probabilities();
         auto pB = stateB->probabilities();
 
-        WA = renyi_entropy(2, pA);
-        WB = renyi_entropy(2, pB);
-        W = renyi_entropy(2, pAB);
+        M = renyi_entropy(2, pA) + renyi_entropy(2, pB) - renyi_entropy(2, pAB);
       }
 
-      dataframe::utils::emplace(samples, "configurational_entropy_mutual", WA + WB - W);
+      dataframe::utils::emplace(samples, "configurational_entropy_mutual", M);
     }
 
     void add_configurational_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) const {
@@ -154,8 +168,9 @@ class QuantumStateSampler {
       size_t N = num_qubits/2 - 1;
       std::vector<double> entropy(N);
 
+      auto supports = get_bipartite_supports(num_qubits);
       if (configurational_entropy_method == "sampled") {
-        auto samples = state->sample_bitstrings_bipartite(num_configurational_entropy_samples);
+        auto samples = extract_amplitudes(state->sample_bitstrings(supports, num_configurational_entropy_samples));
 
         double W = estimate_renyi_entropy(2, samples[0]);
         for (size_t i = 0; i < N; i++) {
@@ -171,7 +186,7 @@ class QuantumStateSampler {
         auto supports = get_bipartite_supports(num_qubits);
         for (size_t i = 0; i < N; i++) {
           auto qubitsA = to_qubits(supports[i]);
-          auto qubitsB = complement(qubits, num_qubits);
+          auto qubitsB = to_qubits(supports[i + N]);
           if (qubitsA.size() + qubitsB.size() != num_qubits) {
             throw std::runtime_error(fmt::format("Qubits {} and {} are not a bipartition!", qubitsA, qubitsB));
           }

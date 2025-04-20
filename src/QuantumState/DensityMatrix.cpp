@@ -185,9 +185,22 @@ std::complex<double> DensityMatrix::expectation(const Eigen::MatrixXcd& m) const
   return (data * m).trace();
 }
 
-double DensityMatrix::expectation(const BitString& bits) const {
-  uint32_t z = bits.to_integer();
-  return data(z, z).real();
+double DensityMatrix::expectation(const BitString& bits, std::optional<QubitSupport> support) const {
+  if (support) {
+    Qubits qubits = to_qubits(support.value());
+    uint32_t zA = bits.to_integer();
+    double p = 0.0;
+    for (uint32_t z = 0; z < basis; z++) {
+      if (quantumstate_utils::bits_congruent(z, zA, qubits)) {
+        p += data(z, z).real();
+      }
+    }
+
+    return p;
+  } else {
+    uint32_t z = bits.to_integer();
+    return data(z, z).real();
+  }
 }
 
 void DensityMatrix::evolve(const Eigen::MatrixXcd& gate) {

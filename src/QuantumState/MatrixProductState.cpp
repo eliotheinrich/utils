@@ -174,6 +174,16 @@ ITensor pauli_tensor(Pauli p, Index i1, Index i2) {
   throw std::runtime_error("Invalid Pauli index.");
 }
 
+ITensor projection_tensor(bool z, Index i1, Index i2) {
+  static const Eigen::Matrix2cd P0 = (Eigen::Matrix2cd() << 1.0, 0.0, 0.0, 0.0).finished();
+  static const Eigen::Matrix2cd P1 = (Eigen::Matrix2cd() << 0.0, 0.0, 0.0, 1.0).finished();
+  if (z) {
+    return matrix_to_tensor(P1, {i1}, {i2});
+  } else {
+    return matrix_to_tensor(P0, {i1}, {i2});
+  }
+}
+
 void swap_tags(Index& idx1, Index& idx2) {
   IndexSet idxs = {idx1, idx2};
   auto new_idxs = swapTags(idxs, idx1.tags(), idx2.tags());
@@ -1133,20 +1143,21 @@ class MatrixProductStateImpl {
       return p.sign() * partial_expectation(paulis, i1, i2, L, R);
     }
 
-    // TODO make this provide marginal probabilities when Qubits are passed
-    double expectation(const BitString& bits, std::optional<QubitSupport>& support) {
-      size_t i1, i2;
-      size_t q1, q2;
+    double expectation(const BitString& bits, std::optional<QubitSupport> support) {
+      QubitSupport _support;
       if (support) {
-        QubitInterval interval = to_interval(support.value());
-        if (interval) {
-          std::tie(q1, q2) = interval.value();
-        } else {
-          return 1.0;
-        }
+        _support = support.value();
       } else {
-        q1 = 0;
-        q2 = num_qubits;
+        _support = std::make_pair(0, num_qubits);
+      }
+
+      QubitInterval interval = to_interval(_support);
+
+      uint32_t q1, q2;
+      if (interval) {
+        std::tie(q1, q2) = interval.value();
+      } else {
+        return 1.0;
       }
 
       size_t i1 = qubit_indices[q1];
@@ -1154,23 +1165,26 @@ class MatrixProductStateImpl {
 
       auto [L, R] = get_boundary_tensors(i1, i2);
 
-      std::vector<ITensor> projectors;
-      Eigen::Matrix2cd P1; P1 << 0, 0, 0, 1;
-      Eigen::Matrix2cd P0; P0 << 1, 0, 0, 0;
+      std::vector<ITensor> operators;
+
+      Qubits qubits = to_qubits(_support);
+      std::set<uint32_t> qubits_set(qubits.begin(), qubits.end());
       for (size_t i = i1; i < i2; i++) {
         if (qubit_map.contains(i)) {
           size_t q = qubit_map.at(i);
           Index idx = external_idx(q);
-          if (q >
-          if (bits.get(q)) {
-            projectors.push_back(matrix_to_tensor(P1, {prime(idx)}, {idx}));
+          ITensor op;
+          if (qubits_set.contains(q)) {
+            op = projection_tensor(bits.get(q), prime(idx), idx);
           } else {
-            projectors.push_back(matrix_to_tensor(P0, {prime(idx)}, {idx}));
+            op = matrix_to_tensor(Eigen::Matrix2cd::Identity(), {prime(idx)}, {idx});
           }
+
+          operators.push_back(op);
         }
       }
 
-      return partial_expectation(projectors, i1, i2, L, R).real();
+      return partial_expectation(operators, i1, i2, L, R).real();
     }
 
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) {
@@ -1203,8 +1217,6 @@ class MatrixProductStateImpl {
 
       std::vector<BitAmplitudes> samples;
       
-      Eigen::Matrix2cd P0; P0 << 1.0, 0.0, 0.0, 0.0;
-      Eigen::Matrix2cd P1; P1 << 0.0, 0.0, 0.0, 1.0;
       for (size_t i = 0; i < num_samples; i++) {
         double p = 1.0;
         BitString bits(num_qubits);
@@ -1215,7 +1227,8 @@ class MatrixProductStateImpl {
           size_t j2 = index_of_next_qubit(q);
 
           Index ext = external_idx(q);
-          std::vector<ITensor> M = {matrix_to_tensor(P0, {prime(ext)}, {ext})};
+          std::vector<ITensor> M = {projection_tensor(0, prime(ext), ext)};
+
 
           ITensor R = right_boundary_tensor(j2);
           ITensor L0 = partial_contraction(j1, j2, &M, &L, nullptr);
@@ -1225,7 +1238,7 @@ class MatrixProductStateImpl {
           bool v = (randf() >= p0);
           bits.set(q, v);
           if (v) {
-            M = {matrix_to_tensor(P1, {prime(ext)}, {ext})};
+            M = {projection_tensor(1, prime(ext), ext)};
             ITensor L1 = partial_contraction(j1, j2, &M, &L, nullptr);
             L = L1;
             p *= 1.0 - p0;
@@ -1234,9 +1247,13 @@ class MatrixProductStateImpl {
             p *= p0;
           }
         }
+        
+        std::vector<double> amplitudes{p};
+        for (const auto& support : supports) {
+          amplitudes.push_back(expectation(bits, support));
+        }
 
-        // TODO support for supports
-        samples.push_back({bits, {p}});
+        samples.push_back({bits, amplitudes});
       }
 
       return samples;
@@ -1455,7 +1472,7 @@ class MatrixProductStateImpl {
         ITensor L = left_boundary_tensor(qubit_indices[0]);
         for (size_t q = 0; q < N; q++) {
           Index idx = external_idx(q);
-          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q), prime(idx), idx)};
+          std::vector<ITensor> p = {projection_tensor(b.get(q), prime(idx), idx)};
           uint32_t i1 = qubit_indices[q];
           uint32_t i2 = index_of_next_qubit(q);
           extend_left_environment_tensor(L, i1, i2, p);
@@ -1466,18 +1483,18 @@ class MatrixProductStateImpl {
 
         std::vector<double> tB(N);
         ITensor R = right_boundary_tensor(num_blocks());
-        std::vector<ITensor> paulis;
+        std::vector<ITensor> projectors;
         for (size_t q = num_qubits/2; q < num_qubits; q++) {
           Index idx = external_idx(q);
-          paulis.push_back(pauli_tensor(P.to_pauli(q), prime(idx), idx));
+          projectors.push_back(projection_tensor(b.get(q), prime(idx), idx));
         }
         size_t i = qubit_indices[num_qubits/2];
-        extend_right_environment_tensor(R, num_blocks(), i, paulis);
+        extend_right_environment_tensor(R, num_blocks(), i, projectors);
 
         for (size_t n = 0; n < N; n++) {
           uint32_t q = num_qubits/2 - n;
           Index idx = external_idx(q - 1);
-          std::vector<ITensor> p = {pauli_tensor(P.to_pauli(q - 1), prime(idx), idx)};
+          std::vector<ITensor> p = {projection_tensor(b.get(q - 1), prime(idx), idx)};
           uint32_t i1 = qubit_indices[q];
           uint32_t i2 = qubit_indices[q - 1];
           extend_right_environment_tensor(R, i1, i2, p);
@@ -2580,7 +2597,7 @@ std::complex<double> MatrixProductState::expectation(const Eigen::MatrixXcd& m, 
   return impl->expectation(m, qubits);
 }
 
-double MatrixProductState::expectation(const BitString& bits, std::optional<QubitSupport>& support) const {
+double MatrixProductState::expectation(const BitString& bits, std::optional<QubitSupport> support) const {
   return impl->expectation(bits, support);
 }
 
@@ -2655,6 +2672,22 @@ void MatrixProductState::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
 
 void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
   impl->evolve(gate, qubits);
+}
+
+std::vector<double> MatrixProductState::probabilities() const {
+  //std::vector<double> amplitudes(basis);
+  //for (uint32_t z = 0; z < basis; z++) {
+  //  BitString bits = BitString::from_bits(num_qubits, z);
+  //  amplitudes[z] = expectation(bits);
+  //}
+  //return amplitudes;
+  if (impl->is_pure_state()) {
+    Statevector psi(*this);
+    return psi.probabilities();
+  } else {
+    DensityMatrix rho(*this);
+    return rho.probabilities();
+  }
 }
 
 double MatrixProductState::purity() const {
