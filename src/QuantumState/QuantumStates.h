@@ -200,7 +200,8 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const;
     virtual double configurational_entropy(size_t num_samples) const {
-      throw std::runtime_error("Called configurational_entropy on a state that does not provide a specialized implementation.");
+      auto samples = extract_amplitudes(sample_bitstrings({}, num_samples))[0];
+      return estimate_renyi_entropy(1, samples, 2);
     }
     virtual double configurational_entropy_mutual(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) const {
       throw std::runtime_error("Called configurational_entropy_mutual on a state that does not provide a specialized implementation.");
