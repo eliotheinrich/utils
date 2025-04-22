@@ -51,6 +51,12 @@ std::vector<BitAmplitudes> QuantumState::sample_bitstrings(const std::vector<Qub
   return samples;
 }
 
+
+double QuantumState::configurational_entropy(size_t num_samples) const {
+  auto samples = extract_amplitudes(sample_bitstrings({}, num_samples))[0];
+  return estimate_renyi_entropy(1, samples, 2);
+}
+
 void single_qubit_random_mutation(PauliString& p) {
   size_t j = randi() % p.num_qubits;
   size_t g = randi() % 4;

@@ -15,6 +15,10 @@
 #define QS_ATOL 1e-8
 
 class QuantumState;
+      
+double renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
+double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
+double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base=std::numbers::e);
 
 using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
 using BitAmplitudes = std::pair<BitString, std::vector<double>>;
@@ -199,10 +203,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     }
 
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const;
-    virtual double configurational_entropy(size_t num_samples) const {
-      auto samples = extract_amplitudes(sample_bitstrings({}, num_samples))[0];
-      return estimate_renyi_entropy(1, samples, 2);
-    }
+    virtual double configurational_entropy(size_t num_samples) const;
     virtual double configurational_entropy_mutual(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) const {
       throw std::runtime_error("Called configurational_entropy_mutual on a state that does not provide a specialized implementation.");
     }
@@ -514,10 +515,6 @@ std::vector<std::vector<double>> extract_amplitudes(const std::vector<T>& sample
 
   return amplitudes;
 }
-
-double renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
-double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
-double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base=std::numbers::e);
 
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};
