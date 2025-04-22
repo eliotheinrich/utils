@@ -199,6 +199,15 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
     }
 
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const;
+    virtual double configurational_entropy(size_t num_samples) const {
+      throw std::runtime_error("Called configurational_entropy on a state that does not provide a specialized implementation.");
+    }
+    virtual double configurational_entropy_mutual(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) const {
+      throw std::runtime_error("Called configurational_entropy_mutual on a state that does not provide a specialized implementation.");
+    }
+    virtual std::vector<double> configurational_entropy_bipartite(size_t num_samples) const {
+      throw std::runtime_error("Called configurational_entropy_bipartite on a state that does not provide a specialized implementation.");
+    }
 
 		virtual std::vector<double> probabilities() const=0;
     virtual std::vector<std::vector<double>> marginal_probabilities(const std::vector<QubitSupport>& supports) const;
@@ -394,41 +403,13 @@ class Statevector : public MagicQuantumState {
     virtual void deserialize(const std::vector<char>& bytes) override;
 };
 
-class PauliExpectationTree;
-class PauliExpectationTreeImpl;
-
-class PauliExpectationTree {
-  private:
-    std::unique_ptr<PauliExpectationTreeImpl> impl;
-
-  public:
-    size_t num_qubits;
-
-    PauliExpectationTree(const MatrixProductState& state, const PauliString& p);
-    ~PauliExpectationTree();
-    
-    std::complex<double> expectation() const;
-
-    std::complex<double> partial_expectation(uint32_t q1, uint32_t q2) const;
-
-    void propogate_pauli(Pauli p, uint32_t q);
-
-    void modify(const PauliString& P);
-
-    std::string to_string() const;
-
-    PauliString to_pauli_string() const;
-};
-
 class MatrixProductStateImpl;
 
 class MatrixProductState : public MagicQuantumState {
-  friend class PauliExpectationTree;
-
 	private:
-    std::unique_ptr<MatrixProductStateImpl> impl;
 
 	public:
+    std::unique_ptr<MatrixProductStateImpl> impl;
     MatrixProductState();
     ~MatrixProductState();
 
@@ -447,9 +428,10 @@ class MatrixProductState : public MagicQuantumState {
     std::vector<std::vector<std::vector<std::complex<double>>>> tensor(uint32_t q) const;
 
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const override;
+    virtual double configurational_entropy_mutual(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) const override;
+    virtual std::vector<double> configurational_entropy_bipartite(size_t num_samples) const override;
 
     virtual std::vector<PauliAmplitudes> sample_paulis(const std::vector<QubitSupport>& qubits, size_t num_samples) override;
-    virtual std::vector<PauliAmplitudes> sample_paulis_montecarlo(const std::vector<QubitSupport>& qubits, size_t num_samples, size_t equilibration_timesteps, ProbabilityFunc prob, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
 
     virtual double magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) override;
     virtual double magic_mutual_information_montecarlo(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples, size_t equilibration_timesteps, std::optional<PauliMutationFunc> mutation_opt=std::nullopt) override;
@@ -532,8 +514,9 @@ std::vector<std::vector<double>> extract_amplitudes(const std::vector<T>& sample
   return amplitudes;
 }
 
-double renyi_entropy(size_t index, const std::vector<double>& samples);
-double estimate_renyi_entropy(size_t index, const std::vector<double>& samples);
+double renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
+double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
+double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base=std::numbers::e);
 
 inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
   return {samples[0], samples[1], samples[2]};

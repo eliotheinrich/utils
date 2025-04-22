@@ -78,11 +78,32 @@ void QuantumState::validate_qubits(const Qubits& qubits) const {
   }
 }
 
-double estimate_renyi_entropy(size_t index, const std::vector<double>& samples) {
+static inline double log(double x, double base) {
+  return std::log(x) / std::log(base);
+}
+
+double renyi_entropy(size_t index, const std::vector<double>& probs, double base) {
+  double s = 0.0;
+  if (index == 1) {
+    for (auto p : probs) {
+      if (p > 1e-6) {
+        s += p * log(p, base);
+      }
+    }
+    return -s;
+  } else {
+    for (auto p : probs) {
+      s += std::pow(p, index);
+    }
+    return log(s, base)/(1.0 - index);
+  }
+}
+
+double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, double base) {
   if (index == 1) {
     double q = 0.0;
     for (auto p : samples) {
-      q += std::log(p);
+      q += log(p, base);
     }
 
     q = q/samples.size();
@@ -94,23 +115,17 @@ double estimate_renyi_entropy(size_t index, const std::vector<double>& samples) 
     }
 
     q = q/samples.size();
-    return 1.0/(1.0 - index) * std::log(q);
+    return 1.0/(1.0 - index) * log(q, base);
   }
 }
 
-double renyi_entropy(size_t index, const std::vector<double>& probs) {
-  double s = 0.0;
-  if (index == 1) {
-    for (auto p : probs) {
-      if (p > 1e-6) {
-        s += p * std::log(p);
-      }
-    }
-    return -s;
-  } else {
-    for (auto p : probs) {
-      s += std::pow(p, index);
-    }
-    return std::log(s)/(1.0 - index);
+double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base) {
+  size_t N = samplesAB.size();
+
+  double p = 0.0;
+  for (size_t i = 0; i < N; i++) {
+    p -= log(samplesA[i] * samplesB[i] / samplesAB[i], base);
   }
+
+  return p/N;
 }

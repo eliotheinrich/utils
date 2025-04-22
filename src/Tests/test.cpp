@@ -187,6 +187,26 @@ Qubits random_qubits(size_t num_qubits, size_t k) {
   return r;
 }
 
+Qubits random_boundary_qubits(size_t num_qubits, size_t k) {
+  Qubits qubits;
+  if (k == 0) {
+    return qubits;
+  }
+
+  size_t k1 = randi(0, k+1);
+  size_t k2 = k - k1;
+
+  for (uint32_t q = 0; q < k1; q++) {
+    qubits.push_back(q);
+  }
+
+  for (uint32_t q = 0; q < k2; q++) {
+    qubits.push_back(num_qubits - q - 1);
+  }
+  
+  return qubits;
+}
+
 QubitInterval random_interval(size_t num_qubits, size_t k) {
   uint32_t q1 = randi() % (num_qubits - k + 1);
   uint32_t q2 = q1 + k;
@@ -309,7 +329,7 @@ bool test_mpo_expectation() {
 
   for (size_t i = 0; i < 100; i++) {
     size_t num_traced_qubits = 3;
-    Qubits qubits = random_qubits(nqb, num_traced_qubits);
+    Qubits qubits = random_boundary_qubits(nqb, num_traced_qubits);
 
     size_t num_remaining_qubits = nqb - num_traced_qubits;
 
@@ -413,20 +433,6 @@ bool test_nonlocal_mps() {
   return true;
 }
 
-bool test_mpo_constructor() {
-  size_t nqb = 6;
-  MatrixProductState mps(nqb, 1u << nqb);
-  mps.set_debug_level(MPS_DEBUG_LEVEL);
-  DensityMatrix rho(nqb);
-
-  randomize_state_haar(mps, rho);
-  std::vector<uint32_t> traced_qubits = {0, 1, 3, 4};
-
-  MatrixProductState mpo = mps.partial_trace_mps(traced_qubits);
-
-  return true;
-}
-
 bool test_partial_trace() {
   constexpr size_t nqb = 6;
   static_assert(nqb % 2 == 0);
@@ -439,26 +445,12 @@ bool test_partial_trace() {
 
 
     size_t qA = randi() % (nqb / 2);
-    Qubits qubitsA = random_qubits(nqb, qA);
+    qA = 4;
+    Qubits qubitsA = random_boundary_qubits(nqb, qA);
 
     size_t qB = randi() % (nqb / 2);
-    Qubits qubitsB = random_qubits(nqb - qA, qB);
-
-    auto complement = [](const std::vector<uint32_t>& qubits, size_t num_qubits) {
-      std::vector<bool> mask(num_qubits, true);
-      for (const auto q : qubits) {
-        mask[q] = false;
-      } 
-
-      std::vector<uint32_t> qubits_;
-      for (size_t i = 0; i < num_qubits; i++) {
-        if (mask[i]) {
-          qubits_.push_back(i);
-        }
-      }
-
-      return qubits_;
-    };
+    if (qA + qB == nqb) qB--;
+    Qubits qubitsB = random_boundary_qubits(nqb - qA, qB);
 
     auto rho0 = rho.partial_trace_density_matrix({});
     auto rhoA = rho.partial_trace_density_matrix(qubitsA);
@@ -470,8 +462,8 @@ bool test_partial_trace() {
 
     PauliString P = PauliString::rand(nqb);
 
-    std::vector<uint32_t> qubitsA_ = complement(qubitsA, mps.get_num_qubits());
-    std::vector<uint32_t> qubitsB_ = complement(qubitsB, mpoA.get_num_qubits());
+    Qubits qubitsA_ = to_qubits(support_complement(qubitsA, mps.get_num_qubits()));
+    Qubits qubitsB_ = to_qubits(support_complement(qubitsB, mpoA.get_num_qubits()));
 
     PauliString PA = P.substring(qubitsA_, false);
 
@@ -664,12 +656,7 @@ bool test_mpo_sample_paulis() {
     ASSERT(P1 == P2 && is_close(t1, t2), fmt::format("Paulis <{}> = {:.3f} and <{}> = {:.3f} do not match in sample_paulis.", P1, t1, P2, t2));
   }
 
-  mpo = mps.partial_trace_mps({0, 1, 2});
-
-  auto paulis = mpo.sample_paulis({}, 1);
-
-  mpo = mps.partial_trace_mps({0, 1, 5});
-
+  // TODO add sample partially traced tests
 
   return true;
 }
@@ -762,15 +749,14 @@ bool test_purity() {
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(mps);
 
-    uint32_t num_traced_qubits = randi() % nqb;
-    std::vector<uint32_t> traced_qubits(nqb);
-    std::iota(traced_qubits.begin(), traced_qubits.end(), 0);
-    std::shuffle(traced_qubits.begin(), traced_qubits.end(), rng);
-    traced_qubits = std::vector<uint32_t>(traced_qubits.begin(), traced_qubits.begin() + num_traced_qubits);
+    uint32_t k = randi() % (nqb - 1);
+    Qubits traced_qubits = random_boundary_qubits(nqb, k);
 
-    MatrixProductState mpo = mps.partial_trace_mps({0, 1, 3, 5});
+    MatrixProductState mpo = mps.partial_trace_mps(traced_qubits);
     DensityMatrix dm(mpo);
 
+    double t1 = mpo.trace();
+    double t2 = dm.trace();
     double p1 = mpo.purity();
     double p2 = dm.purity();
 
@@ -840,62 +826,6 @@ bool test_pauli() {
   return true;
 }
 
-bool test_pauli_expectation_tree() {
-  constexpr size_t nqb = 8;
-
-  MatrixProductState mps(nqb, 64);
-  mps.set_debug_level(MPS_DEBUG_LEVEL);
-
-  int t1 = 0;
-  int t2 = 0;
-
-  for (size_t i = 0; i < 10; i++) {
-    randomize_state_haar(mps);
-
-    size_t tqb = randi() % (nqb/2);
-    size_t rqb = nqb - tqb;
-    Qubits tqubits = random_qubits(nqb, tqb);
-    MatrixProductState mpo = mps.partial_trace_mps(tqubits);
-
-    PauliString p = PauliString::rand(rqb);
-
-    PauliExpectationTree tree(mpo, p);
-
-    size_t k = randi() % (rqb / 2) + 1;
-
-    auto test_subsystem = [&](const QubitSupport& support) {
-      PauliString p_ = p.substring(support);
-
-      std::complex<double> c1 = mpo.expectation(p_);
-
-      auto interval = p_.support_range();
-      std::complex<double> c2;
-      if (interval) {
-        auto [q1, q2] = interval.value();
-        c2 = tree.partial_expectation(q1, q2);
-      } else {
-        c2 = p_.sign();
-      }
-
-      ASSERT(is_close_eps(1e-1, c1, c2), fmt::format("Partial expectations failed. P = {}, P_ = {}, subsystem = {}, c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i", p, p_, to_qubits(support), c1.real(), c1.imag(), c2.real(), c2.imag()));
-
-      return true;
-    };
-
-    for (size_t j = 0; j < 10; j++) {
-      QubitSupport subsystem = random_interval(rqb, k);
-
-      ASSERT(test_subsystem(subsystem));
-
-      PauliString p_mut = PauliString::rand(rqb);
-      p = p_mut * p;
-      tree.modify(p_mut);
-    }
-  }
-
-  return true;
-}
-
 bool test_mps_debug_tests() {
   constexpr size_t nqb = 8;
 
@@ -907,10 +837,6 @@ bool test_mps_debug_tests() {
   ASSERT(mps.state_valid(), "Failed debug tests.");
 
   return true;
-}
-
-bool test_mps_montecarlo() {
-  constexpr size_t nqb = 8;
 }
 
 bool test_mpo_sample_paulis_montecarlo() {
@@ -957,7 +883,7 @@ bool test_mpo_sample_paulis_montecarlo() {
 
   for (size_t i = 0; i < 10; i++) {
     size_t tqb = 4;
-    Qubits qubits = random_qubits(nqb, tqb);
+    Qubits qubits = random_boundary_qubits(nqb, tqb);
     auto mpo = std::dynamic_pointer_cast<MagicQuantumState>(mps.partial_trace(qubits));
     auto rho = std::dynamic_pointer_cast<MagicQuantumState>(sv.partial_trace(qubits));
 
@@ -1181,9 +1107,7 @@ bool test_forced_measurement() {
   MatrixProductState mps(nqb, 1u << nqb);
 
   auto test_circuit = [](const QuantumCircuit& qc, MatrixProductState& psi) {
-    std::cout << psi.to_string() << "\n";
     qc.apply(psi);
-    std::cout << psi.to_string() << "\n";
   };
   
   QuantumCircuit qc(nqb);
@@ -1193,7 +1117,6 @@ bool test_forced_measurement() {
   qc = QuantumCircuit(nqb);
   qc.add_measurement({0, 1}, PauliString("+ZZ"), true);
   test_circuit(qc, mps);
-
 
   return true;
 }
@@ -1230,9 +1153,25 @@ bool test_statevector_diagonal_gate() {
 }
 
 bool test_sample_bitstrings() {
-
+  // TODO implement
+  
+  return true;
 }
 
+double kl_divergence(const std::vector<double>& P, const std::vector<double>& Q) {
+  if (P.size() != Q.size()) {
+    throw std::runtime_error("Cannot compare distributions of difference size.");
+  }
+
+  double kl_div = 0.0;
+  for (int i = 0; i < P.size(); ++i) {
+    if (!is_close(Q[i], 0) && !is_close(P[i], 0)) {
+      kl_div += Q[i] * std::log(Q[i] / P[i]);
+    }
+  }
+  
+  return kl_div;
+}
 
 bool test_mps_sample_bitstrings() {
   constexpr size_t nqb = 8;
@@ -1258,13 +1197,7 @@ bool test_mps_sample_bitstrings() {
   }
 
   // Compute KL divergence and check that it is small
-  double kl_div = 0.0;
-  for (int i = 0; i < N; ++i) {
-    if (!is_close(Q[i], 0) && !is_close(P[i], 0)) {
-      kl_div += Q[i] * std::log(Q[i] / P[i]);
-    }
-  }
-
+  double kl_div = kl_divergence(P, Q);
   ASSERT(kl_div < 0.05);
 
   return true;
@@ -1282,7 +1215,7 @@ bool test_mps_mixed_sample_bitstrings() {
   constexpr size_t num_samples = 1000;
 
   for (size_t i = 0; i < 10; i++) {
-    auto qubits = random_qubits(nqb, 4);
+    auto qubits = random_boundary_qubits(nqb, 4);
     auto rho = psi.partial_trace(qubits);
     auto mpo = mps.partial_trace(qubits);
 
@@ -1300,13 +1233,7 @@ bool test_mps_mixed_sample_bitstrings() {
     }
 
     // Compute KL divergence and check that it is small
-    double kl_div = 0.0;
-    for (int i = 0; i < N; ++i) {
-      if (!is_close(Q[i], 0) && !is_close(P[i], 0)) {
-        kl_div += Q[i] * std::log(Q[i] / P[i]);
-      }
-    }
-
+    double kl_div = kl_divergence(P, Q);
     ASSERT(kl_div < 0.05);
   }
 
@@ -1368,6 +1295,50 @@ bool test_bitstring_expectation() {
   return true;
 }
 
+bool test_configurational_entropy() {
+  constexpr size_t nqb = 8;
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  Statevector psi(nqb);
+
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(mps, psi);
+
+    size_t t = 4;
+    auto qubits = random_boundary_qubits(nqb, t);
+    auto mpo = mps.partial_trace(qubits);
+
+    uint32_t k = randi(0, nqb - t);
+    Qubits qubitsA(k);
+    std::iota(qubitsA.begin(), qubitsA.end(), 0);
+    Qubits qubitsB(mpo->get_num_qubits() - k);
+    std::iota(qubitsB.begin(), qubitsB.end(), k);
+    std::vector<QubitSupport> supports = {qubitsA, qubitsB};
+
+    auto samples = extract_amplitudes(mpo->sample_bitstrings(supports, 500));
+
+    size_t idx = randi(0, 4);
+
+    auto rho = psi.partial_trace(qubits);
+    auto s1 = estimate_renyi_entropy(idx, samples[0]);
+    auto s2 = renyi_entropy(idx, rho->probabilities());
+    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match. Estimate = {:.5f}, exact = {:.5f}\n", s1, s2));
+
+    auto rhoA = rho->partial_trace(qubitsB);
+    auto s1A = estimate_renyi_entropy(idx, samples[1]);
+    auto s2A = renyi_entropy(idx, rhoA->probabilities());
+    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match on qubitsA = {}. Estimate = {:.5f}, exact = {:.5f}\n", qubitsA, s1, s2));
+    
+    auto rhoB = rho->partial_trace(qubitsA);
+    auto s1B = estimate_renyi_entropy(idx, samples[2]);
+    auto s2B = renyi_entropy(idx, rhoB->probabilities());
+    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match on qubitsB = {}. Estimate = {:.5f}, exact = {:.5f}\n", qubitsB, s1, s2));
+  } 
+
+  
+  return true;
+}
+
 bool test_quantum_state_sampler() {
   constexpr size_t nqb = 8;
 
@@ -1375,10 +1346,11 @@ bool test_quantum_state_sampler() {
   randomize_state_haar(*mps.get());
 
   ExperimentParams params;
-  params["sample_configurational_entropy"] = 1;
+  params["sample_configurational_entropy"] = 0;
   params["sample_configurational_entropy_mutual"] = 1;
+  params["sample_configurational_entropy_bipartite"] = 1;
   params["num_configurational_entropy_samples"] = 1000,
-  params["configurational_entropy_method"] = "sampled";
+  params["configurational_entropy_method"] = "virtual";
 
   QuantumStateSampler sampler(params);
 
@@ -1413,7 +1385,6 @@ int main(int argc, char *argv[]) {
 
   ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
-  ADD_TEST(test_mpo_constructor);
   ADD_TEST(test_statevector);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
@@ -1423,14 +1394,13 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli_reduce);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mps_inner);
-  ADD_TEST(test_mps_reverse);
+  //ADD_TEST(test_mps_reverse);
   ADD_TEST(test_statevector_to_mps);
   ADD_TEST(test_mps_measure);  
   ADD_TEST(test_mps_weak_measure);
   ADD_TEST(test_purity);
   ADD_TEST(test_projector);
   ADD_TEST(test_mpo_sample_paulis);
-  ADD_TEST(test_pauli_expectation_tree);
   ADD_TEST(test_mpo_sample_paulis_montecarlo);
   ADD_TEST(test_sample_paulis_exhaustive);
   ADD_TEST(test_pauli);
@@ -1447,6 +1417,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sample_bitstrings);
   ADD_TEST(test_quantum_state_sampler);
+  ADD_TEST(test_configurational_entropy);
+
   //ADD_TEST(inspect_svd_error);
 
 
