@@ -104,6 +104,27 @@ static QubitSupport support_complement(const QubitSupport& support, size_t n) {
   return QubitSupport{qubits_};
 }
 
+static bool support_contiguous(const QubitSupport& support) {
+  return std::visit(quantumcircuit_utils::overloaded {
+    [](const QubitInterval& interval) -> bool{
+      return true;
+    },
+    [](const Qubits& qubits) -> bool {
+      Qubits qubits_sorted = qubits;
+      std::sort(qubits_sorted.begin(), qubits_sorted.end());
+
+      for (size_t i = 0; i < qubits_sorted.size() - 1; i++) {
+        if (qubits_sorted[i+1] != qubits_sorted[i] + 1) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+  }, support);
+}
+
+
 
 bool qargs_unique(const Qubits& qubits);
 Qubits parse_qargs_opt(const std::optional<Qubits>& qubits_opt, uint32_t num_qubits);

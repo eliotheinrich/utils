@@ -65,9 +65,35 @@ std::string Statevector::to_string() const {
   return st;
 }
 
-double Statevector::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
-  DensityMatrix rho(*this);
-  return rho.entropy(qubits, index);
+double Statevector::entropy(const Qubits& qubits, uint32_t index) {
+  if (qubits.size() == 0 || qubits.size() == num_qubits) {
+    return 0.0;
+  }
+
+  Qubits qubitsA = qubits;
+  std::sort(qubitsA.begin(), qubitsA.end());
+  Qubits qubitsB = to_qubits(support_complement(qubitsA, num_qubits));
+  if (support_contiguous(qubitsA) && qubitsA[0] == 0) {
+    Qubits qubitsB = to_qubits(support_complement(qubitsA, num_qubits));
+    size_t dA = 1u << qubitsA.size();
+    size_t dB = 1u << qubitsB.size();
+
+    Eigen::Map<const Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> M(data.data(), dB, dA);
+
+    Eigen::JacobiSVD<Eigen::MatrixXcd> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::VectorXd schmidt = svd.singularValues().array();
+    Eigen::VectorXd probs = schmidt.array().square();
+    std::vector<double> p(probs.data(), probs.data() + probs.size());
+
+    return renyi_entropy(index, p);
+  } else if (support_contiguous(qubitsB) && qubitsB[0] == 0) {
+    std::cout << "Complementing and trying again\n";
+    return entropy(qubitsB, index);
+  } else {
+    std::cout << "Calling DensityMatrix version\n";
+    DensityMatrix rho(*this);
+    return rho.entropy(qubitsA, index);
+  }
 }
 
 std::shared_ptr<QuantumState> Statevector::partial_trace(const Qubits& qubits) const {
