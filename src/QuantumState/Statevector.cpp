@@ -214,7 +214,7 @@ bool Statevector::measure(const Measurement& m) {
   Eigen::MatrixXcd proj0 = (id + pm)/2.0; // false
   Eigen::MatrixXcd proj1 = (id - pm)/2.0; // true
 
-  double prob_zero = std::abs(expectation(proj0, qubits));
+  double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits))).real()/2.0;
 
   bool b;
   if (m.is_forced()) {
