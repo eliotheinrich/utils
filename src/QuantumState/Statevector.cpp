@@ -240,7 +240,7 @@ bool Statevector::weak_measure(const WeakMeasurement& m) {
   auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
   Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-  double prob_zero = std::abs(expectation(proj0, qubits));
+  double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits))).real()/2.0;
 
   bool b;
   if (m.is_forced()) {
