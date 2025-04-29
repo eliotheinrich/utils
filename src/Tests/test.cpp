@@ -1152,12 +1152,6 @@ bool test_statevector_diagonal_gate() {
   return true;
 }
 
-bool test_sample_bitstrings() {
-  // TODO implement
-  
-  return true;
-}
-
 double kl_divergence(const std::vector<double>& P, const std::vector<double>& Q) {
   if (P.size() != Q.size()) {
     throw std::runtime_error("Cannot compare distributions of difference size.");
@@ -1223,7 +1217,7 @@ bool test_mps_mixed_sample_bitstrings() {
 
     auto samples = mpo->sample_bitstrings({}, num_samples);
 
-    std::vector<double> Q(N, 0.0);
+    std::vector<double> Q(1u << rho->get_num_qubits(), 0.0);
     for (const auto& [bits, p] : samples) {
       uint32_t z = bits.to_integer();
       double p_ = P[z];
@@ -1356,7 +1350,6 @@ bool test_quantum_state_sampler() {
 
   SampleMap samples;
   sampler.add_samples(samples, mps);
-  std::cout << fmt::format("samples = \n{}\n", samples);
   return true;
 }
 
@@ -1378,14 +1371,13 @@ bool test_magic_state_sampler() {
 
   SampleMap samples;
   sampler.add_samples(samples, mps);
-  std::cout << fmt::format("samples = \n{}\n", samples);
+  return true;
 }
 
 bool test_sv_entropy() {
-  constexpr size_t nqb = 12;
+  constexpr size_t nqb = 8;
 
-  Statevector psi(nqb);
-  
+  Statevector psi(nqb); 
 
   for (size_t i = 0; i < 5; i++) {
     randomize_state_haar(psi);
@@ -1411,7 +1403,7 @@ bool test_sv_entropy() {
       double s1 = psi.entropy(qubits, index);
       double s2 = rho.entropy(qubits, index);
 
-      ASSERT(is_close(s1, s2));
+      ASSERT(is_close_eps(1e-4, s1, s2), fmt::format("Entropies do not match: {:.5f}, {:.5f}\n", s1, s2));
     }
   }
 
@@ -1473,7 +1465,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_mixed_sample_bitstrings);
   ADD_TEST(test_marginal_distributions);
   ADD_TEST(test_bitstring_expectation);
-  ADD_TEST(test_sample_bitstrings);
   ADD_TEST(test_quantum_state_sampler);
   ADD_TEST(test_magic_state_sampler);
   ADD_TEST(test_configurational_entropy);

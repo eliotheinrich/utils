@@ -87,10 +87,8 @@ double Statevector::entropy(const Qubits& qubits, uint32_t index) {
 
     return renyi_entropy(index, p);
   } else if (support_contiguous(qubitsB) && qubitsB[0] == 0) {
-    std::cout << "Complementing and trying again\n";
     return entropy(qubitsB, index);
   } else {
-    std::cout << "Calling DensityMatrix version\n";
     DensityMatrix rho(*this);
     return rho.entropy(qubitsA, index);
   }
