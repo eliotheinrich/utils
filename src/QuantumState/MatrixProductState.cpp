@@ -243,19 +243,6 @@ void match_indices(const std::string& tags, const ITensor& base, Tensors&... ten
   (do_match_wrapper(tensors), ...);
 }
 
-bool contiguous(const Qubits& v) {
-  auto v_r = v;
-  std::sort(v_r.begin(), v_r.end());
-
-  for (size_t i = 0; i < v_r.size() - 1; i++) {
-    if (v_r[i+1] != v_r[i] + 1) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 bool is_bipartition(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_qubits) {
   std::vector<bool> mask(num_qubits, false);
   for (const uint32_t q : qubitsA) {
@@ -1103,7 +1090,7 @@ class MatrixProductStateImpl {
         throw std::runtime_error(fmt::format("Passed observable has dimension {}x{}, provided {} sites.", r, c, n));
       }
 
-      if (!contiguous(qubits)) {
+      if (!support_contiguous(qubits)) {
         throw std::runtime_error(fmt::format("Provided sites {} are not contiguous.", qubits));
       }
 
@@ -1457,7 +1444,7 @@ class MatrixProductStateImpl {
         if (T) {
           t = *T;
         }
-        svd_error error{Random::get_seed(), t, to_bytes(), q1, truncate};
+        svd_error error{Random::get_seed(), t, to_bytes(), static_cast<uint32_t>(q1), truncate};
         uint32_t r = randi();
         write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
         std::cout << "There was a LAPACK error!\n";
@@ -2064,7 +2051,7 @@ double MatrixProductState::entropy(const Qubits& qubits, uint32_t index) {
 	std::vector<uint32_t> sorted_qubits(qubits);
 	std::sort(sorted_qubits.begin(), sorted_qubits.end());
 
-	if ((sorted_qubits[0] != 0) || !contiguous(sorted_qubits)) {
+	if ((sorted_qubits[0] != 0) || !support_contiguous(sorted_qubits)) {
 		throw std::runtime_error("Invalid qubits passed to MatrixProductState.entropy; must be a continuous interval with left side qubit = 0.");
 	}
 
@@ -2086,7 +2073,7 @@ double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const
     return MagicQuantumState::magic_mutual_information(qubitsA, qubitsB, num_samples);
   }
 
-  if (!contiguous(qubitsA) || !contiguous(qubitsB)) {
+  if (!support_contiguous(qubitsA) || !support_contiguous(qubitsB)) {
     throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
   }
   if (!is_bipartition(qubitsA, qubitsB, num_qubits)) {

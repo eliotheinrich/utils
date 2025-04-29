@@ -1379,6 +1379,42 @@ bool test_magic_state_sampler() {
   SampleMap samples;
   sampler.add_samples(samples, mps);
   std::cout << fmt::format("samples = \n{}\n", samples);
+}
+
+bool test_sv_entropy() {
+  constexpr size_t nqb = 12;
+
+  Statevector psi(nqb);
+  
+
+  for (size_t i = 0; i < 5; i++) {
+    randomize_state_haar(psi);
+    DensityMatrix rho(psi);
+
+    for (size_t j = 0; j < 10; j++) {
+      size_t index = randi(0, 4) + 1;
+
+      Qubits qubits;
+      int r = randi();
+      size_t k = randi(0, nqb);
+      if (r % 3 == 0) {
+        qubits = Qubits(k);
+        std::iota(qubits.begin(), qubits.end(), 0);
+      } else if (r % 3 == 1) {
+        qubits = Qubits(k);
+        std::iota(qubits.begin(), qubits.end(), 0);
+        qubits = to_qubits(support_complement(qubits, nqb));
+      } else {
+        qubits = random_qubits(nqb, k);
+      }
+
+      double s1 = psi.entropy(qubits, index);
+      double s2 = rho.entropy(qubits, index);
+
+      ASSERT(is_close(s1, s2));
+    }
+  }
+
   return true;
 }
 
@@ -1441,6 +1477,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_quantum_state_sampler);
   ADD_TEST(test_magic_state_sampler);
   ADD_TEST(test_configurational_entropy);
+  ADD_TEST(test_sv_entropy);
 
   //ADD_TEST(inspect_svd_error);
 
