@@ -176,34 +176,19 @@ std::vector<PauliAmplitudes> MagicQuantumState::sample_paulis_montecarlo(const s
 double MagicQuantumState::magic_mutual_information_exhaustive(const Qubits& qubitsA, const Qubits& qubitsB) {
   auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
 
-  auto stateAB = std::dynamic_pointer_cast<MagicQuantumState>(partial_trace(_qubits));
-  auto stateA = std::dynamic_pointer_cast<MagicQuantumState>(stateAB->partial_trace(_qubitsA));
-  auto stateB = std::dynamic_pointer_cast<MagicQuantumState>(stateAB->partial_trace(_qubitsB));
-
-  auto samplesA = stateA->sample_paulis_exhaustive({});
-  auto samplesB = stateB->sample_paulis_exhaustive({});
-  auto samplesAB = stateAB->sample_paulis_exhaustive({});
-
-  auto power = [](double s, const PauliAmplitudes& p, double pow) {
-    return s + std::pow(p.second[0], pow);
+  auto normalized_amplitudes = [this](const Qubits& qubits) {
+    auto state = std::dynamic_pointer_cast<MagicQuantumState>(partial_trace(qubits));
+    auto amplitudes = extract_amplitudes(state->sample_paulis_exhaustive({}))[0];
+    double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
+    std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
+    return amplitudes;
   };
 
-  auto power_vec = [&power](const std::vector<PauliAmplitudes>& samples, double pow) {
-    auto powfunc = std::bind(power, std::placeholders::_1, std::placeholders::_2, pow);
-    return std::accumulate(samples.begin(), samples.end(), 0.0, powfunc);
-  };
+  auto amplitudesAB = normalized_amplitudes(_qubits);
+  auto amplitudesA = normalized_amplitudes(qubitsB);
+  auto amplitudesB = normalized_amplitudes(qubitsA);
 
-  double sumA_2 = power_vec(samplesA, 2.0);
-  double sumA_4 = power_vec(samplesA, 4.0);
-  double sumB_2 = power_vec(samplesB, 2.0);
-  double sumB_4 = power_vec(samplesB, 4.0);
-  double sumAB_2 = power_vec(samplesAB, 2.0);
-  double sumAB_4 = power_vec(samplesAB, 4.0);
-
-  double I = -std::log(sumA_2*sumB_2/sumAB_2);
-  double W = -std::log(sumA_4*sumB_4/sumAB_4);
-
-  return I - W;
+  return renyi_entropy(2, amplitudesA) + renyi_entropy(2, amplitudesB) - renyi_entropy(2, amplitudesAB);
 }
 
 std::vector<double> MagicQuantumState::bipartite_magic_mutual_information_exhaustive() {

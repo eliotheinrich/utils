@@ -95,6 +95,10 @@ double Statevector::entropy(const Qubits& qubits, uint32_t index) {
 }
 
 std::shared_ptr<QuantumState> Statevector::partial_trace(const Qubits& qubits) const {
+  if (qubits.size() == 0) {
+    return std::make_shared<Statevector>(*this);
+  }
+
   auto interval = support_range(qubits);
   if (interval) {
     auto [q1, q2] = interval.value();
