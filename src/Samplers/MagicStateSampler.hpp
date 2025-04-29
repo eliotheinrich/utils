@@ -26,6 +26,8 @@ class StabilizerEntropySampler {
 
     ~StabilizerEntropySampler()=default;
 
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state)=0;
+
   protected:	
     bool sre_use_parent_methods;
 
@@ -234,7 +236,7 @@ class MagicStateSampler : public StabilizerEntropySampler {
       dataframe::utils::emplace(samples, "stabilizer_entropy_bipartite", mmi_samples);
     }
 
-    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) override {
       if (sample_stabilizer_entropy) {
         add_stabilizer_entropy_samples(samples, state);
       }

@@ -8,7 +8,9 @@ class MPSParticipationSampler : public ParticipationSampler {
 
     ~MPSParticipationSampler()=default;
 
-    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MatrixProductState>& state) {
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state_) override {
+      std::shared_ptr<MatrixProductState> state = std::dynamic_pointer_cast<MatrixProductState>(state_);
+
       if (sample_configurational_entropy || sample_configurational_entropy_mutual || sample_configurational_entropy_bipartite) {
         // Only perform sample a single time
         std::vector<QubitSupport> supports;

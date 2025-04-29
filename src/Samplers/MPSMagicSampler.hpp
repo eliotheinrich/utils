@@ -6,9 +6,9 @@ class MPSMagicSampler : public StabilizerEntropySampler {
   public:
     MPSMagicSampler(dataframe::ExperimentParams& params) : StabilizerEntropySampler(params) {}
 
-    ~MPSMagicSampler()=default;
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state_) override {
+      std::shared_ptr<MatrixProductState> state = std::dynamic_pointer_cast<MatrixProductState>(state_);
 
-    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MatrixProductState>& state) {
       if (sample_stabilizer_entropy || sample_stabilizer_entropy_mutual || sample_stabilizer_entropy_bipartite) {
         std::vector<QubitSupport> supports;
         if (sample_stabilizer_entropy_mutual) {

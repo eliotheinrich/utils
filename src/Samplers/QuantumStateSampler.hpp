@@ -43,6 +43,8 @@ class ParticipationSampler {
       sample_configurational_entropy_bipartite = dataframe::utils::get<int>(params, "sample_configurational_entropy_bipartite", false);
     }
 
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state)=0;
+
   protected:
     bool sample_configurational_entropy;
     std::string configurational_entropy_method;
@@ -260,7 +262,7 @@ class QuantumStateSampler : public ParticipationSampler {
       dataframe::utils::emplace(samples, "spin_glass_order", O/num_qubits);
     }
 
-    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) {
+    virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<QuantumState>& state) override {
       if (sample_probabilities) {
         add_probability_samples(samples, state);
       }
