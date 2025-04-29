@@ -251,35 +251,6 @@ double MagicQuantumState::calculate_magic_mutual_information_from_samples(const 
   return I - W;
 }
 
-double MagicQuantumState::calculate_magic_mutual_information_from_samples2(const MutualMagicAmplitudes& samples2) {
-  const auto [tAB, tA, tB] = unfold_mutual_magic_amplitudes(samples2);
-  if (tA.size() != tB.size() || tB.size() != tAB.size()) {
-    throw std::invalid_argument(fmt::format("Invalid sample sizes passed to calculate_magic_from_samples2. tA.size() = {}, tB.size() = {}, tAB.size() = {}", tA.size(), tB.size(), tAB.size()));
-  }
-
-  size_t num_samples = tA.size();
-
-  double I = 0.0;
-  for (size_t i = 0; i < num_samples; i++) {
-    I += std::pow(tA[i] * tB[i] / tAB[i], 2.0);
-  }
-  I = -std::log(I / num_samples);
-
-  double W = 0.0;
-  for (size_t i = 0; i < num_samples; i++) {
-    W += std::pow(tA[i] * tB[i], 4.0) / std::pow(tAB[i], 2.0);
-  }
-  W = -std::log(W / num_samples);
-
-  double q = 0.0;
-  for (size_t i = 0; i < num_samples; i++) {
-    q += std::pow(tAB[i], 2.0);
-  }
-  double M = -std::log(q / num_samples);
-
-  return I - W + M;
-}
-
 MutualMagicData MagicQuantumState::magic_mutual_information_samples_montecarlo(
   const Qubits& qubitsA, const Qubits& qubitsB,
   size_t num_samples, size_t equilibration_timesteps, 
@@ -431,20 +402,4 @@ std::vector<double> MagicQuantumState::bipartite_magic_mutual_information_exact(
     [](const MutualMagicData& s) { return MagicQuantumState::calculate_magic_mutual_information_from_samples(s); }
   );
   return data;
-}
-
-std::vector<double> MagicQuantumState::bipartite_magic_mutual_information(size_t num_samples) {
-  std::vector<double> magic(num_qubits/2 - 1);
-  for (size_t i = 0; i < magic.size(); i++) {
-    size_t j = i + 1;
-    Qubits qubitsA(j);
-    std::iota(qubitsA.begin(), qubitsA.end(), 0);
-
-    Qubits qubitsB(num_qubits - j);
-    std::iota(qubitsB.begin(), qubitsB.end(), j);
-
-    magic[i] = magic_mutual_information(qubitsA, qubitsB, num_samples);
-  }
-  
-  return magic;
 }

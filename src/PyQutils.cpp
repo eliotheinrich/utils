@@ -177,17 +177,16 @@ NB_MODULE(qutils_bindings, m) {
     .def_static("calculate_magic_mutual_information_from_samples", [](MagicQuantumState& self, const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
       return self.calculate_magic_mutual_information_from_samples(samples2, samples4);
     })
-    .def_static("calculate_magic_mutual_information_from_samples2", &MagicQuantumState::calculate_magic_mutual_information_from_samples2)
     .def("magic_mutual_information_samples_exact", &MagicQuantumState::magic_mutual_information_samples_exact)
     .def("magic_mutual_information_samples", &MagicQuantumState::magic_mutual_information_samples_montecarlo)
     .def("magic_mutual_information_exhaustive", &MagicQuantumState::magic_mutual_information_exhaustive)
-    .def("magic_mutual_information", &MagicQuantumState::magic_mutual_information)
     .def("bipartite_magic_mutual_information_samples_exact", &MagicQuantumState::bipartite_magic_mutual_information_samples_exact)
     .def("bipartite_magic_mutual_information_samples_montecarlo", &MagicQuantumState::bipartite_magic_mutual_information_samples_montecarlo)
-    .def("bipartite_magic_mutual_information_exhaustive", &MagicQuantumState::bipartite_magic_mutual_information_exhaustive)
-    .def("bipartite_magic_mutual_information", &MagicQuantumState::bipartite_magic_mutual_information);
+    .def("bipartite_magic_mutual_information_exhaustive", &MagicQuantumState::bipartite_magic_mutual_information_exhaustive);
 
   m.def("renyi_entropy", &renyi_entropy);
+  m.def("estimate_renyi_entropy", &estimate_renyi_entropy);
+  m.def("estimate_mutual_renyi_entropy", &estimate_mutual_renyi_entropy);
 
   nanobind::class_<Statevector, MagicQuantumState>(m, "Statevector")
     .def(nanobind::init<uint32_t>())
@@ -235,7 +234,6 @@ NB_MODULE(qutils_bindings, m) {
     .def("get_logged_truncerr", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.get_logged_truncerr()); })
     .def("trace", &MatrixProductState::trace)
     .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
-    .def("magic_mutual_information", &MatrixProductState::magic_mutual_information)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -280,6 +278,18 @@ NB_MODULE(qutils_bindings, m) {
       sampler.add_samples(samples, qstate);
       return samples;
     });
+    
+  nanobind::class_<MPSParticipationSampler>(m, "MPSParticipationSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      MPSParticipationSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("take_samples", [](MPSParticipationSampler& sampler, const std::shared_ptr<MatrixProductState>& state) {
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, state);
+      return samples;
+    });
 
   nanobind::class_<MagicStateSampler>(m, "MagicStateSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
@@ -292,6 +302,18 @@ NB_MODULE(qutils_bindings, m) {
       self.set_montecarlo_update(mutation);
     })
     .def("take_samples", [](MagicStateSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, state);
+      return samples;
+    });
+
+  nanobind::class_<MPSMagicSampler>(m, "MPSMagicSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      MPSMagicSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("take_samples", [](MPSMagicSampler& sampler, const std::shared_ptr<MatrixProductState>& state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;

@@ -6,36 +6,11 @@
 #include <iostream>
 #include <string>
 
-class MagicStateSampler {
+class StabilizerEntropySampler {
   public:
-    enum sre_method_t {
-      Virtual, MonteCarlo, Exhaustive, Exact
-    };
-
-    sre_method_t parse_sre_method(const std::string& s) {
-      if (s == "montecarlo") {
-        return sre_method_t::MonteCarlo;
-      } else if (s == "virtual") {
-        return sre_method_t::Virtual;
-      } else if (s == "exhaustive") {
-        return sre_method_t::Exhaustive;
-      } else if (s == "exact") {
-        return sre_method_t::Exact;
-      } else {
-        throw std::runtime_error(fmt::format("Stabilizer renyi entropy method \"{}\" not found.", s));
-      }
-    }
-
-    MagicStateSampler(dataframe::ExperimentParams& params) {
-      sre_use_parent_methods = dataframe::utils::get<int>(params, "sre_use_parent_methods", false);
-
+    StabilizerEntropySampler(dataframe::ExperimentParams& params) {
       sample_stabilizer_entropy = dataframe::utils::get<int>(params, "sample_stabilizer_entropy", false);
-      sre_save_samples = dataframe::utils::get<int>(params, "sre_save_samples", 0);
       sre_num_samples = dataframe::utils::get<int>(params, "sre_num_samples", 1000);
-      sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method", "virtual"));
-      if (sre_method == sre_method_t::MonteCarlo) {
-        sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps");
-      }
 
       if (sample_stabilizer_entropy) {
         renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "stabilizer_entropy_indices", "1"));
@@ -47,6 +22,67 @@ class MagicStateSampler {
       }
 
       sample_stabilizer_entropy_bipartite = dataframe::utils::get<int>(params, "sample_stabilizer_entropy_bipartite", false);
+    }
+
+    ~StabilizerEntropySampler()=default;
+
+  protected:	
+    bool sre_use_parent_methods;
+
+    bool sample_stabilizer_entropy;
+    std::vector<size_t> renyi_indices;
+
+    size_t sre_num_samples;
+
+    bool sample_stabilizer_entropy_mutual;
+    size_t stabilizer_entropy_mutual_subsystem_size;
+    bool sample_stabilizer_entropy_bipartite;
+
+  private:
+    static std::vector<size_t> parse_renyi_indices(const std::string &renyi_indices_str) {
+      std::vector<size_t> indices;
+      std::stringstream ss(renyi_indices_str);
+      std::string token;
+
+      while (std::getline(ss, token, ',')) {
+        try {
+          uint32_t number = std::stoi(dataframe::utils::strip(token));
+          indices.push_back(number);
+        } catch (const std::exception &e) {}
+      }
+
+      return indices;
+    }
+};
+
+class MagicStateSampler : public StabilizerEntropySampler {
+  public:
+    enum sre_method_t {
+      MonteCarlo, Exhaustive, Exact
+    };
+
+    sre_method_t parse_sre_method(const std::string& s) {
+      if (s == "montecarlo") {
+        return sre_method_t::MonteCarlo;
+      } else if (s == "exhaustive") {
+        return sre_method_t::Exhaustive;
+      } else if (s == "exact") {
+        return sre_method_t::Exact;
+      } else {
+        throw std::runtime_error(fmt::format("Stabilizer renyi entropy method \"{}\" not found.", s));
+      }
+    }
+
+    MagicStateSampler(dataframe::ExperimentParams& params) : StabilizerEntropySampler(params) {
+      sre_method = parse_sre_method(dataframe::utils::get<std::string>(params, "sre_method"));
+      if (sre_method == sre_method_t::MonteCarlo) {
+        sre_mc_equilibration_timesteps = dataframe::utils::get<int>(params, "sre_mc_equilibration_timesteps");
+      }
+
+      if (sample_stabilizer_entropy) {
+        sre_save_samples = dataframe::utils::get<int>(params, "sre_save_samples", false);
+      }
+
       if (sample_stabilizer_entropy_mutual || sample_stabilizer_entropy_bipartite) {
         sre_mmi_save_samples = dataframe::utils::get<int>(params, "sre_mmi_save_samples", false);
       }
@@ -85,8 +121,6 @@ class MagicStateSampler {
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
 
-      state->set_use_parent_implementation(sre_use_parent_methods);
-
       ProbabilityFunc prob = [](double t) -> double { return t*t; };
       std::vector<double> stabilizer_renyi_entropy;
       std::vector<double> amplitudes;
@@ -98,9 +132,6 @@ class MagicStateSampler {
         std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
       } else if (sre_method == sre_method_t::Exact) {
         auto pauli_samples = state->sample_paulis_exact({}, sre_num_samples, prob);
-        std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
-      } else if (sre_method == sre_method_t::Virtual) {
-        auto pauli_samples = state->sample_paulis({}, sre_num_samples);
         std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
       }
 
@@ -148,12 +179,8 @@ class MagicStateSampler {
         throw std::runtime_error(fmt::format("stabilizer_entropy_mutual_subsystem_size = {}, but num_qubits = {}", stabilizer_entropy_mutual_subsystem_size, num_qubits));
       }
 
-      std::vector<uint32_t> qubitsA(stabilizer_entropy_mutual_subsystem_size);
-      std::vector<uint32_t> qubitsB(stabilizer_entropy_mutual_subsystem_size);
-      for (size_t i = 0; i < stabilizer_entropy_mutual_subsystem_size; i++) {
-        qubitsA[i] = i;
-        qubitsB[i] = i + num_qubits - stabilizer_entropy_mutual_subsystem_size;
-      }
+      Qubits qubitsA = to_qubits(std::make_pair(0, stabilizer_entropy_mutual_subsystem_size));
+      Qubits qubitsB = to_qubits(std::make_pair(num_qubits - stabilizer_entropy_mutual_subsystem_size, num_qubits));
 
       double mmi_sample;
       if (sre_method == sre_method_t::Exhaustive) {
@@ -174,8 +201,6 @@ class MagicStateSampler {
         } else {
           mmi_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
         }
-      } else if (sre_method == sre_method_t::Virtual) {
-        mmi_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
       }
 
       dataframe::utils::emplace(samples, "stabilizer_entropy_mutual", mmi_sample);
@@ -204,8 +229,6 @@ class MagicStateSampler {
         } else {
           mmi_samples = state->bipartite_magic_mutual_information_exact(sre_num_samples);
         }
-      } else if (sre_method == sre_method_t::Virtual) {
-        mmi_samples = state->bipartite_magic_mutual_information(sre_num_samples);
       }
 
       dataframe::utils::emplace(samples, "stabilizer_entropy_bipartite", mmi_samples);
@@ -226,36 +249,12 @@ class MagicStateSampler {
     }
 
   private:	
-    bool sre_use_parent_methods;
-
-    bool sample_stabilizer_entropy;
-    std::vector<size_t> renyi_indices;
-
     sre_method_t sre_method;
-    bool sre_save_samples;
-    size_t sre_num_samples;
     size_t sre_mc_equilibration_timesteps;
 
-    bool sample_stabilizer_entropy_mutual;
+    bool sre_save_samples;
     bool sre_mmi_save_samples;
-    size_t stabilizer_entropy_mutual_subsystem_size;
-    bool sample_stabilizer_entropy_bipartite;
 
     std::optional<PauliMutationFunc> mutation;
-
-    static std::vector<size_t> parse_renyi_indices(const std::string &renyi_indices_str) {
-      std::vector<size_t> indices;
-      std::stringstream ss(renyi_indices_str);
-      std::string token;
-
-      while (std::getline(ss, token, ',')) {
-        try {
-          uint32_t number = std::stoi(dataframe::utils::strip(token));
-          indices.push_back(number);
-        } catch (const std::exception &e) {}
-      }
-
-      return indices;
-    }
 };
 

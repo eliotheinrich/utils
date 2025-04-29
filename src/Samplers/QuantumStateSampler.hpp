@@ -27,9 +27,36 @@ static inline Basis parse_basis(const std::string& s) {
   }
 }
 
-class QuantumStateSampler {
+class ParticipationSampler {
   public:
-    QuantumStateSampler(dataframe::ExperimentParams& params) {
+    ParticipationSampler(dataframe::ExperimentParams& params) {
+      sample_configurational_entropy = dataframe::utils::get<int>(params, "sample_configurational_entropy", false);
+      configurational_entropy_method = dataframe::utils::get<std::string>(params, "configurational_entropy_method", "sampled");
+      std::set<std::string> allowed_methods = {"sampled", "exhaustive"};
+      if (!allowed_methods.contains(configurational_entropy_method)) {
+        throw std::runtime_error(fmt::format("Invalid configurational entropy method: {}\n", configurational_entropy_method));
+      }
+      num_configurational_entropy_samples = dataframe::utils::get<int>(params, "num_configurational_entropy_samples", 1000);
+
+      sample_configurational_entropy_mutual = dataframe::utils::get<int>(params, "sample_configurational_entropy_mutual", false);
+
+      sample_configurational_entropy_bipartite = dataframe::utils::get<int>(params, "sample_configurational_entropy_bipartite", false);
+    }
+
+  protected:
+    bool sample_configurational_entropy;
+    std::string configurational_entropy_method;
+    size_t num_configurational_entropy_samples;
+
+    bool sample_configurational_entropy_mutual;
+
+    bool sample_configurational_entropy_bipartite;
+
+};
+
+class QuantumStateSampler : public ParticipationSampler {
+  public:
+    QuantumStateSampler(dataframe::ExperimentParams& params) : ParticipationSampler(params) {
       num_bins = dataframe::utils::get<int>(params, "num_bins", 100);
       min_prob = dataframe::utils::get<double>(params, "min_prob", 0.0);
       max_prob = dataframe::utils::get<double>(params, "max_prob", 1.0);
@@ -40,18 +67,6 @@ class QuantumStateSampler {
       }
 
       sample_bitstring_distribution = dataframe::utils::get<int>(params, "sample_bitstring_distribution", false);
-
-      sample_configurational_entropy = dataframe::utils::get<int>(params, "sample_configurational_entropy", false);
-      configurational_entropy_method = dataframe::utils::get<std::string>(params, "configurational_entropy_method", "sampled");
-      std::set<std::string> allowed_methods = {"sampled", "exhaustive", "virtual"};
-      if (!allowed_methods.contains(configurational_entropy_method)) {
-        throw std::runtime_error(fmt::format("Invalid configurational entropy method: {}\n", configurational_entropy_method));
-      }
-      num_configurational_entropy_samples = dataframe::utils::get<int>(params, "num_configurational_entropy_samples", 1000);
-
-      sample_configurational_entropy_mutual = dataframe::utils::get<int>(params, "sample_configurational_entropy_mutual", false);
-
-      sample_configurational_entropy_bipartite = dataframe::utils::get<int>(params, "sample_configurational_entropy_bipartite", false);
 
       sample_spin_glass_order = dataframe::utils::get<int>(params, "sample_spin_glass_order", false);
       if (sample_spin_glass_order) {
@@ -110,8 +125,6 @@ class QuantumStateSampler {
       } else if (configurational_entropy_method == "exhaustive") {
         auto probs = state->probabilities();
         W = renyi_entropy(1, probs, 2);
-      } else {
-        W = state->configurational_entropy(num_configurational_entropy_samples);
       }
 
       dataframe::utils::emplace(samples, "configurational_entropy", W);
@@ -145,8 +158,6 @@ class QuantumStateSampler {
         auto pB = stateB->probabilities();
 
         M = renyi_entropy(1, pA, 2) + renyi_entropy(1, pB, 2) - renyi_entropy(1, pAB, 2);
-      } else {
-        M = state->configurational_entropy_mutual(qubitsA, qubitsB, num_configurational_entropy_samples);
       }
 
       dataframe::utils::emplace(samples, "configurational_entropy_mutual", M);
@@ -189,8 +200,6 @@ class QuantumStateSampler {
 
           entropy[i] = WA + WB - W;
         }
-      } else {
-        entropy = state->configurational_entropy_bipartite(num_configurational_entropy_samples);
       }
 
       dataframe::utils::emplace(samples, "configurational_entropy_bipartite", entropy);
@@ -284,14 +293,6 @@ class QuantumStateSampler {
     bool sample_probabilities;
 
     bool sample_bitstring_distribution;
-
-    bool sample_configurational_entropy;
-    std::string configurational_entropy_method;
-    size_t num_configurational_entropy_samples;
-
-    bool sample_configurational_entropy_mutual;
-
-    bool sample_configurational_entropy_bipartite;
 
     bool sample_spin_glass_order;
     bool spin_glass_order_assume_symmetry;

@@ -1,0 +1,48 @@
+#pragma once
+
+#include "MPSMagicSampler.hpp"
+
+class MPSMagicSampler : public StabilizerEntropySampler {
+  public:
+    MPSMagicSampler(dataframe::ExperimentParams& params) : StabilizerEntropySampler(params) {}
+
+    ~MPSMagicSampler()=default;
+
+    void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MatrixProductState>& state) {
+      if (sample_stabilizer_entropy || sample_stabilizer_entropy_mutual || sample_stabilizer_entropy_bipartite) {
+        std::vector<QubitSupport> supports;
+        if (sample_stabilizer_entropy_mutual) {
+          uint32_t nqb = state->get_num_qubits();
+          QubitInterval qubitsA = std::make_pair(0, stabilizer_entropy_mutual_subsystem_size);
+          supports.push_back(qubitsA);
+          QubitInterval qubitsB = std::make_pair(nqb - stabilizer_entropy_mutual_subsystem_size, nqb);
+          supports.push_back(qubitsB);
+        }
+        std::vector<PauliAmplitudes> pauli_samples = state->sample_paulis(supports, sre_num_samples);
+        std::vector<std::vector<double>> amplitudes = extract_amplitudes(pauli_samples);
+
+        if (sample_stabilizer_entropy) {
+          std::vector<double> amplitudes_ = amplitudes[0];
+          double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
+          std::transform(amplitudes_.begin(), amplitudes_.end(), amplitudes_.begin(), [&](auto x) { return x * x / purity; });
+
+          std::vector<double> stabilizer_renyi_entropy;
+          for (auto index : renyi_indices) {
+            double M = estimate_renyi_entropy(index, amplitudes_);
+            dataframe::utils::emplace(samples, fmt::format("stabilizer_entropy{}", index), M);
+          }
+        }
+
+        if (sample_stabilizer_entropy_mutual) {
+          double M = MatrixProductState::calculate_magic_mutual_information_from_samples2(amplitudes[0], amplitudes[1], amplitudes[2]);
+          dataframe::utils::emplace(samples, "stabilizer_entropy_mutual", M);
+        }
+
+        if (sample_stabilizer_entropy_bipartite) {
+          std::vector<double> M = state->process_bipartite_pauli_samples(pauli_samples);
+          dataframe::utils::emplace(samples, "stabilizer_entropy_bipartite", M);
+        }
+      }
+    }
+};
+

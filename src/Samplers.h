@@ -5,3 +5,5 @@
 #include "Samplers/QuantumStateSampler.hpp"
 #include "Samplers/LinearCodeSampler.hpp"
 #include "Samplers/MagicStateSampler.hpp"
+#include "Samplers/MPSParticipationSampler.hpp"
+#include "Samplers/MPSMagicSampler.hpp"

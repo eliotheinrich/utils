@@ -1206,7 +1206,6 @@ class MatrixProductStateImpl {
       return samples;
     }
 
-
     std::vector<double> process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& pauli_samples) {
       int i = orthogonality_level;
       set_orthogonality_level(1);
@@ -1258,7 +1257,7 @@ class MatrixProductStateImpl {
 
       std::vector<double> magic(N);
       for (size_t n = 0; n < N; n++) {
-        magic[n] = MagicQuantumState::calculate_magic_mutual_information_from_samples2({samplesAB[n], samplesA[n], samplesB[n]});
+        magic[n] = MatrixProductState::calculate_magic_mutual_information_from_samples2(samplesAB[n], samplesA[n], samplesB[n]);
       }
 
       set_orthogonality_level(i);
@@ -2068,85 +2067,47 @@ std::vector<std::vector<std::vector<std::complex<double>>>> MatrixProductState::
   return impl->get_tensor(q);
 }
 
-double MatrixProductState::magic_mutual_information(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) {
-  if (use_parent) {
-    return MagicQuantumState::magic_mutual_information(qubitsA, qubitsB, num_samples);
+double MatrixProductState::calculate_magic_mutual_information_from_samples2(const std::vector<double>& tAB, const std::vector<double>& tA, const std::vector<double>& tB) {
+  if (tA.size() != tB.size() || tB.size() != tAB.size()) {
+    throw std::invalid_argument(fmt::format("Invalid sample sizes passed to calculate_magic_from_samples2. tA.size() = {}, tB.size() = {}, tAB.size() = {}", tA.size(), tB.size(), tAB.size()));
   }
 
-  if (!support_contiguous(qubitsA) || !support_contiguous(qubitsB)) {
-    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} not contiguous. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB));
-  }
-  if (!is_bipartition(qubitsA, qubitsB, num_qubits)) {
-    throw std::runtime_error(fmt::format("qubitsA = {}, qubitsB = {} are not a bipartition of system with {} qubits. Can't compute MPS.magic_mutual_information.", qubitsA, qubitsB, num_qubits));
-  }
+  size_t num_samples = tA.size();
 
-  auto pauli_samples = sample_paulis({qubitsA, qubitsB}, num_samples);
-  auto data = extract_amplitudes(pauli_samples);
-  return MagicQuantumState::calculate_magic_mutual_information_from_samples2(data);
+  double I = 0.0;
+  for (size_t i = 0; i < num_samples; i++) {
+    I += std::pow(tA[i] * tB[i] / tAB[i], 2.0);
+  }
+  I = -std::log(I / num_samples);
+
+  double W = 0.0;
+  for (size_t i = 0; i < num_samples; i++) {
+    W += std::pow(tA[i] * tB[i], 4.0) / std::pow(tAB[i], 2.0);
+  }
+  W = -std::log(W / num_samples);
+
+  double q = 0.0;
+  for (size_t i = 0; i < num_samples; i++) {
+    q += std::pow(tAB[i], 2.0);
+  }
+  double M = -std::log(q / num_samples);
+
+  return I - W + M;
 }
 
-double MatrixProductState::magic_mutual_information_montecarlo(
-  const Qubits& qubitsA, 
-  const Qubits& qubitsB, 
-  size_t num_samples, size_t equilibration_timesteps, 
-  std::optional<PauliMutationFunc> mutation_opt
-) {
-  if (use_parent) {
-    return MagicQuantumState::magic_mutual_information_montecarlo(qubitsA, qubitsB, num_samples, equilibration_timesteps, mutation_opt);
-  }
-
-  auto prob = [](double t) -> double { return t*t; };
-
-  auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
-  std::vector<QubitSupport> supports = {_qubitsA, _qubitsB};
-  auto mpo = partial_trace_mps(_qubits);
-
-  auto pauli_samples2 = mpo.sample_paulis_montecarlo(supports, num_samples, equilibration_timesteps, prob, mutation_opt);
-  return MagicQuantumState::calculate_magic_mutual_information_from_samples2(extract_amplitudes(pauli_samples2));
-}
-
-std::vector<double> MatrixProductState::bipartite_magic_mutual_information(size_t num_samples) { 
-  auto pauli_samples = sample_paulis({}, num_samples);
-  return impl->process_bipartite_pauli_samples(pauli_samples);
-}
-
-std::vector<double> MatrixProductState::bipartite_magic_mutual_information_montecarlo(
-  size_t num_samples, size_t equilibration_timesteps, 
-  std::optional<PauliMutationFunc> mutation_opt
-) {
-  if (use_parent) {
-    return MagicQuantumState::bipartite_magic_mutual_information_montecarlo(num_samples, equilibration_timesteps, mutation_opt);
-  }
-
-  auto pauli_samples = sample_paulis_montecarlo({}, num_samples, equilibration_timesteps, [](double t) { return t*t; }, mutation_opt);
-  return impl->process_bipartite_pauli_samples(pauli_samples);
+std::vector<double> MatrixProductState::process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& samples) const {
+  return impl->process_bipartite_pauli_samples(samples);
 }
 
 std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
   return impl->sample_bitstrings(supports, num_samples);
 }
 
-double MatrixProductState::configurational_entropy_mutual(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_samples) const {
-  Qubits qubits = qubitsA;
-  for (const auto q : qubitsB) {
-    qubits.push_back(q);
-  }
-
-  auto mps = partial_trace(to_qubits(support_complement(qubits, num_qubits)));
-  auto samples = extract_amplitudes(mps->sample_bitstrings({qubitsA, qubitsB}, num_samples));
-  return estimate_mutual_renyi_entropy(samples[0], samples[1], samples[2], 2);
-}
-
-std::vector<double> MatrixProductState::configurational_entropy_bipartite(size_t num_samples) const {
-  auto bit_samples = sample_bitstrings({}, num_samples);
-  return impl->process_bipartite_bit_samples(bit_samples);
+std::vector<double> MatrixProductState::process_bipartite_bit_samples(const std::vector<BitAmplitudes>& samples) const {
+  return impl->process_bipartite_bit_samples(samples);
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
-  if (use_parent) {
-    return MagicQuantumState::sample_paulis(supports, num_samples);
-  }
-
   return impl->sample_paulis(supports, num_samples);
 }
 
@@ -2236,12 +2197,6 @@ void MatrixProductState::evolve(const Eigen::MatrixXcd& gate, const Qubits& qubi
 }
 
 std::vector<double> MatrixProductState::probabilities() const {
-  //std::vector<double> amplitudes(basis);
-  //for (uint32_t z = 0; z < basis; z++) {
-  //  BitString bits = BitString::from_bits(num_qubits, z);
-  //  amplitudes[z] = expectation(bits);
-  //}
-  //return amplitudes;
   if (impl->is_pure_state()) {
     Statevector psi(*this);
     return psi.probabilities();

@@ -1343,10 +1343,9 @@ bool test_quantum_state_sampler() {
   params["sample_configurational_entropy"] = 0;
   params["sample_configurational_entropy_mutual"] = 1;
   params["sample_configurational_entropy_bipartite"] = 1;
-  params["num_configurational_entropy_samples"] = 1000,
-  params["configurational_entropy_method"] = "virtual";
+  params["num_configurational_entropy_samples"] = 1000;
 
-  QuantumStateSampler sampler(params);
+  MPSParticipationSampler sampler(params);
 
   SampleMap samples;
   sampler.add_samples(samples, mps);
@@ -1364,10 +1363,9 @@ bool test_magic_state_sampler() {
   params["sample_stabilizer_entropy_mutual"] = 1;
   params["stabilizer_entropy_mutual_subsystem_size"] = 4;
   params["sample_stabilizer_entropy_bipartite"] = 1;
-  params["num_sre_samples"] = 1000,
-  params["sre_method"] = "virtual";
+  params["num_sre_samples"] = 1000;
 
-  MagicStateSampler sampler(params);
+  MPSMagicSampler sampler(params);
 
   SampleMap samples;
   sampler.add_samples(samples, mps);
