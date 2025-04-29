@@ -240,13 +240,13 @@ double MagicQuantumState::calculate_magic_mutual_information_from_samples(const 
   for (size_t i = 0; i < num_samples2; i++) {
     I += std::pow(tA2[i] * tB2[i] / tAB2[i], 2.0);
   }
-  I = -std::log(I/num_samples2);
+  I = -std::log(I / num_samples2);
 
   double W = 0.0;
   for (size_t i = 0; i < num_samples4; i++) {
     W += std::pow(tA4[i] * tB4[i] / tAB4[i], 4.0);
   }
-  W = -std::log(W/num_samples4);
+  W = -std::log(W / num_samples4);
 
   return I - W;
 }
@@ -263,13 +263,13 @@ double MagicQuantumState::calculate_magic_mutual_information_from_samples2(const
   for (size_t i = 0; i < num_samples; i++) {
     I += std::pow(tA[i] * tB[i] / tAB[i], 2.0);
   }
-  I = -std::log(I/num_samples);
+  I = -std::log(I / num_samples);
 
   double W = 0.0;
   for (size_t i = 0; i < num_samples; i++) {
     W += std::pow(tA[i] * tB[i], 4.0) / std::pow(tAB[i], 2.0);
   }
-  W = -std::log(W/num_samples);
+  W = -std::log(W / num_samples);
 
   double q = 0.0;
   for (size_t i = 0; i < num_samples; i++) {

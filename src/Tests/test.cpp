@@ -1360,6 +1360,28 @@ bool test_quantum_state_sampler() {
   return true;
 }
 
+bool test_magic_state_sampler() {
+  constexpr size_t nqb = 8;
+
+  std::shared_ptr<MatrixProductState> mps = std::make_shared<MatrixProductState>(nqb, 1u << nqb);
+  randomize_state_haar(*mps.get());
+
+  ExperimentParams params;
+  params["sample_stabilizer_entropy"] = 1;
+  params["sample_stabilizer_entropy_mutual"] = 1;
+  params["stabilizer_entropy_mutual_subsystem_size"] = 4;
+  params["sample_stabilizer_entropy_bipartite"] = 1;
+  params["num_sre_samples"] = 1000,
+  params["sre_method"] = "virtual";
+
+  MagicStateSampler sampler(params);
+
+  SampleMap samples;
+  sampler.add_samples(samples, mps);
+  std::cout << fmt::format("samples = \n{}\n", samples);
+  return true;
+}
+
 using TestResult = std::tuple<bool, int>;
 
 #define ADD_TEST(x)                                                               \
@@ -1417,6 +1439,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sample_bitstrings);
   ADD_TEST(test_quantum_state_sampler);
+  ADD_TEST(test_magic_state_sampler);
   ADD_TEST(test_configurational_entropy);
 
   //ADD_TEST(inspect_svd_error);

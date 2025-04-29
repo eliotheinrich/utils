@@ -660,7 +660,6 @@ class MatrixProductStateImpl {
       mps.external_indices = external_indices_;
       mps.internal_indices = internal_indices_;
 
-      // TODO Need to find a better way to do this than just turning off orthogonalization
       mps.left_ortho_lim = 0;
       mps.right_ortho_lim = remaining_qubits - 1;
       mps.debug_level = debug_level;
@@ -852,23 +851,6 @@ class MatrixProductStateImpl {
       }
 
       return renyi_entropy(index, sv);
-
-      //double s = 0.0;
-      //if (index == 1) {
-      //  for (double v : sv) {
-      //    if (v >= 1e-6) {
-      //      s -= v * std::log(v);
-      //    }
-      //  }
-      //} else {
-      //  for (double v : sv) {
-      //    s += std::pow(v, index);
-      //  }
-      //  
-      //  s = std::log(s)/(1.0 - index);
-      //}
-
-      //return s;
     }
 
     ITensor left_boundary_tensor(size_t i) const {
@@ -1637,7 +1619,6 @@ class MatrixProductStateImpl {
       return deltas;
     }
 
-    // TODO fix this
     double purity() {
       if (is_pure_state()) {
         return 1.0;
@@ -2076,10 +2057,6 @@ std::string MatrixProductState::to_string() const {
 }
 
 double MatrixProductState::entropy(const Qubits& qubits, uint32_t index) {
-  //if (index != 1) {
-  //  throw std::runtime_error("Cannot compute Renyi entanglement entropy with index other than 1 for MatrixProductState.");
-  //}
-
 	if (qubits.size() == 0) {
 		return 0.0;
 	}

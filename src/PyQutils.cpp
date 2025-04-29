@@ -28,6 +28,9 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
     .def_ro("num_qubits", &PauliString::num_qubits)
+    .def_static("from_bits", [](uint32_t num_qubits, uint32_t z) { return PauliString::from_bitstring(num_qubits, z); })
+    .def_static("rand", [](uint32_t num_qubits) { return PauliString::rand(num_qubits); })
+    .def_static("randh", [](uint32_t num_qubits) { return PauliString::randh(num_qubits); })
     .def("__str__", &PauliString::to_string_ops)
     .def("__mul__", &PauliString::operator*)
     .def("__rmul__", &PauliString::operator*)
@@ -61,14 +64,6 @@ NB_MODULE(qutils_bindings, m) {
         self.reduce(z, std::make_pair(&qc, qubits));
         return qc;
       }, "z"_a = true);
-
-  m.def("random_paulistring", [](uint32_t num_qubits) {
-    return PauliString::randh(num_qubits);
-  });
-
-  m.def("bitstring_paulistring", [](uint32_t num_qubits, uint32_t bitstring) {
-    return PauliString::from_bitstring(num_qubits, bitstring);
-  });
 
   nanobind::class_<QuantumCircuit>(m, "QuantumCircuit")
     .def(nanobind::init<uint32_t>())
