@@ -500,8 +500,16 @@ std::vector<std::vector<double>> extract_amplitudes(const std::vector<T>& sample
   return amplitudes;
 }
 
-inline std::array<std::vector<double>, 3> unfold_mutual_magic_amplitudes(const MutualMagicAmplitudes& samples) {
-  return {samples[0], samples[1], samples[2]};
+static std::vector<double> normalize_pauli_samples(const std::vector<double>& p, size_t num_qubits, double purity) {
+  std::vector<double> p_(p.size());
+
+  double N = std::pow(2.0, num_qubits) * purity;
+  // Normalize
+  for (size_t i = 0; i < p.size(); i++) {
+    p_[i] = p[i] * p[i] / N;
+  }
+
+  return p_;
 }
 
 inline void assert_gate_shape(const Eigen::MatrixXcd& gate, const Qubits& qubits) {

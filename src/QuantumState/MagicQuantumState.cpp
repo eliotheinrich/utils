@@ -176,19 +176,58 @@ std::vector<PauliAmplitudes> MagicQuantumState::sample_paulis_montecarlo(const s
 double MagicQuantumState::magic_mutual_information_exhaustive(const Qubits& qubitsA, const Qubits& qubitsB) {
   auto [_qubits, _qubitsA, _qubitsB] = get_traced_qubits(qubitsA, qubitsB, num_qubits);
 
-  auto normalized_amplitudes = [this](const Qubits& qubits) {
-    auto state = std::dynamic_pointer_cast<MagicQuantumState>(partial_trace(qubits));
-    auto amplitudes = extract_amplitudes(state->sample_paulis_exhaustive({}))[0];
-    double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
-    std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
-    return amplitudes;
-  };
+  //auto get_partial_entropy = [this](const Qubits& qubits) {
+  //  auto state = std::dynamic_pointer_cast<MagicQuantumState>(partial_trace(qubits));
+  //  auto amplitudes = extract_amplitudes(state->sample_paulis_exhaustive({}))[0];
 
-  auto amplitudesAB = normalized_amplitudes(_qubits);
-  auto amplitudesA = normalized_amplitudes(qubitsB);
-  auto amplitudesB = normalized_amplitudes(qubitsA);
+  //  double N = 0.0;
+  //  for (size_t i = 0; i < amplitudes.size(); i++) {
+  //    N += amplitudes[i] * amplitudes[i];
+  //  }
 
-  return renyi_entropy(2, amplitudesA) + renyi_entropy(2, amplitudesB) - renyi_entropy(2, amplitudesAB);
+  //  for (size_t i = 0; i < amplitudes.size(); i++) {
+  //    amplitudes[i] = amplitudes[i] * amplitudes[i] / N;
+  //  }
+
+  //  size_t num_qubits = state->get_num_qubits();
+  //  return renyi_entropy(2, amplitudes) - num_qubits * std::log(2);
+  //};
+
+  //double MAB = get_partial_entropy(_qubits);
+  //double MA = get_partial_entropy(qubitsB);
+  //double MB = get_partial_entropy(qubitsA);
+
+
+  auto state = std::dynamic_pointer_cast<MagicQuantumState>(partial_trace(_qubits));
+  auto amplitudes = extract_amplitudes(state->sample_paulis_exhaustive({qubitsA, qubitsB}));
+
+  double MAB1 = 0.0;
+  double MAB2 = 0.0;
+  
+  double MA1 = 0.0;
+  double MA2 = 0.0;
+
+  double MB1 = 0.0;
+  double MB2 = 0.0;
+
+  for (size_t i = 0; i < amplitudes[0].size(); i++) {
+    MAB1 += std::pow(amplitudes[0][i], 4.0);
+    MAB2 += std::pow(amplitudes[0][i], 2.0);
+
+    MA1 += std::pow(amplitudes[1][i], 4.0);
+    MA2 += std::pow(amplitudes[1][i], 2.0);
+
+    MB1 += std::pow(amplitudes[2][i], 4.0);
+    MB2 += std::pow(amplitudes[2][i], 2.0);
+  }
+
+  double MAB = -std::log(MAB1/MAB2);
+  double MA = -std::log(MA1/MA2);
+  double MB = -std::log(MB1/MB2);
+
+  //std::cout << fmt::format("MAB = {:.5f}, {:.5f}, MA = {:.5f}, {:.5f}, MB = {:.5f}, {:.5f}\n", MAB, MAB_, MA, MA_, MB, MB_);
+
+  return MA + MB - MAB;
 }
 
 std::vector<double> MagicQuantumState::bipartite_magic_mutual_information_exhaustive() {
@@ -208,8 +247,14 @@ std::vector<double> MagicQuantumState::bipartite_magic_mutual_information_exhaus
 }
 
 double MagicQuantumState::calculate_magic_mutual_information_from_samples(const MutualMagicAmplitudes& samples2, const MutualMagicAmplitudes& samples4) {
-  const auto [tAB2, tA2, tB2] = unfold_mutual_magic_amplitudes(samples2);
-  const auto [tAB4, tA4, tB4] = unfold_mutual_magic_amplitudes(samples4);
+  auto tAB2 = samples2[0];
+  auto tA2 = samples2[1];
+  auto tB2 = samples2[2];
+
+  auto tAB4 = samples4[0];
+  auto tA4 = samples4[1];
+  auto tB4 = samples4[2];
+
   if (tA2.size() != tB2.size() || tB2.size() != tAB2.size()) {
     throw std::invalid_argument(fmt::format("Invalid sample sizes passed to calculate_magic_mutual_information_from_samples. tA2.size() = {}, tB2.size() = {}, tAB2.size() = {}", tA2.size(), tB2.size(), tAB2.size()));
   }
@@ -233,7 +278,7 @@ double MagicQuantumState::calculate_magic_mutual_information_from_samples(const 
   }
   W = -std::log(W / num_samples4);
 
-  return I - W;
+  return W - I;
 }
 
 MutualMagicData MagicQuantumState::magic_mutual_information_samples_montecarlo(

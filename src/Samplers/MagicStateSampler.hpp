@@ -6,6 +6,10 @@
 #include <iostream>
 #include <string>
 
+#define STABILIZER_ENTROPY(x) fmt::format("stabilizer_entropy{}", x)
+#define STABILIZER_ENTROPY_MUTUAL "stabilizer_entropy_mutual"
+#define STABILIZER_ENTROPY_BIPARTITE "stabilizer_entropy_bipartite"
+
 class StabilizerEntropySampler {
   public:
     StabilizerEntropySampler(dataframe::ExperimentParams& params) {
@@ -98,27 +102,33 @@ class MagicStateSampler : public StabilizerEntropySampler {
 
     void add_stabilizer_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
       auto compute_sre_montecarlo = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
-        std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
-        double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
-        std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
+        std::vector<double> amplitudes = normalize_pauli_samples(extract_amplitudes(pauli_samples)[0], state->get_num_qubits(), state->purity());
 
+        size_t num_qubits = state->get_num_qubits();
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
           double M = estimate_renyi_entropy(index, amplitudes);
-          stabilizer_renyi_entropy.push_back(M);
+          stabilizer_renyi_entropy.push_back(M - num_qubits * std::log(2));
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
 
       auto compute_sre_exhaustive = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = extract_amplitudes(pauli_samples)[0];
-        double purity = std::pow(2.0, state->get_num_qubits()) * state->purity();
-        std::transform(amplitudes.begin(), amplitudes.end(), amplitudes.begin(), [&](auto x) { return x * x / purity; });
+        double N = 0.0;
+        for (size_t i = 0; i < amplitudes.size(); i++) {
+          N += amplitudes[i] * amplitudes[i];
+        }
 
+        for (size_t i = 0; i < amplitudes.size(); i++) {
+          amplitudes[i] = amplitudes[i] * amplitudes[i] / N;
+        }
+
+        size_t num_qubits = state->get_num_qubits();
         std::vector<double> stabilizer_renyi_entropy;
         for (auto index : indices) {
           double M = renyi_entropy(index, amplitudes);
-          stabilizer_renyi_entropy.push_back(M);
+          stabilizer_renyi_entropy.push_back(M - num_qubits * std::log(2));
         }
         return std::make_pair(amplitudes, stabilizer_renyi_entropy);
       };
@@ -142,7 +152,7 @@ class MagicStateSampler : public StabilizerEntropySampler {
       }
 
       for (size_t i = 0; i < renyi_indices.size(); i++) {
-        dataframe::utils::emplace(samples, fmt::format("stabilizer_entropy{}", renyi_indices[i]), stabilizer_renyi_entropy[i]);
+        dataframe::utils::emplace(samples, STABILIZER_ENTROPY(renyi_indices[i]), stabilizer_renyi_entropy[i]);
       }
     }
 
@@ -156,8 +166,13 @@ class MagicStateSampler : public StabilizerEntropySampler {
       std::vector<std::vector<double>> tAB4;
 
       for (auto const [t2, t4] : data) {
-        auto [tA2_, tB2_, tAB2_] = unfold_mutual_magic_amplitudes(t2);
-        auto [tA4_, tB4_, tAB4_] = unfold_mutual_magic_amplitudes(t4);
+        auto tAB2_ = t2[0];
+        auto tA2_ = t2[1];
+        auto tB2_ = t2[2];
+
+        auto tAB4_ = t4[0];
+        auto tA4_ = t4[1];
+        auto tB4_ = t4[2];
 
         tA2.push_back(tA2_);
         tB2.push_back(tB2_);
@@ -205,7 +220,7 @@ class MagicStateSampler : public StabilizerEntropySampler {
         }
       }
 
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual", mmi_sample);
+      dataframe::utils::emplace(samples, STABILIZER_ENTROPY_MUTUAL, mmi_sample);
     }
     
     void add_stabilizer_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
@@ -233,7 +248,7 @@ class MagicStateSampler : public StabilizerEntropySampler {
         }
       }
 
-      dataframe::utils::emplace(samples, "stabilizer_entropy_bipartite", mmi_samples);
+      dataframe::utils::emplace(samples, STABILIZER_ENTROPY_BIPARTITE, mmi_samples);
     }
 
     virtual void add_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) override {

@@ -2086,13 +2086,13 @@ double MatrixProductState::calculate_magic_mutual_information_from_samples2(cons
   }
   W = -std::log(W / num_samples);
 
-  double q = 0.0;
+  std::vector<double> tAB_(tAB);
   for (size_t i = 0; i < num_samples; i++) {
-    q += std::pow(tAB[i], 2.0);
+    tAB_[i] = tAB_[i] * tAB_[i];
   }
-  double M = -std::log(q / num_samples);
 
-  return I - W + M;
+  double M = estimate_renyi_entropy(2, tAB_);
+  return W - I - M;
 }
 
 std::vector<double> MatrixProductState::process_bipartite_pauli_samples(const std::vector<PauliAmplitudes>& samples) const {

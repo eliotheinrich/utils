@@ -124,7 +124,7 @@ double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const
 
   double p = 0.0;
   for (size_t i = 0; i < N; i++) {
-    p -= log(samplesA[i] * samplesB[i] / samplesAB[i], base);
+    p += log(samplesAB[i] / (samplesA[i] * samplesB[i]), base);
   }
 
   return p/N;
