@@ -35,11 +35,7 @@ class ParticipationSampler {
   public:
     ParticipationSampler(dataframe::ExperimentParams& params) {
       sample_participation_entropy = dataframe::utils::get<int>(params, "sample_participation_entropy", false);
-      participation_entropy_method = dataframe::utils::get<std::string>(params, "participation_entropy_method", "sampled");
-      std::set<std::string> allowed_methods = {"sampled", "exhaustive"};
-      if (!allowed_methods.contains(participation_entropy_method)) {
-        throw std::runtime_error(fmt::format("Invalid participation entropy method: {}\n", participation_entropy_method));
-      }
+
       num_participation_entropy_samples = dataframe::utils::get<int>(params, "num_participation_entropy_samples", 1000);
 
       sample_participation_entropy_mutual = dataframe::utils::get<int>(params, "sample_participation_entropy_mutual", false);
@@ -51,7 +47,7 @@ class ParticipationSampler {
 
   protected:
     bool sample_participation_entropy;
-    std::string participation_entropy_method;
+
     size_t num_participation_entropy_samples;
 
     bool sample_participation_entropy_mutual;
@@ -78,6 +74,12 @@ class QuantumStateSampler : public ParticipationSampler {
       if (sample_spin_glass_order) {
         spin_glass_order_assume_symmetry = dataframe::utils::get<int>(params, "spin_glass_order_assume_symmetry", false);
         spin_glass_order_basis = parse_basis(dataframe::utils::get<std::string>(params, "spin_glass_order_basis", "Z"));
+      }
+
+      participation_entropy_method = dataframe::utils::get<std::string>(params, "participation_entropy_method", "sampled");
+      std::set<std::string> allowed_methods = {"sampled", "exhaustive"};
+      if (!allowed_methods.contains(participation_entropy_method)) {
+        throw std::runtime_error(fmt::format("Invalid participation entropy method: {}\n", participation_entropy_method));
       }
     }
 
@@ -303,6 +305,8 @@ class QuantumStateSampler : public ParticipationSampler {
     bool sample_spin_glass_order;
     bool spin_glass_order_assume_symmetry;
     Basis spin_glass_order_basis;
+
+    std::string participation_entropy_method;
 
     uint32_t get_bin_idx(double s) const {
       if ((s < min_prob) || (s > max_prob)) {
