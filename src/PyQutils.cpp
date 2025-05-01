@@ -1,3 +1,5 @@
+#include "Samplers/ParticipationSampler.hpp"
+#include "Samplers/StabilizerEntropySampler.hpp"
 #include <PyQutils.hpp>
 #include <memory>
 
@@ -278,6 +280,19 @@ NB_MODULE(qutils_bindings, m) {
       sampler.add_samples(samples, qstate);
       return samples;
     });
+
+  nanobind::class_<GenericParticipationSampler>(m, "GenericParticipationSampler")
+    .def(nanobind::init<dataframe::ExperimentParams&>())
+    .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
+      GenericParticipationSampler sampler(params);
+      return std::make_pair(sampler, params);
+    })
+    .def("take_samples", [](GenericParticipationSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
+      std::shared_ptr<QuantumState> qstate = std::dynamic_pointer_cast<QuantumState>(state);
+      dataframe::SampleMap samples;
+      sampler.add_samples(samples, qstate);
+      return samples;
+    });
     
   nanobind::class_<MPSParticipationSampler>(m, "MPSParticipationSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
@@ -291,17 +306,17 @@ NB_MODULE(qutils_bindings, m) {
       return samples;
     });
 
-  nanobind::class_<MagicStateSampler>(m, "MagicStateSampler")
+  nanobind::class_<GenericMagicSampler>(m, "GenericMagicSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      MagicStateSampler sampler(params);
+      GenericMagicSampler sampler(params);
       return std::make_pair(sampler, params);
     })
-    .def("set_sre_montecarlo_update", [](MagicStateSampler& self, PyMutationFunc func) {
+    .def("set_sre_montecarlo_update", [](GenericMagicSampler& self, PyMutationFunc func) {
       auto mutation = convert_from_pyfunc(func);
       self.set_montecarlo_update(mutation);
     })
-    .def("take_samples", [](MagicStateSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
+    .def("take_samples", [](GenericMagicSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;

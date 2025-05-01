@@ -1,5 +1,8 @@
 #pragma once 
 
+#include "Frame.h"
+#include <QuantumState.h>
+
 #define PARTICIPATION_ENTROPY           "participation_entropy"
 #define PARTICIPATION_ENTROPY_MUTUAL    "participation_entropy_mutual"
 #define PARTICIPATION_ENTROPY_BIPARTITE "participation_entropy_bipartite"

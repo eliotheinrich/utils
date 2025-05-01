@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Frame.h"
+#include <QuantumState.h>
+
 #define STABILIZER_ENTROPY(x) fmt::format("stabilizer_entropy{}", x)
 #define STABILIZER_ENTROPY_MUTUAL "stabilizer_entropy_mutual"
 #define STABILIZER_ENTROPY_BIPARTITE "stabilizer_entropy_bipartite"
