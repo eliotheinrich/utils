@@ -684,46 +684,6 @@ bool test_mps_inner() {
   return true;
 }
 
-bool test_mps_reverse() {
-  std::vector<size_t> nqbs = {3, 4, 5, 6};
-
-  for (auto nqb : nqbs) {
-    MatrixProductState mps(nqb, 1u << nqb);
-    mps.set_debug_level(MPS_DEBUG_LEVEL);
-
-    randomize_state_haar(mps);
-
-    Qubits qubits(nqb);
-    std::iota(qubits.begin(), qubits.end(), 0);
-    size_t k = randi() % (nqb - 2) + 1;
-
-    Qubits traced_qubits;
-    if (randi() % 2) {
-      traced_qubits = Qubits(qubits.begin(), qubits.begin() + k);
-    } else {
-      traced_qubits = Qubits(qubits.end() - k, qubits.end());
-    }
-
-    auto mps_m = mps.partial_trace_mps(traced_qubits);
-    MatrixProductState mps_r_m = mps_m;
-    ASSERT(states_close(mps_m, mps_r_m));
-
-    mps_r_m.reverse();
-
-    size_t remaining_nqb = mps_r_m.get_num_qubits();
-    for (size_t i = 0; i < remaining_nqb/2; i++) {
-      mps_r_m.swap(i, remaining_nqb - i - 1);
-    }
-    
-    DensityMatrix d1(mps_m);
-    DensityMatrix d2(mps_r_m);
-
-    ASSERT(states_close(mps_m, mps_r_m));
-  }
-
-  return true;
-}
-
 bool test_statevector_to_mps() {
   constexpr size_t nqb = 4;
 
@@ -951,11 +911,11 @@ bool test_stabilizer_entropy_sampling() {
 
   ExperimentParams params1 = params;
   params1["sre_method"] = "exhaustive";
-  MagicStateSampler sampler1(params1);
+  GenericMagicSampler sampler1(params1);
 
   ExperimentParams params2 = params;
   params2["sre_method"] = "exact";
-  MagicStateSampler sampler2(params2);
+  GenericMagicSampler sampler2(params2);
 
   ExperimentParams params3 = params;
   MPSMagicSampler sampler3(params3);
@@ -1013,11 +973,11 @@ bool test_participation_entropy_sampling() {
 
   ExperimentParams params1 = params;
   params1["participation_entropy_method"] = "exhaustive";
-  QuantumStateSampler sampler1(params1);
+  GenericParticipationSampler sampler1(params1);
 
   ExperimentParams params2 = params;
   params2["participation_entropy_method"] = "sampled";
-  QuantumStateSampler sampler2(params2);
+  GenericParticipationSampler sampler2(params2);
 
   ExperimentParams params3 = params;
   MPSParticipationSampler sampler3(params3);
@@ -1207,24 +1167,45 @@ bool test_circuit_measurements() {
   return true;
 }
 
+template <class StateType>
+bool apply_circuit_check_error(const QuantumCircuit& qc, StateType& state, bool should_error) {
+  bool found_error = false;
+  try {
+    qc.apply(state);
+  } catch (const std::runtime_error& error) {
+    found_error = true;
+  }
+
+  return found_error == should_error;
+}
+
 bool test_forced_measurement() {
-  constexpr size_t nqb = 2;
+  constexpr size_t nqb = 4;
 
   Statevector psi(nqb);
   DensityMatrix rho(nqb);
   MatrixProductState mps(nqb, 1u << nqb);
 
-  auto test_circuit = [](const QuantumCircuit& qc, MatrixProductState& psi) {
-    qc.apply(psi);
-  };
-  
-  QuantumCircuit qc(nqb);
-  qc.add_measurement({0}, PauliString("+Z"), true);
-  test_circuit(qc, mps);
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(psi, rho, mps);
 
-  qc = QuantumCircuit(nqb);
-  qc.add_measurement({0, 1}, PauliString("+ZZ"), true);
-  test_circuit(qc, mps);
+    uint32_t k = randi(1, 3);
+    PauliString P = PauliString::randh(k);
+    Qubits qubits = random_qubits(nqb, k);
+    bool outcome = randi() % 2;
+
+    QuantumCircuit qc(nqb);
+    qc.add_measurement(qubits, P, outcome);
+    ASSERT(apply_circuit_check_error(qc, psi, false));
+    ASSERT(apply_circuit_check_error(qc, rho, false));
+    ASSERT(apply_circuit_check_error(qc, mps, false));
+
+    qc = QuantumCircuit(nqb);
+    qc.add_measurement(qubits, P, !outcome);
+    ASSERT(apply_circuit_check_error(qc, psi, true));
+    ASSERT(apply_circuit_check_error(qc, rho, true));
+    ASSERT(apply_circuit_check_error(qc, mps, true));
+  }
 
   return true;
 }
@@ -1511,7 +1492,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli_reduce);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mps_inner);
-  //ADD_TEST(test_mps_reverse);
   ADD_TEST(test_statevector_to_mps);
   ADD_TEST(test_mps_measure);  
   ADD_TEST(test_mps_weak_measure);
@@ -1560,7 +1540,7 @@ int main(int argc, char *argv[]) {
     double total_duration = 0.0;
     for (const auto& [name, result] : tests) {
       auto [passed, duration] = result;
-      std::cout << fmt::format("{:>35}: {} ({:.2f} seconds)\n", name, test_passed_str(passed), duration/1e6);
+      std::cout << fmt::format("{:>40}: {} ({:.2f} seconds)\n", name, test_passed_str(passed), duration/1e6);
       total_duration += duration;
     }
 

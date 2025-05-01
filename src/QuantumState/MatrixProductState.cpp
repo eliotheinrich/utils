@@ -1631,79 +1631,6 @@ class MatrixProductStateImpl {
       return dim(inds(singular_values[i])[0]);
     }
 
-    void reverse() {
-      // Swap constituent tensors
-      for (size_t i = 0; i < num_qubits/2; i++) {
-        size_t j = num_qubits - i - 1;
-        std::swap(tensors[i], tensors[j]);
-      }
-
-      for (size_t i = 0; i < singular_values.size()/2; i++) {
-        size_t j = num_qubits - i - 1;
-        std::swap(singular_values[i], singular_values[j]);
-      }
-
-      // Relabel indices
-      for (size_t i = 0; i < num_qubits/2; i++) {
-        size_t j = num_qubits - i - 1;
-        swap_tags(external_indices[i], external_indices[j], tensors[i], tensors[j]);
-        std::swap(external_indices[i], external_indices[j]);
-      }
-
-      for (size_t i = 0; i < internal_indices.size()/2; i++) {
-        size_t j = internal_indices.size() - i - 1;
-        std::swap(internal_indices[i], internal_indices[j]);
-      }
-
-      // Fix index tags
-      for (size_t i = 0; i < internal_indices.size()/2; i++) {
-        size_t j = internal_indices.size() - i - 1;
-        size_t k1 = i / 2;
-        size_t k2 = internal_indices.size() / 2 - k1 - 1;
-
-        Index& i1 = internal_indices[i];
-        Index& i2 = internal_indices[j];
-        
-        swap_tags(i1, i2, singular_values[k1], singular_values[k2]);
-        if (k1 == k2) {
-          singular_values[k1].swapTags(tags(i1), tags(i2));
-        }
-      }
-
-      auto swap_internal_indices_at_block = [&](const Index& i1, const Index& i2, size_t q) {
-      };
-
-      for (size_t i = 0; i < internal_indices.size(); i++) {
-        size_t j = internal_indices.size() - i - 1;
-
-        Index i1 = internal_indices[i];
-        Index i2 = internal_indices[j];
-
-        size_t k = (i + 1) / 2;
-        tensors[k].swapTags(tags(i1), tags(i2));
-      }
-
-      if (num_qubits % 2) {
-        size_t k = num_qubits / 2;
-        size_t i = internal_indices.size()/2;
-        size_t j = internal_indices.size() - i - 1;
-
-        tensors[k].swapTags(tags(internal_indices[i]), tags(internal_indices[j]));
-      }
-
-      std::swap(left_ortho_lim, right_ortho_lim);
-      left_ortho_lim = num_qubits - 1 - left_ortho_lim;
-      right_ortho_lim = num_qubits - 1 - right_ortho_lim;
-
-      // Fix boundary indices
-      std::swap(left_boundary_index, right_boundary_index);
-      swap_tags(left_boundary_index, right_boundary_index);
-      tensors[0].swapTags(tags(left_boundary_index), tags(right_boundary_index));
-      tensors[num_qubits - 1].swapTags(tags(left_boundary_index), tags(right_boundary_index));
-      left_environment_tensor.swapTags(tags(left_boundary_index), tags(right_boundary_index));
-      right_environment_tensor.swapTags(tags(left_boundary_index), tags(right_boundary_index));
-    }
-
     std::complex<double> inner(const MatrixProductStateImpl& other) const {
       if (!is_pure_state() || !other.is_pure_state()) {
         throw std::runtime_error("Can't compute inner product of mixed state.");
@@ -2174,10 +2101,6 @@ double MatrixProductState::trace() const {
 
 size_t MatrixProductState::bond_dimension(size_t i) const {
   return impl->bond_dimension_at_site(i);
-}
-
-void MatrixProductState::reverse() {
-  impl->reverse();
 }
 
 void MatrixProductState::orthogonalize(uint32_t q) {
