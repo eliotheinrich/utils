@@ -517,6 +517,3 @@ inline void assert_gate_shape(const Eigen::MatrixXcd& gate, const Qubits& qubits
     throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
   }
 }
-
-bool inspect_svd_error();
-int load_seed(const std::string& filename);

@@ -280,47 +280,6 @@ class MatrixProductStateImpl {
     int debug_level;
     int orthogonality_level;
 
-    struct svd_error {
-      unsigned int seed;
-      std::optional<ITensor> T;
-      std::vector<char> mps_bytes;
-      uint32_t q;
-      bool truncate;
-    };
-
-    static void write_svd_error(const std::string& filename, const svd_error& e) {
-      std::vector<char> bytes;
-      auto write_error = glz::write_beve(e, bytes);
-      if (write_error) {
-        throw std::runtime_error(fmt::format("Error writing svd_error to binary: \n{}", glz::format_error(write_error, bytes)));
-      }
-
-      std::ofstream output_file(filename, std::ios::out | std::ios::binary);
-      if (!output_file) {
-        throw std::runtime_error(fmt::format("Failed to open file for writing: {}", filename));
-      }
-      output_file.write(reinterpret_cast<const char*>(&bytes[0]), bytes.size());
-      output_file.close();
-    }
-
-    static svd_error read_svd_error(const std::string& filename) {
-      std::ifstream input_file(filename, std::ios::in | std::ios::binary);
-      if (!input_file) {
-        throw std::runtime_error(fmt::format("Failed to open file for reading: {}", filename));
-      }
-
-      std::vector<char> bytes((std::istreambuf_iterator<char>(input_file)), std::istreambuf_iterator<char>());
-      input_file.close();
-
-      svd_error e;
-      auto parse_error = glz::read_beve(e, bytes);
-      if (parse_error) {
-        throw std::runtime_error(fmt::format("Error reading svd_error from binary: \n{}", glz::format_error(parse_error, bytes)));
-      }
-
-      return e;
-    }
-
     uint32_t num_qubits;
     uint32_t bond_dimension;
     double sv_threshold;
@@ -459,10 +418,12 @@ class MatrixProductStateImpl {
 
         auto M = V*mps(i + 1);
 
-        std::tie(U, S, V) = svd(M, u_inds, v_inds,
-            {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-            "LeftTags=",fmt::format("n={},Internal,Left",i-1),
-            "RightTags=",fmt::format("n={},Internal,Right",i-1)});
+        std::tie(U, S, V) = svd(M, u_inds, v_inds, {
+          "SVDMethod=","gesvd",
+          "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
+          "LeftTags=",fmt::format("n={},Internal,Left",i-1),
+          "RightTags=",fmt::format("n={},Internal,Right",i-1)
+        });
 
         auto ext = siteIndex(mps, i);
         U.replaceTags(ext.tags(), vidal_mps.external_idx(i - 1).tags());
@@ -1426,30 +1387,12 @@ class MatrixProductStateImpl {
 
       double threshold = truncate ? sv_threshold : 1e-15;
 
-      ITensor U, S, V;
-      try {
-        // TODO get rid of this; find some other way to deal with numerical instability for very small values in tensor
-        theta = apply(theta, [](Cplx c) { 
-          double mask = std::abs(c) >= 1e-14;
-          return Cplx(c.real() * mask, c.imag() * mask);
-        });
-
-        std::tie(U, S, V) = svd(theta, u_inds, v_inds, 
-            {"Cutoff=",threshold,"MaxDim=",bond_dimension,
-             "LeftTags=",fmt::format("Internal,Left,n={}", q1),
-             "RightTags=",fmt::format("Internal,Right,n={}", q1)});
-      } catch (const std::runtime_error& e) {
-        std::optional<ITensor> t = std::nullopt;
-        if (T) {
-          t = *T;
-        }
-        svd_error error{Random::get_seed(), t, to_bytes(), static_cast<uint32_t>(q1), truncate};
-        uint32_t r = randi();
-        write_svd_error(fmt::format("svd_error{:05}.eve", r), error);
-        std::cout << "There was a LAPACK error!\n";
-        writeToFile("theta.h5", theta);
-        throw e;
-      }
+      auto [U, S, V] = svd(theta, u_inds, v_inds, {
+        "SVDMethod=","gesvd",
+        "Cutoff=",threshold,"MaxDim=",bond_dimension,
+        "LeftTags=",fmt::format("Internal,Left,n={}", q1),
+        "RightTags=",fmt::format("Internal,Right,n={}", q1)
+      });
 
       double truncerr = sqr(norm(U*S*V - theta)/norm(theta));
       log.push_back(truncerr);
@@ -1573,10 +1516,12 @@ class MatrixProductStateImpl {
           v_inds.push_back(external_idx(j));
         }
         
-        auto [U, S, V] = svd(c, u_inds, v_inds,
-            {"Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-            "LeftTags=",fmt::format("Internal,Left,n={}", i),
-            "RightTags=",fmt::format("Internal,Right,n={}", i)});
+        auto [U, S, V] = svd(c, u_inds, v_inds, {
+          "SVDMethod=","gesvd",
+          "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
+          "LeftTags=",fmt::format("Internal,Left,n={}", i),
+          "RightTags=",fmt::format("Internal,Right,n={}", i)
+        });
 
         c = V;
         tensors[i] = U;
@@ -2193,31 +2138,4 @@ void MatrixProductState::deserialize(const std::vector<char>& bytes) {
   if (parse_error) {
     throw std::runtime_error(fmt::format("Error reading MatrixProductState from binary: \n{}", glz::format_error(parse_error, bytes)));
   }
-}
-
-bool inspect_svd_error() {
-  ITensor theta;
-  readFromFile("theta.h5", theta);
-
-
-  std::vector<Index> u_inds{findIndex(theta, "i=94"), findIndex(theta, "n=93")};
-  std::vector<Index> v_inds{findIndex(theta, "i=95"), findIndex(theta, "n=95")};
-
-  print(theta);
-
-  size_t q = 94;
-
-  size_t bond_dimension = 128;
-  double threshold = 1e-4;
-  auto [U, S, V] = svd(theta, u_inds, v_inds, 
-      {"Cutoff=",threshold,"MaxDim=",bond_dimension,
-      "LeftTags=",fmt::format("n={}", q),
-      "RightTags=",fmt::format("n={}", q+1)});
-  PrintData(S);
-  return true;
-}
-
-int load_seed(const std::string& filename) {
-  auto e = MatrixProductStateImpl::read_svd_error(filename);
-  return e.seed;
 }

@@ -1516,8 +1516,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_configurational_entropy);
   ADD_TEST(test_sv_entropy);
 
-  //ADD_TEST(inspect_svd_error);
-
 
   constexpr char green[] = "\033[1;32m";
   constexpr char black[] = "\033[0m";

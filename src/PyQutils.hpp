@@ -33,7 +33,7 @@ using namespace nanobind::literals;
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params,             \
                                          uint32_t num_threads) {                          \
       A simulator(params, num_threads);                                                   \
-      return std::make_pair(simulator, params);                                           \
+      return std::make_pair(std::move(simulator), params);                                \
     })                                                                                    \
     .def("init", [](                                                                      \
           A& self,                                                                        \
