@@ -108,9 +108,11 @@ std::shared_ptr<QuantumState> DensityMatrix::partial_trace(const Qubits& qubits)
   return std::make_shared<DensityMatrix>(std::move(partial_trace_density_matrix(qubits)));
 }
 
-double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t index) {
+double DensityMatrix::entanglement(const QubitSupport& support, uint32_t index) {
 	// If number of qubits is larger than half the system, take advantage of the fact that 
-	// S_A = S_\bar{A} to compute entropy for the smaller of A and \bar{A}
+	// S_A = S_\bar{A} to compute entanglement for the smaller of A and \bar{A}
+
+  auto qubits = to_qubits(support);
 	if (qubits.size() > num_qubits/2) {
 		Qubits qubits_complement;
     std::vector<bool> mask(num_qubits, true);
@@ -124,7 +126,7 @@ double DensityMatrix::entropy(const std::vector<uint32_t>& qubits, uint32_t inde
       }
 		}
 
-		return entropy(qubits_complement, index);
+		return entanglement(qubits_complement, index);
 	}
 
 	Qubits traced_qubits;

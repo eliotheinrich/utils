@@ -1,5 +1,5 @@
 #include "QuantumCircuit.h"
-#include "EntropyState.hpp"
+#include "EntanglementEntropyState.hpp"
 #include "Random.hpp"
 
 #include <map>
@@ -39,7 +39,7 @@ struct MeasurementResult {
   : proj(proj), prob_zero(prob_zero), outcome(outcome) {}
 };
 
-class QuantumState : public EntropyState, public std::enable_shared_from_this<QuantumState> {
+class QuantumState : public EntanglementEntropyState, public std::enable_shared_from_this<QuantumState> {
   protected:
     uint32_t num_qubits;
 
@@ -49,7 +49,7 @@ class QuantumState : public EntropyState, public std::enable_shared_from_this<Qu
 		QuantumState()=default;
     ~QuantumState()=default;
 
-		QuantumState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {}
+		QuantumState(uint32_t num_qubits) : EntanglementEntropyState(num_qubits), num_qubits(num_qubits), basis(1u << num_qubits) {}
 
     uint32_t get_num_qubits() const {
       return num_qubits;
@@ -280,7 +280,7 @@ class DensityMatrix : public MagicQuantumState {
 		DensityMatrix partial_trace_density_matrix(const Qubits& traced_qubits) const;
     virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const override;
 
-		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
+		virtual double entanglement(const QubitSupport& support, uint32_t index) override;
 
     virtual std::complex<double> expectation(const PauliString& p) const override;
     std::complex<double> expectation(const Eigen::MatrixXcd& m) const;
@@ -346,7 +346,7 @@ class Statevector : public MagicQuantumState {
 
 		virtual std::string to_string() const override;
 
-		virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
+		virtual double entanglement(const QubitSupport& support, uint32_t index) override;
 
     virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const override;
 
@@ -414,7 +414,7 @@ class MatrixProductState : public MagicQuantumState {
 
 		virtual std::string to_string() const override;
 
-		virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override;
+		virtual double entanglement(const QubitSupport& support, uint32_t index) override;
     std::vector<double> singular_values(uint32_t i) const;
     std::vector<std::vector<std::vector<std::complex<double>>>> tensor(uint32_t q) const;
 

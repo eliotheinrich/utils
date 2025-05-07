@@ -778,9 +778,9 @@ class MatrixProductStateImpl {
       return values;
     }
 
-    double entropy(uint32_t q, uint32_t index) {
+    double entanglement(uint32_t q, uint32_t index) {
       if (q < 0 || q > num_qubits) {
-        throw std::invalid_argument("Invalid qubit passed to MatrixProductState.entropy; must have 0 <= q <= num_qubits.");
+        throw std::invalid_argument("Invalid qubit passed to MatrixProductState.entanglement; must have 0 <= q <= num_qubits.");
       }
 
       if (q == 0 || q == num_qubits) {
@@ -788,7 +788,7 @@ class MatrixProductStateImpl {
       }
 
       orthogonalize(q);
-      assert_state_valid(fmt::format("State invalid after applying entropy({})\n", q));
+      assert_state_valid(fmt::format("State invalid after applying entanglement({})\n", q));
 
       auto singular_vals = singular_values[q-1];
       int d = dim(inds(singular_vals)[0]);
@@ -1914,7 +1914,9 @@ std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }
 
-double MatrixProductState::entropy(const Qubits& qubits, uint32_t index) {
+double MatrixProductState::entanglement(const QubitSupport& support, uint32_t index) {
+  // TODO add logic for intervals
+  auto qubits = to_qubits(support);
 	if (qubits.size() == 0) {
 		return 0.0;
 	}
@@ -1923,12 +1925,12 @@ double MatrixProductState::entropy(const Qubits& qubits, uint32_t index) {
 	std::sort(sorted_qubits.begin(), sorted_qubits.end());
 
 	if ((sorted_qubits[0] != 0) || !support_contiguous(sorted_qubits)) {
-		throw std::runtime_error("Invalid qubits passed to MatrixProductState.entropy; must be a continuous interval with left side qubit = 0.");
+		throw std::runtime_error("Invalid qubits passed to MatrixProductState.entanglement; must be a continuous interval with left side qubit = 0.");
 	}
 
 	uint32_t q = sorted_qubits.back() + 1;
 
-	return impl->entropy(q, index);
+	return impl->entanglement(q, index);
 }
 
 std::vector<double> MatrixProductState::singular_values(uint32_t i) const {

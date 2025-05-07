@@ -65,7 +65,9 @@ std::string Statevector::to_string() const {
   return st;
 }
 
-double Statevector::entropy(const Qubits& qubits, uint32_t index) {
+double Statevector::entanglement(const QubitSupport& support, uint32_t index) {
+  // TODO add logic for QubitIntervals
+  auto qubits = to_qubits(support);
   if (qubits.size() == 0 || qubits.size() == num_qubits) {
     return 0.0;
   }
@@ -87,10 +89,10 @@ double Statevector::entropy(const Qubits& qubits, uint32_t index) {
 
     return renyi_entropy(index, p);
   } else if (support_contiguous(qubitsB) && qubitsB[0] == 0) {
-    return entropy(qubitsB, index);
+    return entanglement(qubitsB, index);
   } else {
     DensityMatrix rho(*this);
-    return rho.entropy(qubitsA, index);
+    return rho.entanglement(qubitsA, index);
   }
 }
 

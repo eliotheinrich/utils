@@ -119,12 +119,13 @@ class QuantumCHPState : public CliffordState {
       return tableau.sparsity();
     }
 
-    virtual double entropy(const std::vector<uint32_t>& qubits, uint32_t index) override {
+    virtual double entanglement(const QubitSupport& support, uint32_t index) override {
+      auto qubits = to_qubits(support);
       uint32_t system_size = this->num_qubits;
       uint32_t partition_size = qubits.size();
 
       // Optimization; if partition size is larger than half the system size, 
-      // compute the entropy for the smaller subsystem
+      // compute the entanglement for the smaller subsystem
       if (partition_size > system_size / 2) {
         std::vector<uint32_t> qubits_complement;
         for (uint32_t q = 0; q < system_size; q++) {
@@ -133,7 +134,7 @@ class QuantumCHPState : public CliffordState {
           }
         }
 
-        return entropy(qubits_complement, index);
+        return entanglement(qubits_complement, index);
       }
 
       int rank = tableau.rank(qubits);

@@ -76,8 +76,8 @@ class QuantumGraphState : public CliffordState {
 
     uint32_t distance(const QuantumGraphState& other) const;
 
-    static double graph_state_entropy(const std::vector<uint32_t> &qubits, Graph<> &graph);
-    virtual double entropy(const std::vector<uint32_t> &qubits, uint32_t index) override;
+    static double graph_state_entanglement(const Qubits &qubits, Graph<> &graph);
+    virtual double entanglement(const QubitSupport &support, uint32_t index) override;
 
     virtual double sparsity() const override;
 };

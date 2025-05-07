@@ -133,7 +133,8 @@ void Animator::init_buffers() {
   glBindTexture(GL_TEXTURE_2D, 0);  
 
   // Activate shader
-  shader = Shader("/Users/eliotheinrich/Projects/utils/src/SimulatorDisplay/", "vertex_texture_shader.vs", "fragment_texture_shader.fs");
+  std::cout << "Loading shaders at path " << SIMULATOR_DISPLAY_PATH << "\n";
+  shader = Shader(SIMULATOR_DISPLAY_PATH, "vertex_texture_shader.vs", "fragment_texture_shader.fs");
   shader.set_int("tex", 0);
 }
 

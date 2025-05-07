@@ -4,10 +4,7 @@
 #include <Eigen/SVD>
 #include <unsupported/Eigen/MatrixFunctions>
 
-#include <Display.h>
-#include <EntropyState.hpp>
-#include <Samplers.h>
-#include <Simulator.hpp>
+#include <EntanglementEntropyState.hpp>
 
 #include <sstream>
 #include <iostream>
@@ -28,21 +25,103 @@ static inline bool is_unitary(const Eigen::MatrixXcd& U) {
   return (U.adjoint() * U).isApprox(I);
 }
 
-class FreeFermionState : public EntropyState {
-  private:
-    size_t L;
+class FreeFermionState : public EntanglementEntropyState {
+  protected:
+    uint32_t L;
 
   public:
-    Eigen::MatrixXcd amplitudes;
-    FreeFermionState(size_t L) : L(L), EntropyState(L) {
-      particles_at({});
-    }
+    FreeFermionState(uint32_t L) : EntanglementEntropyState(L), L(L) { }
 
     size_t system_size() const {
       return L;
     }
 
-    void particles_at(const std::vector<size_t>& sites) {
+    virtual void evolve_hamiltonian(const Eigen::MatrixXcd& H, double t=1.0)=0;
+
+    virtual void evolve(const Eigen::MatrixXcd& U)=0;
+
+    virtual void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0)=0;
+
+    virtual void weak_measurement(const Eigen::MatrixXcd& U)=0;
+
+    virtual void weak_measurement_hamiltonian(const Eigen::MatrixXcd& H, double beta=1.0)=0;
+
+    virtual void weak_measurement_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0)=0;
+
+    virtual void forced_projective_measurement(size_t i, bool outcome)=0;
+
+    virtual bool projective_measurement(size_t i, double r)=0;
+
+    double num_particles() const {
+      auto C = covariance_matrix();
+      return C.trace().real();
+    }
+
+    double num_real_particles() const {
+      auto C = covariance_matrix().block(L, L, L, L);
+      return C.trace().real();
+    }
+
+    virtual Eigen::MatrixXcd covariance_matrix() const=0;
+
+    virtual double occupation(size_t i) const=0;
+
+    std::vector<double> occupation() const {
+      auto C = covariance_matrix();
+      std::vector<double> n(L);
+
+      for (size_t i = 0; i < L; i++) {
+        n[i] = std::abs(C(i + L, i + L));
+      }
+
+      return n;
+    }
+
+    virtual  std::string to_string() const=0;
+
+    virtual Texture get_texture() const {
+      Texture texture(L, L);
+      auto correlations = covariance_matrix();
+      double m_r = 0.0;
+      double m_i = 0.0;
+      for (size_t x = 0; x < L; x++) {
+        for (size_t y = 0; y < L; y++) {
+          auto c = correlations(x, y);
+          auto c_r = std::abs(c.real());
+          auto c_i = std::abs(c.imag());
+
+          if (c_r > m_r) {
+            m_r = c_r;
+          }
+          
+          if (c_i > m_i) {
+            m_i = c_i;
+          }
+        }
+      }
+
+      for (size_t x = 0; x < L; x++) {
+        for (size_t y = 0; y < L; y++) {
+          auto c = correlations(x, y);
+          Color color = {static_cast<float>(std::abs(c.real())/m_r), static_cast<float>(std::abs(c.imag())/m_i), 0.0, 1.0};
+          texture.set(x, y, color);
+        }
+      }
+
+      return texture;
+    }
+};
+
+
+class AmplitudeFermionState : public FreeFermionState {
+  public:
+    Eigen::MatrixXcd amplitudes;
+
+    AmplitudeFermionState(uint32_t L) : FreeFermionState(L) {
+      particles_at({});
+    }
+
+    void particles_at(const Qubits& sites) {
       for (auto i : sites) {
         if (i > L) {
           throw std::invalid_argument(fmt::format("Invalid site. Must be within 0 < i < {}", L));
@@ -69,13 +148,13 @@ class FreeFermionState : public EntropyState {
     }
 
     void all_particles() {
-      std::vector<size_t> sites(L);
+      Qubits sites(L);
       std::iota(sites.begin(), sites.end(), 0);
       particles_at(sites);
     }
 
     void checkerboard_particles() {
-      std::vector<size_t> sites;
+      Qubits sites;
       for (size_t i = 0; i < L; i++) {
         sites.push_back(i);
       }
@@ -87,7 +166,8 @@ class FreeFermionState : public EntropyState {
       amplitudes.row(i + L).swap(amplitudes.row(j + L));
     }
 
-		virtual double entropy(const std::vector<uint32_t> &sites, uint32_t index) override {
+		virtual double entanglement(const QubitSupport& support, uint32_t index) override {
+      auto sites = to_qubits(support);
       size_t N = sites.size();
       if (N == 0) {
         return 0.0;
@@ -106,10 +186,10 @@ class FreeFermionState : public EntropyState {
           }
         }
 
-        return entropy(_sites, index);
+        return entanglement(_sites, index);
       }
 
-      auto C = correlation_matrix();
+      auto C = covariance_matrix();
 
       std::vector<int> _sites(sites.begin(), sites.end());
       for (size_t i = 0; i < N; i++) {
@@ -149,11 +229,6 @@ class FreeFermionState : public EntropyState {
       return (A - I).norm() < 1e-4;
     }
 
-    bool check_orthogonality() const {
-      auto A = amplitudes.adjoint() * amplitudes;
-      return is_identity(A);
-    }
-
     void orthogonalize() {
       size_t r = amplitudes.rows();
       size_t c = amplitudes.cols();
@@ -170,26 +245,18 @@ class FreeFermionState : public EntropyState {
       }
 
       amplitudes = Q;
+    }
 
-      //Eigen::JacobiSVD<Eigen::MatrixXcd> svd(amplitudes, Eigen::ComputeThinU);
-      //auto U = svd.matrixU();
-      //auto D = svd.singularValues();
+    bool check_orthogonality() const {
+      auto A = amplitudes.adjoint() * amplitudes;
+      return is_identity(A);
+    }
 
-      //size_t j = 0;
-      //for (size_t i = 0; i < L; i++) {
-      //  if (std::abs(D(i)) > 1e-6) {
-      //    for (size_t k = 0; k < amplitudes.rows(); k++) {
-      //      amplitudes(k, j) = U(k, i);
-      //    }
-      //    j++;
-      //  }
-      //}
-
-      //for (size_t i = j; i < L; i++) {
-      //  for (size_t k = 0; k < amplitudes.rows(); k++) {
-      //    amplitudes(k, i) = 0.0;
-      //  }
-      //}
+    void assert_ortho() const {
+      bool ortho = check_orthogonality();
+      if (!ortho) {
+        throw std::runtime_error("Not orthogonal!");
+      }
     }
 
     Eigen::MatrixXcd prepare_hamiltonian(const Eigen::MatrixXcd& H) const {
@@ -227,13 +294,13 @@ class FreeFermionState : public EntropyState {
       return hamiltonian;
     }
 
-    void evolve_hamiltonian(const Eigen::MatrixXcd& H, double t=1.0) {
+    virtual void evolve_hamiltonian(const Eigen::MatrixXcd& H, double t=1.0) override {
       auto hamiltonian = prepare_hamiltonian(H);
       auto U = (std::complex<double>(0.0, -t)*hamiltonian).exp();
       evolve(U);
     }
 
-    void evolve(const Eigen::MatrixXcd& U) {
+    virtual void evolve(const Eigen::MatrixXcd& U) override {
       if (!is_unitary(U)) {
         throw std::runtime_error("Non-unitary matrix passed to evolve.");
       }
@@ -241,35 +308,28 @@ class FreeFermionState : public EntropyState {
       amplitudes = U * amplitudes;
     }
 
-    void assert_ortho() const {
-      bool ortho = check_orthogonality();
-      if (!ortho) {
-        throw std::runtime_error("Not orthogonal!");
-      }
-    }
-
-    void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) {
+    virtual void evolve_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t=1.0) override {
       auto hamiltonian = prepare_hamiltonian(A, B);
       evolve_hamiltonian(hamiltonian, t);
     }
 
-    void weak_measurement(const Eigen::MatrixXcd& U) {
+    virtual void weak_measurement(const Eigen::MatrixXcd& U) override {
       amplitudes = U * amplitudes;
       orthogonalize();
     }
 
-    void weak_measurement_hamiltonian(const Eigen::MatrixXcd& H, double beta=1.0) {
+    virtual void weak_measurement_hamiltonian(const Eigen::MatrixXcd& H, double beta=1.0) override {
       auto hamiltonian = prepare_hamiltonian(H);
       auto U = (std::complex<double>(beta, 0.0)*hamiltonian).exp();
       weak_measurement(U);
     }
 
-    void weak_measurement_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) {
+    virtual void weak_measurement_hamiltonian(const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta=1.0) override {
       auto hamiltonian = prepare_hamiltonian(A, B);
       weak_measurement_hamiltonian(hamiltonian, beta);
     }
 
-    void forced_projective_measurement(size_t i, bool outcome) {
+    virtual void forced_projective_measurement(size_t i, bool outcome) override {
       if (i < 0 || i > L) {
         throw std::invalid_argument(fmt::format("Invalid qubit measured: {}, L = {}", i, L));
       }
@@ -310,28 +370,18 @@ class FreeFermionState : public EntropyState {
       orthogonalize();
     }
 
-    bool projective_measurement(size_t i, double r) {
+    virtual bool projective_measurement(size_t i, double r) override {
       double c = occupation(i);
       bool outcome = r < c;
       forced_projective_measurement(i, outcome);
       return outcome;
     }
 
-    double num_particles() const {
-      auto C = correlation_matrix();
-      return C.trace().real();
-    }
-
-    double num_real_particles() const {
-      auto C = correlation_matrix().block(L, L, L, L);
-      return C.trace().real();
-    }
-
-    Eigen::MatrixXcd correlation_matrix() const {
+    virtual Eigen::MatrixXcd covariance_matrix() const override {
       return amplitudes * amplitudes.adjoint();
     }
 
-    double occupation(size_t i) const {
+    virtual double occupation(size_t i) const override {
       double d = 0.0;
 
       for (size_t j = 0; j < L; j++) {
@@ -342,99 +392,9 @@ class FreeFermionState : public EntropyState {
       return d;
     }
 
-    std::vector<double> occupation() const {
-      auto C = correlation_matrix();
-      std::vector<double> n(L);
-
-      for (size_t i = 0; i < L; i++) {
-        n[i] = std::abs(C(i + L, i + L));
-      }
-
-      return n;
-    }
-
-    std::string to_string() const {
+    virtual std::string to_string() const override {
       std::stringstream s;
       s << amplitudes;
       return s.str();
-    }
-};
-
-class FreeFermionSimulator : public Simulator {
-  private:
-    EntropySampler sampler;
-
-    bool sample_correlations;
-
-  protected:
-    size_t L;
-
-  public:
-    std::shared_ptr<FreeFermionState> state;
-    FreeFermionSimulator(dataframe::ExperimentParams& params, uint32_t num_threads) : Simulator(params), sampler(params) {
-      L = dataframe::utils::get<int>(params, "system_size");
-      sample_correlations = dataframe::utils::get<int>(params, "sample_correlations", 0);
-      state = std::make_shared<FreeFermionState>(L);
-    }
-
-    virtual Texture get_texture() const override {
-      Texture texture(L, L);
-      auto correlations = state->correlation_matrix();
-      double m_r = 0.0;
-      double m_i = 0.0;
-      for (size_t x = 0; x < L; x++) {
-        for (size_t y = 0; y < L; y++) {
-          auto c = correlations(x, y);
-          auto c_r = std::abs(c.real());
-          auto c_i = std::abs(c.imag());
-
-          if (c_r > m_r) {
-            m_r = c_r;
-          }
-          
-          if (c_i > m_i) {
-            m_i = c_i;
-          }
-        }
-      }
-
-      for (size_t x = 0; x < L; x++) {
-        for (size_t y = 0; y < L; y++) {
-          auto c = correlations(x, y);
-          Color color = {static_cast<float>(std::abs(c.real())/m_r), static_cast<float>(std::abs(c.imag())/m_i), 0.0, 1.0};
-          texture.set(x, y, color);
-        }
-      }
-
-      return texture;
-    }
-
-    void add_correlation_samples(dataframe::SampleMap& samples) const {
-      auto C = state->correlation_matrix();
-      std::vector<std::vector<double>> correlations(L, std::vector<double>(L));
-
-      for (size_t r = 0; r < L; r++) {
-        // Average over space
-        for (size_t i = 0; i < L; i++) {
-          double c = std::abs(C(i, (i+r)%L));
-          correlations[r][i] = c*c;
-        }
-      }
-
-      dataframe::utils::emplace(samples, "correlations", correlations);
-    }
-
-    virtual dataframe::SampleMap take_samples() override {
-      dataframe::SampleMap samples;
-      sampler.add_samples(samples, state);
-
-      if (sample_correlations) {
-        add_correlation_samples(samples);
-      }
-
-      dataframe::utils::emplace(samples, "num_particles", state->num_particles());
-      dataframe::utils::emplace(samples, "num_real_particles", state->num_real_particles());
-
-      return samples;
     }
 };

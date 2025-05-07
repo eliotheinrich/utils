@@ -18,4 +18,5 @@ else()
 endif()
 
 add_library(simulator_display ${SOURCE_FILES})
+target_compile_definitions(simulator_display  PRIVATE SIMULATOR_DISPLAY_PATH="${CMAKE_SOURCE_DIR}/src/SimulatorDisplay")
 target_link_libraries(simulator_display PRIVATE glfw)

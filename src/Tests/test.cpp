@@ -251,8 +251,8 @@ bool test_mps_vs_statevector() {
     std::iota(qubits.begin(), qubits.end(), 0);
 
     size_t index = randi() % 4 + 1;
-    double s1 = s.entropy(qubits, index);
-    double s2 = mps.entropy(qubits, index);
+    double s1 = s.entanglement(qubits, index);
+    double s2 = mps.entanglement(qubits, index);
 
     Statevector s_(mps);
     double inner = std::abs(s_.inner(s));
@@ -1422,7 +1422,7 @@ bool test_configurational_entropy() {
   return true;
 }
 
-bool test_sv_entropy() {
+bool test_sv_entanglement() {
   constexpr size_t nqb = 8;
 
   Statevector psi(nqb); 
@@ -1448,12 +1448,130 @@ bool test_sv_entropy() {
         qubits = random_qubits(nqb, k);
       }
 
-      double s1 = psi.entropy(qubits, index);
-      double s2 = rho.entropy(qubits, index);
+      std::vector<double> s1 = psi.get_entanglement(index);
+      std::vector<double> s2 = rho.get_entanglement(index);
 
-      ASSERT(is_close_eps(1e-4, s1, s2), fmt::format("Entropies do not match: {:.5f}, {:.5f}\n", s1, s2));
+      for (size_t i = 0; i < s1.size(); i++) {
+        ASSERT(is_close_eps(1e-4, s1[i], s2[i]), fmt::format("Entropies do not match: {::.5f}, {::.5f}\n", s1, s2));
+      }
     }
   }
+
+  return true;
+}
+
+bool test_free_fermion_state() {
+  size_t nqb = 8;
+
+  std::complex<double> i(0.0, 1.0);
+
+  auto T = [&](double theta) {
+    double sin = std::sin(theta);
+    double cos = std::cos(theta);
+    Eigen::Matrix4cd Tm;
+    Tm << 1.0, 0.0,   0.0,   0.0,
+          0.0, cos,   i*sin, 0.0,
+          0.0, i*sin, cos,   0.0,
+          0.0, 0.0,   0.0,   1.0;
+    return Tm;
+  };
+
+  auto Tff = [&](double theta, size_t j) {
+    Eigen::MatrixXcd A = Eigen::MatrixXcd::Zero(nqb, nqb);
+    A(j+1, j) = theta;
+    A(j, j+1) = theta;
+
+    return A;
+  };
+
+
+  auto G = [&](double theta) {
+    double sin = std::sin(theta);
+    double cos = std::cos(theta);
+    Eigen::Matrix4cd Gm;
+    Gm << cos,   0.0, 0.0, i*sin,
+          0.0,   1.0, 0.0, 0.0,
+          0.0,   0.0, 1.0, 0.0,
+          i*sin, 0.0, 0.0, cos;
+    return Gm;
+  };
+
+  auto Gff = [&](double theta, size_t j) {
+    Eigen::MatrixXcd B = Eigen::MatrixXcd::Zero(nqb, nqb);
+    B(j+1, j) = theta;
+    B(j, j+1) = -theta;
+
+    return B;
+  };
+
+  auto R = [&](double theta) {
+    Eigen::Matrix2cd Rm;
+    Rm << 1.0, 0.0,
+          0.0, std::exp(i*theta);
+    return Rm;
+  };
+
+  auto Rff = [&](double theta, size_t j) {
+    Eigen::MatrixXcd A = Eigen::MatrixXcd::Zero(nqb, nqb);
+    A(j, j) = theta;
+
+    return A;
+  };
+
+  Statevector psi(nqb);
+  AmplitudeFermionState fermion_state(nqb);
+  Qubits sites = random_qubits(nqb, nqb/2);
+  for (auto q : sites) {
+    psi.x(q);
+  }
+  fermion_state.particles_at(sites);
+
+  Eigen::MatrixXcd zeros = Eigen::MatrixXcd::Zero(nqb, nqb);
+
+  for (size_t k = 0; k < 20; k++) {
+    int gate_type = randi(0, 4);
+    double theta = randf(0, 2*M_PI);
+
+    if (gate_type == 0) {
+      uint32_t q = randi(0, nqb);
+      psi.evolve(R(theta), {q});
+      fermion_state.evolve_hamiltonian(Rff(theta, q), zeros);
+    } else if (gate_type == 1) {
+      uint32_t q = randi(0, nqb - 1);
+      psi.evolve(T(theta), {q, q+1});
+      fermion_state.evolve_hamiltonian(Tff(theta, q), zeros);
+    } else if (gate_type == 2) {
+      uint32_t q = randi(0, nqb - 1);
+      psi.evolve(G(theta), {q, q+1});
+      fermion_state.evolve_hamiltonian(zeros, Gff(theta, q));
+    } else {
+      uint32_t q = randi(0, nqb);
+      bool outcome = psi.mzr(q);
+      fermion_state.forced_projective_measurement(q, outcome);
+    }
+
+    // Check state equality
+    std::vector<double> c1;
+    std::vector<double> c2;
+    for (uint32_t i = 0; i < nqb; i++) {
+      PauliString Z(nqb);
+      Z.set_z(i, 1);
+      c1.push_back((1.0 - psi.expectation(Z).real()) / 2.0);
+      c2.push_back(fermion_state.occupation(i));
+
+      QubitInterval interval = std::make_pair(0, i);
+    }
+
+    uint32_t index = randi(2, 4);
+    std::vector<double> s1 = psi.get_entanglement(index);
+    std::vector<double> s2 = fermion_state.get_entanglement(index);
+
+    for (size_t i = 0; i < nqb; i++) {
+      ASSERT(is_close(s1[i], s2[i]), fmt::format("Entanglement {} at {} is not equal: \n{::.5f}\n{::.5f}", index, i, s1, s2));
+      ASSERT(is_close(c1[i], c2[i]), fmt::format("Occupations at {} are not equal: \n{::.5f}\n{::.5f}", i, c1, c2));
+    }
+  }
+
 
   return true;
 }
@@ -1514,7 +1632,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_marginal_distributions);
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_configurational_entropy);
-  ADD_TEST(test_sv_entropy);
+  ADD_TEST(test_sv_entanglement);
+  ADD_TEST(test_free_fermion_state);
 
 
   constexpr char green[] = "\033[1;32m";

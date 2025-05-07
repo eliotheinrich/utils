@@ -438,7 +438,7 @@ uint32_t QuantumGraphState::distance(const QuantumGraphState& other) const {
   return s;
 }
 
-double QuantumGraphState::graph_state_entropy(const Qubits& qubits, Graph<>& graph) {
+double QuantumGraphState::graph_state_entanglement(const Qubits& qubits, Graph<>& graph) {
   Graph<int, bool> bipartite_graph = graph.partition(qubits);
   int s = 2*bipartite_graph.num_vertices;
   for (uint32_t i = 0; i < bipartite_graph.num_vertices; i++) {
@@ -542,8 +542,8 @@ double QuantumGraphState::graph_state_entropy(const Qubits& qubits, Graph<>& gra
   return static_cast<double>(s);
 }
 
-double QuantumGraphState::entropy(const std::vector<uint32_t> &qubits, uint32_t index) {
-  return QuantumGraphState::graph_state_entropy(qubits, graph);
+double QuantumGraphState::entanglement(const QubitSupport &support, uint32_t index) {
+  return QuantumGraphState::graph_state_entanglement(to_qubits(support), graph);
 }
 
 double QuantumGraphState::sparsity() const {

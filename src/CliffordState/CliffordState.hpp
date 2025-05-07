@@ -1,7 +1,7 @@
 #pragma once
 
 #include "QuantumCircuit.h"
-#include "EntropyState.hpp"
+#include "EntanglementEntropyState.hpp"
 #include "Random.hpp"
 
 #include <algorithm>
@@ -19,12 +19,12 @@ static inline CliffordType parse_clifford_type(std::string s) {
   }
 }
 
-class CliffordState : public EntropyState {
+class CliffordState : public EntanglementEntropyState {
   public:
     size_t num_qubits;
     CliffordState()=default;
 
-    CliffordState(uint32_t num_qubits) : EntropyState(num_qubits), num_qubits(num_qubits) {}
+    CliffordState(uint32_t num_qubits) : EntanglementEntropyState(num_qubits), num_qubits(num_qubits) {}
     virtual ~CliffordState() {}
 
     void evolve(const QuantumCircuit& qc, const Qubits& qubits) {

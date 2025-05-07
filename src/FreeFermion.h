@@ -1,4 +1,4 @@
 #pragma once
 
-#include "FreeFermion/FreeFermionSimulator.hpp"
+#include "FreeFermion/FreeFermionState.hpp"
 

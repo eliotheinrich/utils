@@ -174,7 +174,7 @@ void benchmark_clifford_circuit() {
       }
       
       chp.random_clifford(qubits);
-      double entropy = chp.entropy(qubits, 2);
+      double entanglement = chp.entanglement(qubits, 2);
     }
   }
 }
