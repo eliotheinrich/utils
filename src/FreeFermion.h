@@ -1,4 +1,5 @@
 #pragma once
 
-#include "FreeFermion/FreeFermionState.hpp"
+#include "FreeFermion/MajoranaState.hpp"
+#include "FreeFermion/GaussianState.hpp"
 

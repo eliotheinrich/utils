@@ -1460,118 +1460,192 @@ bool test_sv_entanglement() {
   return true;
 }
 
+
+// Functions for generating matchgates
+static constexpr std::complex<double> imag_unit = {0.0, 1.0};
+
+auto T(double theta, uint32_t q, size_t nqb) {
+  double sin = std::sin(theta);
+  double cos = std::cos(theta);
+  Eigen::Matrix4cd Tm;
+  Tm << 1.0, 0.0,           0.0,           0.0,
+        0.0, cos,           imag_unit*sin, 0.0,
+        0.0, imag_unit*sin, cos,           0.0,
+        0.0, 0.0,           0.0,           1.0;
+
+  FreeFermionHamiltonian H(nqb);
+  H.add_term(q+1, q, theta);
+  return std::make_pair(Tm, H);
+}
+
+
+auto G(double theta, uint32_t q, size_t nqb) {
+  double sin = std::sin(theta);
+  double cos = std::cos(theta);
+  Eigen::Matrix4cd Gm;
+  Gm << cos,           0.0, 0.0, imag_unit*sin,
+        0.0,           1.0, 0.0, 0.0,
+        0.0,           0.0, 1.0, 0.0,
+        imag_unit*sin, 0.0, 0.0, cos;
+  FreeFermionHamiltonian H(nqb);
+  H.add_nonconserving_term(q+1, q, theta);
+  return std::make_pair(Gm, H);
+}
+
+auto R(double theta, uint32_t q, size_t nqb) {
+  Eigen::Matrix2cd Rm;
+  Rm << 1.0, 0.0,
+        0.0, std::exp(imag_unit*theta);
+  FreeFermionHamiltonian H(nqb);
+  H.add_term(q, q, theta);
+  return std::make_pair(Rm, H);
+};
+
+void normalize(std::vector<double>& p) {
+  double N = 0.0;
+  for (size_t i = 0; i < p.size(); i++) {
+    N += p[i];
+  }
+
+  for (size_t i = 0; i < p.size(); i++) {
+    p[i] /= N;
+  }
+}
+
 bool test_free_fermion_state() {
   size_t nqb = 8;
 
-  std::complex<double> i(0.0, 1.0);
-
-  auto T = [&](double theta) {
-    double sin = std::sin(theta);
-    double cos = std::cos(theta);
-    Eigen::Matrix4cd Tm;
-    Tm << 1.0, 0.0,   0.0,   0.0,
-          0.0, cos,   i*sin, 0.0,
-          0.0, i*sin, cos,   0.0,
-          0.0, 0.0,   0.0,   1.0;
-    return Tm;
-  };
-
-  auto Tff = [&](double theta, size_t j) {
-    Eigen::MatrixXcd A = Eigen::MatrixXcd::Zero(nqb, nqb);
-    A(j+1, j) = theta;
-    A(j, j+1) = theta;
-
-    return A;
-  };
-
-
-  auto G = [&](double theta) {
-    double sin = std::sin(theta);
-    double cos = std::cos(theta);
-    Eigen::Matrix4cd Gm;
-    Gm << cos,   0.0, 0.0, i*sin,
-          0.0,   1.0, 0.0, 0.0,
-          0.0,   0.0, 1.0, 0.0,
-          i*sin, 0.0, 0.0, cos;
-    return Gm;
-  };
-
-  auto Gff = [&](double theta, size_t j) {
-    Eigen::MatrixXcd B = Eigen::MatrixXcd::Zero(nqb, nqb);
-    B(j+1, j) = theta;
-    B(j, j+1) = -theta;
-
-    return B;
-  };
-
-  auto R = [&](double theta) {
-    Eigen::Matrix2cd Rm;
-    Rm << 1.0, 0.0,
-          0.0, std::exp(i*theta);
-    return Rm;
-  };
-
-  auto Rff = [&](double theta, size_t j) {
-    Eigen::MatrixXcd A = Eigen::MatrixXcd::Zero(nqb, nqb);
-    A(j, j) = theta;
-
-    return A;
-  };
-
-  Statevector psi(nqb);
-  AmplitudeFermionState fermion_state(nqb);
   Qubits sites = random_qubits(nqb, nqb/2);
+  Statevector psi(nqb);
   for (auto q : sites) {
     psi.x(q);
   }
-  fermion_state.particles_at(sites);
+  GaussianState fermion_state(nqb, sites);
+  MajoranaState majorana_state(nqb, sites);
 
-  Eigen::MatrixXcd zeros = Eigen::MatrixXcd::Zero(nqb, nqb);
+  std::vector<double> op_dist = {0.3, 0.3, 0.3, 0.1};
+  normalize(op_dist);
+  std::mt19937 gen(randi());
+  std::discrete_distribution<> dist(op_dist.begin(), op_dist.end());
 
   for (size_t k = 0; k < 20; k++) {
-    int gate_type = randi(0, 4);
-    double theta = randf(0, 2*M_PI);
+    int gate_type = dist(gen);
+    double theta = randf(0, 2 * M_PI);
 
     if (gate_type == 0) {
       uint32_t q = randi(0, nqb);
-      psi.evolve(R(theta), {q});
-      fermion_state.evolve_hamiltonian(Rff(theta, q), zeros);
+      auto [Rm, H] = R(theta, q, nqb);
+      psi.evolve(Rm, {q});
+      fermion_state.evolve_hamiltonian(H);
+      majorana_state.evolve_hamiltonian(H);
     } else if (gate_type == 1) {
       uint32_t q = randi(0, nqb - 1);
-      psi.evolve(T(theta), {q, q+1});
-      fermion_state.evolve_hamiltonian(Tff(theta, q), zeros);
+      auto [Tm, H] = T(theta, q, nqb);
+      psi.evolve(Tm, {q, q+1});
+      fermion_state.evolve_hamiltonian(H);
+      majorana_state.evolve_hamiltonian(H);
     } else if (gate_type == 2) {
       uint32_t q = randi(0, nqb - 1);
-      psi.evolve(G(theta), {q, q+1});
-      fermion_state.evolve_hamiltonian(zeros, Gff(theta, q));
+      auto [Gm, H] = G(theta, q, nqb);
+      psi.evolve(Gm, {q, q+1});
+      fermion_state.evolve_hamiltonian(H);
+      majorana_state.evolve_hamiltonian(H);
     } else {
       uint32_t q = randi(0, nqb);
       bool outcome = psi.mzr(q);
       fermion_state.forced_projective_measurement(q, outcome);
+      majorana_state.forced_projective_measurement(q, outcome);
     }
 
     // Check state equality
+    std::vector<double> c1;
+    std::vector<double> c2;
+    std::vector<double> c3;
+    for (uint32_t i = 0; i < nqb; i++) {
+      PauliString Z(nqb);
+      Z.set_z(i, 1);
+      c1.push_back((1.0 - psi.expectation(Z).real()) / 2.0);
+      c2.push_back(fermion_state.occupation(i));
+      c3.push_back(majorana_state.occupation(i));
+    }
+
+    uint32_t index = randi(2, 3);
+    std::vector<double> s1 = psi.get_entanglement(index);
+    std::vector<double> s2 = fermion_state.get_entanglement(index);
+    std::vector<double> s3 = majorana_state.get_entanglement(index);
+    //std::cout << fmt::format("s = \n{::.5f}\n{::.5f}\n{::.5f}\n", s1, s2, s3);
+
+    for (size_t i = 0; i < nqb; i++) {
+      ASSERT(is_close(s1[i], s2[i], s3[i]), fmt::format("Entanglement {} at {} is not equal: \n{::.5f}\n{::.5f}\n{::.5f}", index, i, s1, s2, s3));
+      ASSERT(is_close(c1[i], c2[i], c3[i]), fmt::format("Occupations at {} are not equal: \n{::.5f}\n{::.5f}\n{::.5f}", i, c1, c2, c3));
+    }
+  }
+
+
+  return true;
+}
+
+bool test_extended_majorana_state() {
+  size_t nqb = 4;
+
+  Qubits sites = random_qubits(nqb, nqb/2);
+  Statevector psi(nqb);
+  for (auto q : sites) {
+    psi.x(q);
+  }
+  ExtendedMajoranaState majorana_state(nqb, sites);
+
+  std::vector<double> op_dist = {0.2, 0.2, 0.2, 0.0, 0.1};
+  normalize(op_dist);
+  std::mt19937 gen(randi());
+  std::discrete_distribution<> dist(op_dist.begin(), op_dist.end());
+
+  for (size_t k = 0; k < 20; k++) {
+    int gate_type = dist(gen);
+    double theta = randf(0, 2 * M_PI);
+
+    if (gate_type == 0) {
+      uint32_t q = randi(0, nqb);
+      auto [Rm, H] = R(theta, q, nqb);
+      psi.evolve(Rm, {q});
+      majorana_state.evolve_hamiltonian(H);
+    } else if (gate_type == 1) {
+      uint32_t q = randi(0, nqb - 1);
+      auto [Tm, H] = T(theta, q, nqb);
+      psi.evolve(Tm, {q, q+1});
+      majorana_state.evolve_hamiltonian(H);
+    } else if (gate_type == 2) {
+      uint32_t q = randi(0, nqb - 1);
+      auto [Gm, H] = G(theta, q, nqb);
+      psi.evolve(Gm, {q, q+1});
+      majorana_state.evolve_hamiltonian(H);
+    } else if (gate_type == 3) {
+      uint32_t q = randi(0, nqb);
+      bool outcome = psi.mzr(q);
+      majorana_state.forced_projective_measurement(q, outcome);
+    } else {
+      uint32_t q = randi(0, nqb - 1);
+      std::cout << fmt::format("Doing interaction at q = {}\n", q);
+      std::cout << psi.to_string() << "\n";
+      psi.measure({{q, q+1}, PauliString("+ZZ"), true});
+      majorana_state.interaction(q);
+    }
+
     std::vector<double> c1;
     std::vector<double> c2;
     for (uint32_t i = 0; i < nqb; i++) {
       PauliString Z(nqb);
       Z.set_z(i, 1);
       c1.push_back((1.0 - psi.expectation(Z).real()) / 2.0);
-      c2.push_back(fermion_state.occupation(i));
-
-      QubitInterval interval = std::make_pair(0, i);
+      c2.push_back(majorana_state.occupation(i));
     }
 
-    uint32_t index = randi(2, 4);
-    std::vector<double> s1 = psi.get_entanglement(index);
-    std::vector<double> s2 = fermion_state.get_entanglement(index);
-
     for (size_t i = 0; i < nqb; i++) {
-      ASSERT(is_close(s1[i], s2[i]), fmt::format("Entanglement {} at {} is not equal: \n{::.5f}\n{::.5f}", index, i, s1, s2));
       ASSERT(is_close(c1[i], c2[i]), fmt::format("Occupations at {} are not equal: \n{::.5f}\n{::.5f}", i, c1, c2));
     }
   }
 
+  std::cout << majorana_state.to_string() << "\n";
 
   return true;
 }
@@ -1634,6 +1708,11 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_configurational_entropy);
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);
+  ADD_TEST(test_extended_majorana_state);
+
+
+
+
 
 
   constexpr char green[] = "\033[1;32m";

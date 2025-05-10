@@ -1,111 +1,10 @@
 #pragma once
 
-#include <Eigen/Dense>
-#include <Eigen/SVD>
-#include <unsupported/Eigen/MatrixFunctions>
+#include "FreeFermionState.hpp"
 
-#include <EntanglementEntropyState.hpp>
-
-#include <sstream>
-#include <iostream>
-
-#include <fmt/format.h>
-#include <fmt/ranges.h>
-
-static inline bool is_hermitian(const Eigen::MatrixXcd& H) {
-  return H.isApprox(H.adjoint());
-}
-
-static inline bool is_antisymmetric(const Eigen::MatrixXcd& A) {
-  return A.isApprox(-A.transpose());
-}
-
-static inline bool is_unitary(const Eigen::MatrixXcd& U) {
-  Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(U.rows(), U.cols());
-  return (U.adjoint() * U).isApprox(I);
-}
-
-struct FreeFermionHamiltonian {
-  struct QuadraticTerm {
-    uint32_t i;
-    uint32_t j;
-    double a;
-  };
-
-  uint32_t L;
-  std::vector<QuadraticTerm> terms;
-  std::vector<QuadraticTerm> nc_terms;
-
-  FreeFermionHamiltonian(uint32_t L) : L(L) {
-    terms = {};
-    nc_terms = {};
-  }
-
-  void add_term(uint32_t i, uint32_t j, double a) {
-    terms.push_back({i, j, a});
-  }
-
-  void add_nonconserving_term(uint32_t i, uint32_t j, double a) {
-    nc_terms.push_back({i, j, a});
-  }
-};
-
-class FreeFermionState : public EntanglementEntropyState {
-  protected:
-    uint32_t L;
-
-  public:
-    FreeFermionState(uint32_t L) : EntanglementEntropyState(L), L(L) { }
-
-    size_t system_size() const {
-      return L;
-    }
-
-    virtual void evolve_hamiltonian(const FreeFermionHamiltonian& H, double t=1.0)=0;
-    virtual void forced_projective_measurement(size_t i, bool outcome)=0;
-    virtual bool projective_measurement(size_t i, double r) {
-      double c = occupation(i);
-      bool outcome = r < c;
-      forced_projective_measurement(i, outcome);
-      return outcome;
-    }
-
-    virtual double num_particles() const {
-      double n = 0.0;
-      for (size_t i = 0; i < L; i++) {
-        n += occupation(i);
-      }
-
-      return n;
-    }
-
-    virtual double occupation(size_t i) const=0;
-
-    virtual std::vector<double> occupation() const {
-      std::vector<double> n(L);
-      
-      for (size_t i = 0; i < L; i++) {
-        n[i] = occupation(i);
-      }
-
-      return n;
-    }
-
-    virtual std::string to_string() const=0;
-
-    virtual Texture get_texture() const {
-      return Texture(L, L);
-    }
-};
-
-
-class AmplitudeFermionState : public FreeFermionState {
-  public:
+class GaussianState : public FreeFermionState {
+  private:
     Eigen::MatrixXcd amplitudes;
-
-    AmplitudeFermionState(uint32_t L) : FreeFermionState(L) {
-      particles_at({});
-    }
 
     void particles_at(const Qubits& sites) {
       for (auto i : sites) {
@@ -147,6 +46,15 @@ class AmplitudeFermionState : public FreeFermionState {
       particles_at(sites);
     }
 
+  public:
+    GaussianState(uint32_t L, std::optional<Qubits> sites) : FreeFermionState(L) {
+      if (sites) {
+        particles_at(sites.value());
+      } else {
+        particles_at({});
+      }
+    }
+
     void swap(size_t i, size_t j) {
       amplitudes.row(i).swap(amplitudes.row(j));
       amplitudes.row(i + L).swap(amplitudes.row(j + L));
@@ -160,19 +68,8 @@ class AmplitudeFermionState : public FreeFermionState {
       }
 
       if (N > L/2) {
-        std::vector<bool> contains(L, false);
-        for (auto i : sites) {
-          contains[i] = true;
-        }
-
-        std::vector<uint32_t> _sites;
-        for (size_t i = 0; i < L; i++) {
-          if (!contains[i]) {
-            _sites.push_back(i);
-          }
-        }
-
-        return entanglement(_sites, index);
+        auto _support = support_complement(support, L);
+        return entanglement(_support, index);
       }
 
       auto C = covariance_matrix();
