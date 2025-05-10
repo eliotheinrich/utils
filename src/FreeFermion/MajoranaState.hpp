@@ -146,7 +146,7 @@ class MajoranaState : public FreeFermionState {
       return S;
     }
 
-    virtual std::string to_string() const {
+    virtual std::string to_string() const override {
       std::stringstream s;
       s << M;
       return s.str();
@@ -204,15 +204,23 @@ class ExtendedMajoranaState : public FreeFermionState {
       std::vector<State> new_states;
 
       for (const auto& [amplitude, state] : states) {
-        MajoranaState state1 = state;
-        state1.forced_projective_measurement(i, true);
-        state1.forced_projective_measurement(i, true);
-        MajoranaState state2 = state;
-        state2.forced_projective_measurement(i, false);
-        state2.forced_projective_measurement(i, false);
+        double n1 = occupation(i);
+        double n2 = occupation(i+1);
 
-        new_states.push_back({amplitude, state1});
-        new_states.push_back({amplitude, state2});
+        constexpr double eps = 1e-6;
+        double f1 = std::sqrt(n1 * n2);
+        double f2 = std::sqrt((1 - n1) * (1 - n2));
+        if (f1 > eps) {
+          MajoranaState state1 = state;
+          state1.forced_projective_measurement(i,   true);
+          state1.forced_projective_measurement(i+1, true);
+          new_states.push_back({amplitude * f1, state1});
+        } if (f2 > eps) {
+          MajoranaState state2 = state;
+          state2.forced_projective_measurement(i,   false);
+          state2.forced_projective_measurement(i+1, false);
+          new_states.push_back({amplitude * f2, state2});
+        }
       }
 
       states = new_states;

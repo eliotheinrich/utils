@@ -1,7 +1,4 @@
-#include "Samplers/ParticipationSampler.hpp"
-#include "Samplers/StabilizerEntropySampler.hpp"
 #include <PyQutils.hpp>
-#include <memory>
 
 using PyMutationFunc = std::function<PauliString(PauliString)>;
 inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
@@ -167,7 +164,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("weak_measure", [](MagicQuantumState& self, const Qubits& qubits, double beta, const PauliString& pauli, std::optional<bool> outcome) {
       return self.weak_measure(WeakMeasurement(qubits, beta, pauli, outcome));
     }, "qubits"_a, "beta"_a, "pauli"_a, "outcome"_a=std::nullopt)
-    .def("entropy", &MagicQuantumState::entropy, "qubits"_a, "index"_a)
+    .def("entanglement", &MagicQuantumState::entanglement, "qubits"_a, "index"_a)
     .def("sample_bitstrings", &MagicQuantumState::sample_bitstrings)
     .def("sample_paulis", &MagicQuantumState::sample_paulis)
     .def("sample_paulis_exact", &MagicQuantumState::sample_paulis_exact)
@@ -202,7 +199,7 @@ NB_MODULE(qutils_bindings, m) {
     .def_ro("data", &Statevector::data)
     .def("normalize", &Statevector::normalize)
     .def("inner", &Statevector::inner)
-    .def("expectation_matrix", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("expectation", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -242,7 +239,7 @@ NB_MODULE(qutils_bindings, m) {
 
   m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
 
-  nanobind::class_<EntropyState>(m, "EntropyState");
+  nanobind::class_<EntanglementEntropyState>(m, "EntanglementEntropyState");
 
   nanobind::class_<EntropySampler>(m, "EntropySampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
@@ -250,7 +247,7 @@ NB_MODULE(qutils_bindings, m) {
       EntropySampler sampler(params);
       return std::make_pair(sampler, params);
     })
-    .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntropyState> state) {
+    .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntanglementEntropyState> state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;
@@ -334,7 +331,7 @@ NB_MODULE(qutils_bindings, m) {
       return samples;
     });
 
-  nanobind::class_<QuantumCHPState, EntropyState>(m, "QuantumCHPState")
+  nanobind::class_<QuantumCHPState, EntanglementEntropyState>(m, "QuantumCHPState")
     .def(nanobind::init<uint32_t>())
     .def_ro("num_qubits", &QuantumCHPState::num_qubits)
     .def("__str__", &QuantumCHPState::to_string)
@@ -374,9 +371,9 @@ NB_MODULE(qutils_bindings, m) {
     .def("myr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.myr_expectation(q); })
     .def("mzr_expectation", [](QuantumCHPState& self, uint32_t q) { return self.mzr_expectation(q); })
     .def("to_statevector", &QuantumCHPState::to_statevector)
-    .def("entropy", &QuantumCHPState::entropy, "qubits"_a, "index"_a=2)
-    .def("entropy_surface", [](QuantumCHPState& self) {
-      return self.get_entropy_surface<int>(2u);
+    .def("entanglement", &QuantumCHPState::entanglement, "qubits"_a, "index"_a=2)
+    .def("get_entanglement", [](QuantumCHPState& self) {
+      return self.get_entanglement<int>(2u);
     })
     .def("random_clifford", &QuantumCHPState::random_clifford)
     .def("get_texture", [](QuantumCHPState& state, 
@@ -422,27 +419,28 @@ NB_MODULE(qutils_bindings, m) {
       return qc;
     });
 
-  nanobind::class_<FreeFermionState, EntropyState>(m, "FreeFermionState")
+  nanobind::class_<FreeFermionHamiltonian>(m, "FreeFermionHamiltonian")
     .def(nanobind::init<size_t>())
-    .def("system_size", &FreeFermionState::system_size)
-    .def("__str__", &FreeFermionState::to_string)
-    .def("particles_at", &FreeFermionState::particles_at)
-    .def("swap", &FreeFermionState::swap)
-    .def("entropy", &FreeFermionState::entropy)
-    .def("prepare_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H) { return self.prepare_hamiltonian(H); })
-    .def("prepare_hamiltonian_", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B) { return self.prepare_hamiltonian(A, B); })
-    .def("evolve_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H, double t) { self.evolve_hamiltonian(H, t); }, "H"_a, "t"_a = 1.0)
-    .def("evolve_hamiltonian_", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double t) { self.evolve_hamiltonian(A, B, t); }, "A"_a, "B"_a, "t"_a = 1.0)
-    .def("evolve", [](FreeFermionState& self, const Eigen::MatrixXcd& U) { self.evolve(U); }, "U"_a)
-    .def("weak_measure_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& H, double beta) { self.weak_measurement_hamiltonian(H, beta); }, "H"_a, "beta"_a = 1.0)
-    .def("weak_measure_hamiltonian", [](FreeFermionState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta) { self.weak_measurement_hamiltonian(A, B, beta); }, "A"_a, "B"_a, "beta"_a = 1.0)
-    .def("weak_measure", [](FreeFermionState& self, const Eigen::MatrixXcd& U) { self.weak_measurement(U); }, "H"_a)
-    .def("mzr", [](FreeFermionState& self, size_t i) {
+    .def("add_term", &FreeFermionHamiltonian::add_term)
+    .def("add_nonconserving_term", &FreeFermionHamiltonian::add_nonconserving_term);
+
+  nanobind::class_<GaussianState, EntanglementEntropyState>(m, "GaussianState")
+    .def(nanobind::init<size_t, Qubits&>())
+    .def("system_size", &GaussianState::system_size)
+    .def("__str__", &GaussianState::to_string)
+    .def("swap", &GaussianState::swap)
+    .def("entanglement", &GaussianState::entanglement)
+    .def("evolve_hamiltonian", &GaussianState::evolve_hamiltonian, "H"_a, "t"_a = 1.0)
+    .def("evolve", [](GaussianState& self, const Eigen::MatrixXcd& U) { self.evolve(U); }, "U"_a)
+    //.def("weak_measure_hamiltonian", [](GaussianState& self, const Eigen::MatrixXcd& H, double beta) { self.weak_measurement_hamiltonian(H, beta); }, "H"_a, "beta"_a = 1.0)
+    //.def("weak_measure_hamiltonian", [](GaussianState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta) { self.weak_measurement_hamiltonian(A, B, beta); }, "A"_a, "B"_a, "beta"_a = 1.0)
+    //.def("weak_measure", [](GaussianState& self, const Eigen::MatrixXcd& U) { self.weak_measurement(U); }, "H"_a)
+    .def("mzr", [](GaussianState& self, size_t i) {
       return self.projective_measurement(i, randf());
     })
-    .def("num_particles", &FreeFermionState::num_particles)
-    .def("correlation_matrix", &FreeFermionState::correlation_matrix)
-    .def("occupation", [](FreeFermionState& self, size_t i) { return self.occupation(i); });
+    .def("num_particles", &GaussianState::num_particles)
+    //.def("correlation_matrix", &GaussianState::correlation_matrix)
+    .def("occupation", [](GaussianState& self, size_t i) { return self.occupation(i); });
 
 
   nanobind::class_<BinaryMatrix>(m, "BinaryMatrix")
@@ -492,6 +490,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("generator_locality", &GeneratorMatrix::generator_locality);
 
 #ifdef BUILD_GLFW
+#include "Display.h"
   constexpr int BUILT_WITH_GLFW = 1;
   nanobind::class_<FrameData>(m, "FrameData")
     .def(nanobind::init<int, std::vector<int>>())

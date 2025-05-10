@@ -1535,7 +1535,7 @@ bool test_free_fermion_state() {
     if (gate_type == 0) {
       uint32_t q = randi(0, nqb);
       auto [Rm, H] = R(theta, q, nqb);
-      psi.evolve(Rm, {q});
+      psi.evolve(Rm, q);
       fermion_state.evolve_hamiltonian(H);
       majorana_state.evolve_hamiltonian(H);
     } else if (gate_type == 1) {
@@ -1607,7 +1607,7 @@ bool test_extended_majorana_state() {
     if (gate_type == 0) {
       uint32_t q = randi(0, nqb);
       auto [Rm, H] = R(theta, q, nqb);
-      psi.evolve(Rm, {q});
+      psi.evolve(Rm, q);
       majorana_state.evolve_hamiltonian(H);
     } else if (gate_type == 1) {
       uint32_t q = randi(0, nqb - 1);

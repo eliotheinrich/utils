@@ -270,35 +270,35 @@ class GaussianState : public FreeFermionState {
       return s.str();
     }
 
-    virtual Texture get_texture() const override {
-      Texture texture(L, L);
-      auto correlations = covariance_matrix();
-      double m_r = 0.0;
-      double m_i = 0.0;
-      for (size_t x = 0; x < L; x++) {
-        for (size_t y = 0; y < L; y++) {
-          auto c = correlations(x, y);
-          auto c_r = std::abs(c.real());
-          auto c_i = std::abs(c.imag());
+    //virtual Texture get_texture() const override {
+    //  Texture texture(L, L);
+    //  auto correlations = covariance_matrix();
+    //  double m_r = 0.0;
+    //  double m_i = 0.0;
+    //  for (size_t x = 0; x < L; x++) {
+    //    for (size_t y = 0; y < L; y++) {
+    //      auto c = correlations(x, y);
+    //      auto c_r = std::abs(c.real());
+    //      auto c_i = std::abs(c.imag());
 
-          if (c_r > m_r) {
-            m_r = c_r;
-          }
-          
-          if (c_i > m_i) {
-            m_i = c_i;
-          }
-        }
-      }
+    //      if (c_r > m_r) {
+    //        m_r = c_r;
+    //      }
+    //      
+    //      if (c_i > m_i) {
+    //        m_i = c_i;
+    //      }
+    //    }
+    //  }
 
-      for (size_t x = 0; x < L; x++) {
-        for (size_t y = 0; y < L; y++) {
-          auto c = correlations(x, y);
-          Color color = {static_cast<float>(std::abs(c.real())/m_r), static_cast<float>(std::abs(c.imag())/m_i), 0.0, 1.0};
-          texture.set(x, y, color);
-        }
-      }
+    //  for (size_t x = 0; x < L; x++) {
+    //    for (size_t y = 0; y < L; y++) {
+    //      auto c = correlations(x, y);
+    //      Color color = {static_cast<float>(std::abs(c.real())/m_r), static_cast<float>(std::abs(c.imag())/m_i), 0.0, 1.0};
+    //      texture.set(x, y, color);
+    //    }
+    //  }
 
-      return texture;
-    }
+    //  return texture;
+    //}
 };

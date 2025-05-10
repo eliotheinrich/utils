@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <numeric>
 
+#include "Support.hpp"
+
 class EntanglementEntropyState {
   protected:
     uint32_t system_size;
