@@ -17,6 +17,8 @@ else()
   message(FATAL_ERROR "Neither glad.c nor glad.cpp was found in ${GLAD_PATH}/src")
 endif()
 
+message("Inside GLFW src. SOURCE_FILES = ${SOURCE_FILES}")
+
 add_library(simulator_display ${SOURCE_FILES})
-target_compile_definitions(simulator_display  PRIVATE SIMULATOR_DISPLAY_PATH="${CMAKE_SOURCE_DIR}/src/SimulatorDisplay")
+#target_compile_definitions(simulator_display  PRIVATE SIMULATOR_DISPLAY_PATH="${CMAKE_SOURCE_DIR}/src/SimulatorDisplay")
 target_link_libraries(simulator_display PRIVATE glfw)

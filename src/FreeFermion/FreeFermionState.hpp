@@ -63,9 +63,9 @@ class FreeFermionState : public EntanglementEntropyState {
 
     virtual void evolve_hamiltonian(const FreeFermionHamiltonian& H, double t=1.0)=0;
     virtual void forced_projective_measurement(size_t i, bool outcome)=0;
-    virtual bool projective_measurement(size_t i, double r) {
+    virtual bool projective_measurement(size_t i) {
       double c = occupation(i);
-      bool outcome = r < c;
+      bool outcome = randf() < c;
       forced_projective_measurement(i, outcome);
       return outcome;
     }

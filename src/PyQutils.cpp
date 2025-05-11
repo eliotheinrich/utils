@@ -199,7 +199,7 @@ NB_MODULE(qutils_bindings, m) {
     .def_ro("data", &Statevector::data)
     .def("normalize", &Statevector::normalize)
     .def("inner", &Statevector::inner)
-    .def("expectation", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("expectation_m", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
@@ -435,8 +435,11 @@ NB_MODULE(qutils_bindings, m) {
     //.def("weak_measure_hamiltonian", [](GaussianState& self, const Eigen::MatrixXcd& H, double beta) { self.weak_measurement_hamiltonian(H, beta); }, "H"_a, "beta"_a = 1.0)
     //.def("weak_measure_hamiltonian", [](GaussianState& self, const Eigen::MatrixXcd& A, const Eigen::MatrixXcd& B, double beta) { self.weak_measurement_hamiltonian(A, B, beta); }, "A"_a, "B"_a, "beta"_a = 1.0)
     //.def("weak_measure", [](GaussianState& self, const Eigen::MatrixXcd& U) { self.weak_measurement(U); }, "H"_a)
-    .def("mzr", [](GaussianState& self, size_t i) {
-      return self.projective_measurement(i, randf());
+    .def("forced_projective_measurement", [](GaussianState& self, size_t i, bool outcome) {
+      self.forced_projective_measurement(i, outcome); 
+    })
+    .def("mzr", [](GaussianState& self, size_t i) { 
+        return self.projective_measurement(i); 
     })
     .def("num_particles", &GaussianState::num_particles)
     //.def("correlation_matrix", &GaussianState::correlation_matrix)

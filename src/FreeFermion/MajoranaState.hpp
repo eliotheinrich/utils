@@ -2,6 +2,11 @@
 
 #include "FreeFermionState.hpp"
 
+// Following https://arxiv.org/pdf/2307.12702
+//class MajoranaState : public FreeFermionState {
+//};
+
+
 // Following https://arxiv.org/pdf/1112.2184
 class MajoranaState : public FreeFermionState {
   private:
@@ -173,7 +178,7 @@ class ExtendedMajoranaState : public FreeFermionState {
 
     virtual void forced_projective_measurement(size_t i, bool outcome) override {
       for (auto& [amplitude, state] : states) {
-        state.projective_measurement(i, outcome);
+        state.forced_projective_measurement(i, outcome);
       }
     }
 

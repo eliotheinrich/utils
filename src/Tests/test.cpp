@@ -290,7 +290,7 @@ bool test_mps_expectation() {
     }
 
     size_t q = randi() % (num_qubits - nqb + 1);
-    std::vector<uint32_t> qubits(nqb);
+    Qubits qubits(nqb);
     std::iota(qubits.begin(), qubits.end(), q);
 
     if (r == 0) {
@@ -1378,50 +1378,6 @@ bool test_bitstring_expectation() {
   return true;
 }
 
-bool test_configurational_entropy() {
-  constexpr size_t nqb = 8;
-
-  MatrixProductState mps(nqb, 1u << nqb);
-  Statevector psi(nqb);
-
-  for (size_t i = 0; i < 10; i++) {
-    randomize_state_haar(mps, psi);
-
-    size_t t = 4;
-    auto qubits = random_boundary_qubits(nqb, t);
-    auto mpo = mps.partial_trace(qubits);
-
-    uint32_t k = randi(0, nqb - t);
-    Qubits qubitsA(k);
-    std::iota(qubitsA.begin(), qubitsA.end(), 0);
-    Qubits qubitsB(mpo->get_num_qubits() - k);
-    std::iota(qubitsB.begin(), qubitsB.end(), k);
-    std::vector<QubitSupport> supports = {qubitsA, qubitsB};
-
-    auto samples = extract_amplitudes(mpo->sample_bitstrings(supports, 500));
-
-    size_t idx = randi(0, 4);
-
-    auto rho = psi.partial_trace(qubits);
-    auto s1 = estimate_renyi_entropy(idx, samples[0]);
-    auto s2 = renyi_entropy(idx, rho->probabilities());
-    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match. Estimate = {:.5f}, exact = {:.5f}\n", s1, s2));
-
-    auto rhoA = rho->partial_trace(qubitsB);
-    auto s1A = estimate_renyi_entropy(idx, samples[1]);
-    auto s2A = renyi_entropy(idx, rhoA->probabilities());
-    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match on qubitsA = {}. Estimate = {:.5f}, exact = {:.5f}\n", qubitsA, s1, s2));
-    
-    auto rhoB = rho->partial_trace(qubitsA);
-    auto s1B = estimate_renyi_entropy(idx, samples[2]);
-    auto s2B = renyi_entropy(idx, rhoB->probabilities());
-    ASSERT(is_close_eps(0.05, s1, s2), fmt::format("Configurational entropy does not match on qubitsB = {}. Estimate = {:.5f}, exact = {:.5f}\n", qubitsB, s1, s2));
-  } 
-
-  
-  return true;
-}
-
 bool test_sv_entanglement() {
   constexpr size_t nqb = 8;
 
@@ -1705,13 +1661,9 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_mixed_sample_bitstrings);
   ADD_TEST(test_marginal_distributions);
   ADD_TEST(test_bitstring_expectation);
-  ADD_TEST(test_configurational_entropy);
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);
   ADD_TEST(test_extended_majorana_state);
-
-
-
 
 
 

@@ -8,6 +8,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#define SIMULATOR_DISPLAY_PATH "/home/eliot_heinrich/Projects/utils/src/SimulatorDisplay"
+
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
   glViewport(0, 0, width, height);
 }
