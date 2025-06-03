@@ -334,7 +334,6 @@ bool test_mpo_expectation() {
     size_t num_remaining_qubits = nqb - num_traced_qubits;
 
     size_t nqb = randi() % (num_remaining_qubits - 1) + 1;
-    //size_t nqb = 1;
 
     size_t q = randi() % (num_remaining_qubits - nqb + 1);
     std::vector<uint32_t> qubits_p(nqb);
@@ -694,6 +693,10 @@ bool test_statevector_to_mps() {
   for (size_t i = 0; i < 10; i++) {
     randomize_state_haar(sv, mps1);
     MatrixProductState mps2(sv, 1u << nqb);
+    std::cout << mps1.to_string() << "\n";
+    std::cout << mps2.to_string() << "\n";
+    std::cout << mps1.inner(mps1) << "\n";
+    std::cout << mps2.inner(mps2) << "\n";
     ASSERT(is_close(std::abs(mps1.inner(mps2)), 1.0), "States not close after translating from Statevector to MatrixProductState.");
   }
 
@@ -931,10 +934,6 @@ bool test_stabilizer_entropy_sampling() {
   SampleMap samples3;
   sampler3.add_samples(samples3, mps);
 
-  //std::cout << fmt::format("samples1 = {}\n", samples1);
-  //std::cout << fmt::format("samples2 = {}\n", samples2);
-  //std::cout << fmt::format("samples3 = {}\n", samples3);
-
   for (int i = 1; i <= 3; i++) {
     double M1 = samples1[STABILIZER_ENTROPY(i)][0][0];
     double M2 = samples2[STABILIZER_ENTROPY(i)][0][0];
@@ -994,10 +993,6 @@ bool test_participation_entropy_sampling() {
     SampleMap samples3;
     sampler3.add_samples(samples3, mps);
 
-    //std::cout << fmt::format("samples1 = {}\n", samples1);
-    //std::cout << fmt::format("samples2 = {}\n", samples2);
-    //std::cout << fmt::format("samples3 = {}\n", samples3);
-
     double W1 = samples1[PARTICIPATION_ENTROPY][0][0];
     double W2 = samples2[PARTICIPATION_ENTROPY][0][0];
     double W3 = samples3[PARTICIPATION_ENTROPY][0][0];
@@ -1055,6 +1050,96 @@ bool test_mps_random_clifford() {
   for (size_t i = 0; i < nqb - 1; i++) {
     double t = mps.trace();
     ASSERT(is_close(t, 1.0), fmt::format("Trace was not preserved. Trace = {:.3f}", t));
+  }
+
+  return true;
+}
+
+bool test_mps_conjugate() {
+  constexpr size_t nqb = 2;
+  MatrixProductState mps(nqb, 2);
+
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(mps);
+
+    size_t n = randi(1, 2);
+    Eigen::MatrixXcd M = haar_unitary(n);
+    Qubits qubits = to_qubits(random_interval(nqb, n));
+
+    auto c1 = mps.expectation(M, qubits);
+
+    auto mps_conj = mps;
+    mps_conj.conjugate();
+
+    Statevector s1(mps);
+    Statevector s2(mps_conj);
+
+    std::cout << s1.to_string() << "\n";
+    std::cout << s2.to_string() << "\n";
+
+    auto c2 = mps_conj.expectation(M, qubits);
+    auto c3 = s2.expectation(M, qubits);
+
+    std::cout << fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i\n", c1.real(), c1.imag(), c2.real(), c2.imag());
+    std::cout << fmt::format("c3 = {:.3f} + {:.3f}i\n", c3.real(), c3.imag());
+  }
+
+  return true;
+}
+
+bool test_mps_concatenate() {
+  for (size_t i = 0; i < 100; i++) {
+    uint32_t nqb1 = randi(1, 10);
+    uint32_t nqb2 = randi(1, 10);
+
+    MatrixProductState mps1(nqb1, 32);
+    randomize_state_haar(mps1);
+    MatrixProductState mps2(nqb2, 32);
+    randomize_state_haar(mps2);
+
+    MatrixProductState mps = mps1.concatenate(mps2);
+
+    for (uint32_t q = 0; q < nqb1; q++) {
+      Eigen::Matrix2cd M = Eigen::Matrix2cd::Random();
+      auto c1 = mps1.expectation(M, {q});
+      auto c2 = mps.expectation(M, {q});
+
+      ASSERT(is_close(c1, c2));
+    }
+
+    for (uint32_t q = 0; q < nqb2; q++) {
+      Eigen::Matrix2cd M = Eigen::Matrix2cd::Random();
+      auto c1 = mps2.expectation(M, {q});
+      auto c2 = mps.expectation(M, {nqb1 + q});
+
+      ASSERT(is_close(c1, c2));
+    }
+  }
+
+  return true;
+}
+
+bool test_mps_many_qubit_gate() {
+  constexpr size_t nqb = 8;
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  Statevector psi(nqb);
+
+
+  for (size_t i = 0; i < 10; i++) {
+    Qubits qubits = to_qubits(random_interval(nqb, 3));
+    std::cout << fmt::format("qubits = {}\n", qubits);
+    Eigen::MatrixXcd U = haar_unitary(3);
+
+    mps.evolve(U, qubits);
+    psi.evolve(U, qubits);
+
+    std::cout << mps.to_string() << "\n";
+    std::cout << psi.to_string() << "\n";
+    std::cout << mps.inner(mps) << "\n";
+    std::cout << psi.inner(psi) << "\n";
+
+    ASSERT(states_close(mps, psi), "States not equal after applying multi-qubit gate.");
   }
 
   return true;
@@ -1652,6 +1737,9 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
+  ADD_TEST(test_mps_conjugate);
+  ADD_TEST(test_mps_concatenate);
+  ADD_TEST(test_mps_many_qubit_gate);
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
   ADD_TEST(test_circuit_measurements);

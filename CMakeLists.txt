@@ -80,42 +80,47 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumState)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/CliffordState)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
 if (DEFINED BUILD_GLFW)
-    add_compile_definitions(BUILD_GLFW)
-    set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
-    add_subdirectory(${DISPLAY_DIR})
+  message("BUILDING GLFW!!!!")
+  add_compile_definitions(BUILD_GLFW)
+  set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
+  add_subdirectory(${DISPLAY_DIR})
+else()
+  message("NOT BUILDING GLFW!!!!!")
 endif()
 
 if (BUILDING_PYQUTILS)
-    find_package(Python 3.10 
-        REQUIRED COMPONENTS Interpreter Development.Module
-        OPTIONAL_COMPONENTS Development.SABIModule
-    )
+  find_package(Python 3.10 
+    REQUIRED COMPONENTS Interpreter Development.Module
+    OPTIONAL_COMPONENTS Development.SABIModule
+  )
 
-    # Finding nanobind
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR
-    )
-    list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
-    find_package(nanobind CONFIG REQUIRED)
+  # Finding nanobind
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+    OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR
+  )
+  list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
+  find_package(nanobind CONFIG REQUIRED)
 
-    nanobind_add_module(
-        qutils_bindings
-        STABLE_ABI
-        NB_STATIC
-        src/PyQutils.hpp
-        src/PyQutils.cpp
-    )
+  nanobind_add_module(
+    qutils_bindings
+    STABLE_ABI
+    NB_STATIC
+    src/PyQutils.hpp
+    src/PyQutils.cpp
+  )
 
-    set(qutils_libs clifford_state linear_code dataframe)
-    if (DEFINED BUILD_GLFW)
-      list(APPEND qutils_libs simulator_display)
-    endif()
+  set(qutils_libs clifford_state linear_code dataframe)
+  if (DEFINED BUILD_GLFW)
+    list(APPEND qutils_libs simulator_display)
+  endif()
 
-    target_link_libraries(qutils_bindings PUBLIC ${qutils_libs})
+  message("qutils_libs = ${qutils_libs}")
 
-    install(
-        TARGETS qutils_bindings
-        LIBRARY DESTINATION qutils
-    )
+  target_link_libraries(qutils_bindings PUBLIC ${qutils_libs})
+
+  install(
+    TARGETS qutils_bindings
+    LIBRARY DESTINATION qutils
+  )
 endif()

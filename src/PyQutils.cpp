@@ -36,6 +36,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("__eq__", &PauliString::operator==)
     .def("__neq__", &PauliString::operator!=)
     .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
+    .def("to_projector", [](PauliString& self) { return (Eigen::MatrixXcd::Identity(1u << self.num_qubits, 1u << self.num_qubits) + self.to_matrix())/2.0; })
     .def("substring", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, true); })
     .def("substring_retain", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, false); })
     .def("superstring", &PauliString::superstring)
@@ -110,6 +111,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("random_clifford", [](QuantumCircuit& self, const std::vector<uint32_t>& qubits) {
       self.random_clifford(qubits);
     })
+    .def("is_clifford", &QuantumCircuit::is_clifford)
     .def("adjoint", [](QuantumCircuit& self, const std::optional<std::vector<double>> params) { return self.adjoint(params); }, "params"_a = nanobind::none())
     .def("reverse", &QuantumCircuit::reverse)
     .def("conjugate", &QuantumCircuit::conjugate)
@@ -219,6 +221,7 @@ NB_MODULE(qutils_bindings, m) {
 
   nanobind::class_<MatrixProductState, MagicQuantumState>(m, "MatrixProductState")
     .def(nanobind::init<uint32_t, uint32_t, double>(), "num_qubits"_a, "max_bond_dimension"_a, "sv_threshold"_a=1e-4)
+    .def(nanobind::init<const MatrixProductState&>())
     .def("__str__", &MatrixProductState::to_string)
     .def("__setstate__", [](MatrixProductState& self, const nanobind::bytes& bytes) { 
       new (&self) MatrixProductState(1, 2);
@@ -233,6 +236,9 @@ NB_MODULE(qutils_bindings, m) {
     .def("get_logged_truncerr", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.get_logged_truncerr()); })
     .def("trace", &MatrixProductState::trace)
     .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
+    .def("concatenate", &MatrixProductState::concatenate)
+    .def("conjugate", &MatrixProductState::conjugate)
+    .def("inner", &MatrixProductState::inner)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });

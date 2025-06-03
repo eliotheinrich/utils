@@ -104,6 +104,10 @@ static bool support_contiguous(const QubitSupport& support) {
       return true;
     },
     [](const Qubits& qubits) -> bool {
+      if (qubits.size() == 0) {
+        return true;
+      }
+
       Qubits qubits_sorted = qubits;
       std::sort(qubits_sorted.begin(), qubits_sorted.end());
 

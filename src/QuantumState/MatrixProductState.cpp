@@ -1044,6 +1044,10 @@ class MatrixProductStateImpl {
     }
 
     std::complex<double> expectation(const Eigen::MatrixXcd& m, const Qubits& qubits) {
+      if (qubits.size() == 0) {
+        throw std::runtime_error("Cannot compute expectation over 0 qubits.");
+      }
+
       size_t r = m.rows();
       size_t c = m.cols();
       size_t n = qubits.size();
@@ -1390,8 +1394,8 @@ class MatrixProductStateImpl {
       auto [U, S, V] = svd(theta, u_inds, v_inds, {
         "SVDMethod=","gesvd",
         "Cutoff=",threshold,"MaxDim=",bond_dimension,
-        "LeftTags=",fmt::format("Internal,Left,n={}", q1),
-        "RightTags=",fmt::format("Internal,Right,n={}", q1)
+        "LeftTags=",fmt::format("n={},Internal,Left", q1),
+        "RightTags=",fmt::format("n={},Internal,Right", q1)
       });
 
       double truncerr = sqr(norm(U*S*V - theta)/norm(theta));
@@ -1422,11 +1426,11 @@ class MatrixProductStateImpl {
         V *= apply(singular_values[q2], inv);
       }
 
-      internal_indices[2*q1] = commonIndex(U, S);
-      internal_indices[2*q1 + 1] = commonIndex(V, S);
+      internal_indices[2*q1]   = commonIndex(U, S);
+      internal_indices[2*q1+1] = commonIndex(V, S);
 
-      tensors[q1] = U;
-      tensors[q2] = V;
+      tensors[q1]         = U;
+      tensors[q2]         = V;
       singular_values[q1] = S;
     }
 
@@ -1441,20 +1445,9 @@ class MatrixProductStateImpl {
       assert_state_valid(stream.str());
     }
 
-    void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
-      assert_gate_shape(gate, qubits);
-
-      if (qubits.size() == 1) {
-        evolve(gate, qubits[0]);
-        return;
-      }
-
-      if ((qubits.size()) != 2 || (gate.rows() != gate.cols()) || (gate.rows() != (1u << qubits.size()))) {
-        throw std::invalid_argument("Can only evolve two-qubit gates in MPS simulation.");
-      }
-
-      uint32_t q1 = std::min(qubits[0], qubits[1]);
-      uint32_t q2 = std::max(qubits[0], qubits[1]);
+    void evolve(const Eigen::Matrix4cd& gate, uint32_t q1_, uint32_t q2_) {
+      uint32_t q1 = std::min(q1_, q2_);
+      uint32_t q2 = std::max(q1_, q2_);
 
       orthogonalize(q1);
 
@@ -1464,7 +1457,7 @@ class MatrixProductStateImpl {
         }
 
         Qubits qbits{q2 - 1, q2};
-        if (qubits[0] > qubits[1]) {
+        if (q1_ > q2_) {
           Eigen::Matrix4cd SWAP = gates::SWAP::value;
           evolve(SWAP * gate * SWAP, qbits);
         } else {
@@ -1479,11 +1472,11 @@ class MatrixProductStateImpl {
         return;
       }
 
-      auto i1 = external_idx(qubits[0]);
-      auto i2 = external_idx(qubits[1]);
+      auto i1 = external_idx(q1_);
+      auto i2 = external_idx(q2_);
       ITensor gate_tensor = matrix_to_tensor(gate, 
         {prime(i1), prime(i2)}, 
-        {i1, i2}
+        {i1,        i2}
       );
 
       svd_bond(q1, &gate_tensor);
@@ -1491,47 +1484,163 @@ class MatrixProductStateImpl {
       set_right_ortho_lim(q1);
 
       std::stringstream stream;
-      stream << "Error after applying gate \n" << gate << fmt::format("\n to qubits {}.", qubits);
+      stream << "Error after applying gate \n" << gate << fmt::format("\n to qubits ({}, {}).", q1_, q2_);
       assert_state_valid(stream.str());
+
     }
 
-    void reset_from_tensor(const ITensor& tensor) {
-      ITensor one_l(left_boundary_index);
-      one_l.set(1, 1.0);
-      ITensor one_r(right_boundary_index);
-      one_r.set(1, 1.0);
+    void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {
+      assert_gate_shape(gate, qubits);
 
-      ITensor c = tensor * one_l * one_r;
+      if (qubits.size() == 1) {
+        evolve(gate, qubits[0]);
+        return;
+      }
 
-      for (size_t i = 0; i < num_qubits - 1; i++) {
-        std::vector<Index> u_inds = {external_idx(i)};
-        if (i > 0) {
-          u_inds.push_back(internal_idx(i-1, InternalDir::Right));
-        } else {
-          u_inds.push_back(left_boundary_index);
+      if (qubits.size() == 2) {
+        evolve(gate, qubits[0], qubits[1]);
+        return;
+      }
+
+      uint32_t qmin = std::ranges::min(qubits);
+      uint32_t qmax = qmin + qubits.size();
+      orthogonalize(qmin, qmax);
+
+      std::vector<std::pair<uint32_t, uint32_t>> swaps;
+      Qubits sorted_qubits = qubits;
+      std::sort(sorted_qubits.begin(), sorted_qubits.end());
+      for (size_t i = 1; i < sorted_qubits.size(); i++) {
+        for (uint32_t qi = qmax; qi >= qmin + i + 1; qi--) {
+          swaps.push_back({qi, qi-1});
         }
+      }
 
-        std::vector<Index> v_inds{right_boundary_index};
-        for (size_t j = i + 1; j < num_qubits; j++) {
+      for (size_t j = 0; j < swaps.size(); j++) {
+        auto [q1, q2] = swaps[j];
+        //std::cout << fmt::format("Called swap({}, {})\n", q1, q2);
+        //swap(q1, q2);
+      }
+      std::cout << fmt::format("qubits = {}, qmin = {}, qmax = {}\n", qubits, qmin, qmax);
+
+      // Now, gate is applied to [qmin, ..., qmax]
+      std::vector<Index> indices;
+      std::vector<Index> indices_p;
+      for (uint32_t q = qmin; q < qmax; q++) {
+        indices.push_back(external_idx(q));
+        indices_p.push_back(prime(external_idx(q)));
+      }
+
+      ITensor theta = tensors[qmin];
+      for (size_t q = qmin+1; q < qmax; q++) {
+        theta *= singular_values[q-1];
+        theta *= tensors[q];
+      }
+
+      std::cout << "theta = \n";
+      print(theta);
+      std::cout << "\n";
+      theta = noPrime(theta * matrix_to_tensor(gate, indices_p, indices));
+      print(theta);
+      std::cout << "\n";
+      reset_from_tensor(theta, std::make_pair(qmin, qmax));
+
+      // Reverse swaps
+      //for (size_t j = swaps.size() - 1; j >= 0; j--) {
+        //auto [q1, q2] = swaps[j];
+        //std::cout << fmt::format("Called swap({}, {})\n", q1, q2);
+        //swap(q1, q2);
+      //}
+    }
+
+    void reset_from_tensor(const ITensor& tensor, QubitInterval support) {
+      if (!support) {
+        return;
+      }
+
+      auto [q1, q2] = support.value();
+      ITensor c = tensor;
+
+      Index left = left_boundary_index;
+      if (q1 != 0) {
+        c *= singular_values[q1 - 1];
+        left = internal_idx(q1 - 1, InternalDir::Left);
+      }
+      
+      Index right = right_boundary_index;
+      if (q2 != num_qubits) {
+        c *= singular_values[q2 - 1];
+        right = internal_idx(q2 - 1, InternalDir::Right);
+      }
+
+      std::cout << fmt::format("q1 = {}, q2 = {}, right = ", q1, q2);
+      print(right);
+      std::cout << "\n";
+
+      for (size_t i = q1; i < q2 - 1; i++) {
+        std::vector<Index> u_inds = {left, external_idx(i)};
+
+        std::vector<Index> v_inds{right};
+        for (size_t j = i + 1; j < q2; j++) {
           v_inds.push_back(external_idx(j));
         }
         
+        print(c);
+        print(u_inds);
+        std::cout << "\n";
+        print(v_inds);
+        std::cout << "\n";
         auto [U, S, V] = svd(c, u_inds, v_inds, {
           "SVDMethod=","gesvd",
           "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-          "LeftTags=",fmt::format("Internal,Left,n={}", i),
-          "RightTags=",fmt::format("Internal,Right,n={}", i)
+          "LeftTags=",fmt::format("n={},Internal,Left", i),
+          "RightTags=",fmt::format("n={},Internal,Right", i)
         });
+
+        double truncerr = sqr(norm(U*S*V - c)/norm(c));
+        log.push_back(truncerr);
+
+        // Renormalize singular values
+        PrintData(S);
+        size_t N = dim(inds(S)[0]);
+        double d = 0.0;
+        for (uint32_t p = 1; p <= N; p++) {
+          std::vector<uint32_t> assignment = {p, p};
+          double c = elt(S, assignment);
+          d += c*c;
+        }
+        S /= std::sqrt(d);
+        std::cout << fmt::format("d = {}\n", d);
+        PrintData(S);
 
         c = V;
         tensors[i] = U;
         singular_values[i] = S;
 
-        internal_indices[2*i] = commonIndex(U, S);
-        internal_indices[2*i + 1] = commonIndex(V, S);
+        left = commonIndex(V, S);
+        internal_indices[2*i]     = commonIndex(U, S);
+        internal_indices[2*i + 1] = left;
       }
 
-      tensors[num_qubits - 1] = c;
+      tensors[q2 - 1] = c;
+
+      // Reset effect of multiplying in singular values
+      auto inv = [&](Real r) { 
+        if (r > sv_threshold) {
+          return 1.0/r;
+        } else {
+          return 0.0;
+        }
+      };
+
+      if (q1 != 0) {
+        tensors[q1] *= apply(singular_values[q1 - 1], inv);
+      }
+
+      if (q2 != num_qubits) {
+        tensors[q2 - 1] *= apply(singular_values[q2 - 1], inv);
+      }
+
+      assert_state_valid(fmt::format("Failed after reset_from_tensor"));
     }
 
     double trace() const {
@@ -1603,9 +1712,97 @@ class MatrixProductStateImpl {
       return std::conj(tensor_to_scalar(contraction));
     }
 
-    bool singular_values_trivial(size_t i) const {
-      return (dim(internal_idx(i, InternalDir::Right)) == 1)
-          && (std::abs(norm(singular_values[i]) - 1.0) < 1e-4);
+    MatrixProductStateImpl concatenate(const MatrixProductStateImpl& other) const {
+      if (dim(right_boundary_index) != 1 || dim(other.left_boundary_index) != 1) {
+        throw std::runtime_error("Cannot concatenate MPS with nontrivial right (left) environment tensors.");
+      }
+
+      MatrixProductStateImpl new_impl(num_qubits + other.num_qubits, std::max(bond_dimension, other.bond_dimension), std::min(sv_threshold, other.sv_threshold));
+
+      for (size_t i = 0; i < num_qubits; i++) {
+        new_impl.tensors[i] = tensors[i];
+        new_impl.external_indices[i] = external_indices[i];
+      }
+
+      for (size_t i = 0; i < other.num_qubits; i++) {
+        uint32_t j = i + tensors.size();
+        new_impl.tensors[j] = other.tensors[i];
+      }
+
+      for (size_t i = 0; i < singular_values.size(); i++) {
+        new_impl.singular_values[i] = singular_values[i];
+        new_impl.internal_indices[2*i]   = internal_indices[2*i];
+        new_impl.internal_indices[2*i+1] = internal_indices[2*i+1];
+      }
+
+      for (size_t i = 0; i < other.singular_values.size(); i++) {
+        new_impl.singular_values[i + singular_values.size() + 1] = other.singular_values[i];
+      }
+
+      // Setting central singular values and patching indices
+      ITensor sv(Index(1, fmt::format("n={},Internal,Left",num_qubits-1)), Index(1, fmt::format("n={},Internal,Right",num_qubits-1)));
+      sv.set({1, 1}, 1.0);
+      new_impl.singular_values[num_qubits-1] = sv;
+
+      Index right = right_boundary_index;
+      Index right_ = findIndex(sv, "Left");
+      new_impl.tensors[num_qubits - 1].replaceInds({right}, {right_});
+      new_impl.internal_indices[2*(num_qubits - 1)] = right_;
+
+      Index left = other.left_boundary_index;
+      Index left_ = findIndex(sv, "Right");
+      new_impl.internal_indices[2*(num_qubits - 1) + 1] = left_;
+
+      new_impl.tensors[num_qubits].replaceInds({left}, {left_});
+
+      // Correct internal indices
+      for (size_t i = 0; i < other.singular_values.size(); i++) {
+        uint32_t j = i + singular_values.size() + 1;
+        left = findIndex(other.singular_values[i], "Left");
+        left_ = Index(dim(left), fmt::format("n={},Internal,Left",j));
+        right = findIndex(other.singular_values[i], "Right");
+        right_ = Index(dim(right), fmt::format("n={},Internal,Right",j));
+
+        try { 
+          new_impl.singular_values[j].replaceInds({left, right}, {left_, right_});
+        } catch (const ITError& e) {
+          new_impl.singular_values[j] = toDense(new_impl.singular_values[j]);
+          new_impl.singular_values[j].replaceInds({left, right}, {left_, right_});
+        }
+        new_impl.tensors[j].replaceInds({left}, {left_});
+        new_impl.tensors[j+1].replaceInds({right}, {right_});
+
+        new_impl.internal_indices[2*j] = left_;
+        new_impl.internal_indices[2*j+1] = right_;
+      }
+
+      for (size_t i = 0; i < other.num_qubits; i++) {
+        uint32_t j = i + num_qubits;
+        Index ext = findIndex(other.tensors[i], "External");
+        Index ext_ = new_impl.external_indices[j];
+        new_impl.tensors[j].replaceInds({ext}, {ext_});
+      }
+
+      new_impl.left_environment_tensor = left_environment_tensor;
+      new_impl.right_environment_tensor = other.right_environment_tensor;
+
+      new_impl.left_ortho_lim = 0;
+      new_impl.right_ortho_lim = new_impl.num_qubits - 1;
+
+      new_impl.left_boundary_index = left_boundary_index;
+      new_impl.right_boundary_index = other.right_boundary_index;
+
+      return new_impl;
+    }
+
+    void conjugate() {
+      for (size_t i = 0; i < tensors.size(); i++) {
+        orthogonalize(i);
+        tensors[i] = conj(tensors[i]);
+      }
+      
+      left_environment_tensor = conj(left_environment_tensor);
+      right_environment_tensor = conj(right_environment_tensor);
     }
 
     void apply_measure(const MeasurementResult& result, const Qubits& qubits) {
@@ -1862,7 +2059,14 @@ MatrixProductState::MatrixProductState(const MatrixProductState& other) : MagicQ
 
 MatrixProductState::MatrixProductState(const Statevector& other, uint32_t bond_dimension, double sv_threshold) : MatrixProductState(other.get_num_qubits(), bond_dimension, sv_threshold) {
   auto coefficients = vector_to_tensor(other.data, impl->external_indices);
-  impl->reset_from_tensor(coefficients);
+  ITensor one_l(impl->left_boundary_index);
+  one_l.set(1, 1.0);
+
+  ITensor one_r(impl->right_boundary_index);
+  one_r.set(1, 1.0);
+
+  coefficients = coefficients * one_l * one_r;
+  impl->reset_from_tensor(coefficients, std::make_pair(0, num_qubits));
 }
 
 MatrixProductState::MatrixProductState()=default;
@@ -2052,6 +2256,17 @@ size_t MatrixProductState::bond_dimension(size_t i) const {
 
 void MatrixProductState::orthogonalize(uint32_t q) {
   impl->orthogonalize(q);
+}
+
+MatrixProductState MatrixProductState::concatenate(const MatrixProductState& other) const {
+  MatrixProductState mps(num_qubits + other.num_qubits, std::max(impl->bond_dimension, other.impl->bond_dimension));
+  auto new_impl = impl->concatenate(*other.impl.get());
+  mps.impl = std::make_unique<MatrixProductStateImpl>(new_impl);
+  return mps;
+}
+
+void MatrixProductState::conjugate() {
+  impl->conjugate();
 }
 
 std::complex<double> MatrixProductState::inner(const MatrixProductState& other) const {

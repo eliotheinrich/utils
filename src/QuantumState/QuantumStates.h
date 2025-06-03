@@ -440,6 +440,9 @@ class MatrixProductState : public MagicQuantumState {
 
     void orthogonalize(uint32_t q);
 
+    MatrixProductState concatenate(const MatrixProductState& other) const;
+    void conjugate();
+
     std::complex<double> inner(const MatrixProductState& other) const;
 
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
