@@ -236,6 +236,93 @@ bool test_statevector() {
   return true;
 }
 
+bool test_measure() {
+  constexpr size_t nqb = 6;
+
+  DensityMatrix rho(nqb);
+  Statevector psi(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  randomize_state_haar(rho, psi, mps);
+
+  // To measure
+  PauliString P = PauliString::randh(nqb);
+
+  double p = psi.expectation(P).real();
+  ASSERT(is_close(p, rho.expectation(P).real(), mps.expectation(P).real()), fmt::format("Expectation of measured Pauli not equal for different state types."));
+  double p0 = (1 + p)/2.0;
+  double p1 = (1 - p)/2.0;
+
+  Qubits qubits(nqb);
+  std::iota(qubits.begin(), qubits.end(), 0);
+
+  rho.measure(Measurement(qubits, P));
+
+  Statevector psi0(psi);
+  psi0.measure(Measurement(qubits, P, false));
+  Statevector psi1(psi);
+  psi1.measure(Measurement(qubits, P, true));
+
+  MatrixProductState mps0(mps);
+  mps0.measure(Measurement(qubits, P, false));
+  MatrixProductState mps1(mps);
+  mps1.measure(Measurement(qubits, P, true));
+
+  for (size_t i = 0; i < 10; i++) {
+    PauliString P_exp = PauliString::randh(nqb);
+    std::complex<double> c1 = rho.expectation(P_exp);
+    std::complex<double> c2 = p0 * psi0.expectation(P_exp) + p1 * psi1.expectation(P_exp);
+    std::complex<double> c3 = p0 * mps0.expectation(P_exp) + p1 * mps1.expectation(P_exp);
+    ASSERT(is_close(c1, c2, c3), fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i, c3 = {:.3f} + {:.3f}i are not close for P = {}", c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag(), P_exp));
+  }
+
+  return true;
+}
+
+bool test_weak_measure() {
+  constexpr size_t nqb = 6;
+
+  DensityMatrix rho(nqb);
+  Statevector psi(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  randomize_state_haar(rho, psi, mps);
+
+  // To measure
+  PauliString P = PauliString::randh(nqb);
+
+  double p = psi.expectation(P).real();
+  ASSERT(is_close(p, rho.expectation(P).real(), mps.expectation(P).real()), fmt::format("Expectation of measured Pauli not equal for different state types."));
+  double beta = randf(0, 2*M_PI);
+  double p0 = (1 + std::tanh(2*beta)*p)/2.0;
+  double p1 = (1 - std::tanh(2*beta)*p)/2.0;
+
+  Qubits qubits(nqb);
+  std::iota(qubits.begin(), qubits.end(), 0);
+
+  rho.weak_measure(WeakMeasurement(qubits, beta, P));
+
+  Statevector psi0(psi);
+  psi0.weak_measure(WeakMeasurement(qubits, beta, P, false));
+  Statevector psi1(psi);
+  psi1.weak_measure(WeakMeasurement(qubits, beta, P, true));
+
+  MatrixProductState mps0(mps);
+  mps0.weak_measure(WeakMeasurement(qubits, beta, P, false));
+  MatrixProductState mps1(mps);
+  mps1.weak_measure(WeakMeasurement(qubits, beta, P, true));
+
+  for (size_t i = 0; i < 10; i++) {
+    PauliString P_exp = PauliString::randh(nqb);
+    std::complex<double> c1 = rho.expectation(P_exp);
+    std::complex<double> c2 = p0 * psi0.expectation(P_exp) + p1 * psi1.expectation(P_exp);
+    std::complex<double> c3 = p0 * mps0.expectation(P_exp) + p1 * mps1.expectation(P_exp);
+    ASSERT(is_close(c1, c2, c3), fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i, c3 = {:.3f} + {:.3f}i are not close for P = {}", c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag(), P_exp));
+  }
+
+  return true;
+}
+
 bool test_mps_vs_statevector() {
   size_t num_qubits = 6;
   size_t bond_dimension = 1u << num_qubits;
@@ -1747,6 +1834,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_statevector);
+  ADD_TEST(test_measure);
+  ADD_TEST(test_weak_measure);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
   ADD_TEST(test_mpo_expectation);

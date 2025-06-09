@@ -1862,7 +1862,8 @@ class MatrixProductStateImpl {
       auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
       Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
+      //double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
+      double prob_zero = (1 + std::tanh(2*m.beta) * expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
 
       bool b;
       if (m.is_forced()) {
@@ -1876,7 +1877,7 @@ class MatrixProductStateImpl {
         t = -t;
       }
 
-      Eigen::MatrixXcd proj = (m.beta*t).exp();
+      Eigen::MatrixXcd proj = (t*m.beta).exp();
       Eigen::MatrixXcd P = proj.pow(2);
       double norm = std::sqrt(std::abs(expectation(P, qubits)));
 

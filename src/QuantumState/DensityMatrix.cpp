@@ -342,9 +342,7 @@ bool DensityMatrix::measure(const Measurement& m) {
     Eigen::MatrixXcd P0 = (id - matrix)/2.0;
     Eigen::MatrixXcd P1 = (id + matrix)/2.0;
 
-    double prob = std::abs(expectation(P0));
-
-    data = P0*data*P0.adjoint()/std::sqrt(prob) + P1*data*P1.adjoint()/std::sqrt(1.0 - prob);
+    data = P0*data*P0.adjoint() + P1*data*P1.adjoint();
     return 0; // No definite outcome; default to 0
   }
 }
@@ -366,20 +364,14 @@ bool DensityMatrix::weak_measure(const WeakMeasurement& m) {
       P = matrix.exp();
     }
 
-    // TODO check this
     data = P*data*P.adjoint();
     data /= trace();
     return outcome;
   } else {
-    Eigen::MatrixXcd P0 = matrix.exp();
-    Eigen::MatrixXcd P1 = (-matrix).exp();
+    Eigen::MatrixXcd P0 = (-matrix).exp()/std::sqrt(2 * std::cosh(2*m.beta));
+    Eigen::MatrixXcd P1 = ( matrix).exp()/std::sqrt(2 * std::cosh(2*m.beta));
 
-    double prob0 = std::abs(expectation(P0));
-    double prob1 = std::abs(expectation(P1));
-
-    // TODO check this
-    data = P0*data*P0.adjoint()/(prob0*prob0) + P1*data*P1.adjoint()/(prob1*prob1);
-    data /= trace();
+    data = P0*data*P0.adjoint() + P1*data*P1.adjoint();
     return 0;
   }
 }
