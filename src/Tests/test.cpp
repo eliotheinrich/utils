@@ -686,17 +686,33 @@ bool test_mps_inner() {
 bool test_statevector_to_mps() {
   constexpr size_t nqb = 4;
 
-  Statevector sv(nqb);
+  Statevector psi(nqb);
   MatrixProductState mps1(nqb, 1u << nqb);
   mps1.set_debug_level(MPS_DEBUG_LEVEL);
 
   for (size_t i = 0; i < 10; i++) {
-    randomize_state_haar(sv, mps1);
-    MatrixProductState mps2(sv, 1u << nqb);
-    std::cout << mps1.to_string() << "\n";
-    std::cout << mps2.to_string() << "\n";
-    std::cout << mps1.inner(mps1) << "\n";
-    std::cout << mps2.inner(mps2) << "\n";
+    randomize_state_haar(psi, mps1);
+    MatrixProductState mps2(psi, 1u << nqb);
+
+    for (size_t j = 0; j < 10; j++) {
+      PauliString P = PauliString::randh(nqb);
+      auto c1 = mps1.expectation(P);
+      auto c2 = mps2.expectation(P);
+      auto c3 = psi.expectation(P);
+      ASSERT(is_close(c1, c2, c3), fmt::format("P = {}, c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i, c3 = {:.3f} + {:.3f}i", P, c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag()));
+    }
+
+
+    for (size_t j = 0; j < 10; j++) {
+      size_t k = randi(0, nqb);
+      Qubits qubits = to_qubits(std::make_pair(0, k));
+      int index = randi(1, 4);
+      double s1 = mps1.entanglement(qubits, index);
+      double s2 = mps2.entanglement(qubits, index);
+      double s3 = psi.entanglement(qubits, index);
+      ASSERT(is_close(s1, s2, s3), fmt::format("qubits = {}, index = {}, s1 = {:.3f}, s2 = {:.3f}, s3 = {:.3f}\n", qubits, index, s1, s2, s3));
+    }
+
     ASSERT(is_close(std::abs(mps1.inner(mps2)), 1.0), "States not close after translating from Statevector to MatrixProductState.");
   }
 
@@ -1127,17 +1143,31 @@ bool test_mps_many_qubit_gate() {
 
 
   for (size_t i = 0; i < 10; i++) {
-    Qubits qubits = to_qubits(random_interval(nqb, 3));
-    std::cout << fmt::format("qubits = {}\n", qubits);
-    Eigen::MatrixXcd U = haar_unitary(3);
+    size_t n = randi(1, 5);
+    Qubits qubits = random_qubits(nqb, n);
+    qubits = random_qubits(nqb, n);
+    //std::sort(qubits.begin(), qubits.end());
+    Eigen::MatrixXcd U = haar_unitary(n);
 
     mps.evolve(U, qubits);
     psi.evolve(U, qubits);
 
-    std::cout << mps.to_string() << "\n";
-    std::cout << psi.to_string() << "\n";
-    std::cout << mps.inner(mps) << "\n";
-    std::cout << psi.inner(psi) << "\n";
+    for (size_t j = 0; j < 10; j++) {
+      PauliString P = PauliString::randh(nqb);
+      auto c1 = mps.expectation(P);
+      auto c2 = psi.expectation(P);
+      ASSERT(is_close(c1, c2), fmt::format("P = {}, c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i", P, c1.real(), c1.imag(), c2.real(), c2.imag()));
+    }
+
+
+    for (size_t j = 0; j < 10; j++) {
+      size_t k = randi(0, nqb);
+      Qubits qubits = to_qubits(std::make_pair(0, k));
+      int index = randi(1, 4);
+      double s1 = mps.entanglement(qubits, index);
+      double s2 = psi.entanglement(qubits, index);
+      ASSERT(is_close(s1, s2), fmt::format("qubits = {}, index = {}, s1 = {:.3f}, s2 = {:.3f}", qubits, index, s1, s2));
+    }
 
     ASSERT(states_close(mps, psi), "States not equal after applying multi-qubit gate.");
   }

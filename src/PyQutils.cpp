@@ -36,7 +36,12 @@ NB_MODULE(qutils_bindings, m) {
     .def("__eq__", &PauliString::operator==)
     .def("__neq__", &PauliString::operator!=)
     .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
-    .def("to_projector", [](PauliString& self) { return (Eigen::MatrixXcd::Identity(1u << self.num_qubits, 1u << self.num_qubits) + self.to_matrix())/2.0; })
+    .def("to_projector", [](PauliString& self) { 
+      Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(1u << self.num_qubits, 1u << self.num_qubits);
+      Eigen::MatrixXcd M = self.to_matrix();
+      Eigen::MatrixXcd P = (I + M)/2.0;
+      return P;
+    })
     .def("substring", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, true); })
     .def("substring_retain", [](const PauliString& self, const std::vector<uint32_t>& sites) { return self.substring(sites, false); })
     .def("superstring", &PauliString::superstring)
@@ -194,6 +199,14 @@ NB_MODULE(qutils_bindings, m) {
     .def(nanobind::init<QuantumCircuit>())
     .def(nanobind::init<Statevector>())
     .def(nanobind::init<MatrixProductState>())
+    .def("__init__", [](Statevector *psi, const std::vector<std::complex<double>>& data) {
+      Eigen::VectorXcd data_(data.size());
+      for (size_t i = 0; i < data.size(); i++) {
+        data_(i) = data[i];
+      }
+
+      new (psi) Statevector(data_);
+    })
     .def("__setstate__", [](Statevector& self, const nanobind::bytes& bytes) { 
       new (&self) Statevector();
       self.deserialize(convert_bytes(bytes)); 

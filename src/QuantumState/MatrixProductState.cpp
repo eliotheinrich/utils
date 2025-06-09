@@ -1497,6 +1497,7 @@ class MatrixProductStateImpl {
         return;
       }
 
+      // TODO combine q = 2 and q > 2 cases?
       if (qubits.size() == 2) {
         evolve(gate, qubits[0], qubits[1]);
         return;
@@ -1506,21 +1507,29 @@ class MatrixProductStateImpl {
       uint32_t qmax = qmin + qubits.size();
       orthogonalize(qmin, qmax);
 
+      std::vector<uint32_t> inds(num_qubits);
+      std::iota(inds.begin(), inds.end(), 0);
       std::vector<std::pair<uint32_t, uint32_t>> swaps;
-      Qubits sorted_qubits = qubits;
-      std::sort(sorted_qubits.begin(), sorted_qubits.end());
-      for (size_t i = 1; i < sorted_qubits.size(); i++) {
-        for (uint32_t qi = qmax; qi >= qmin + i + 1; qi--) {
+      for (size_t i = 0; i < qubits.size(); i++) {
+        uint32_t q = qubits[i];
+        auto it = std::find(inds.begin(), inds.end(), q);
+        uint32_t current_pos;
+        if (it != inds.end()) {
+          current_pos = std::distance(inds.begin(), it);
+        } else {
+          throw std::runtime_error("Error finding qubit.");
+        }
+
+        for (uint32_t qi = current_pos; qi >= qmin + i + 1; qi--) {
+          std::swap(inds[qi], inds[qi-1]);
           swaps.push_back({qi, qi-1});
         }
       }
 
       for (size_t j = 0; j < swaps.size(); j++) {
         auto [q1, q2] = swaps[j];
-        //std::cout << fmt::format("Called swap({}, {})\n", q1, q2);
-        //swap(q1, q2);
+        swap(q1, q2);
       }
-      std::cout << fmt::format("qubits = {}, qmin = {}, qmax = {}\n", qubits, qmin, qmax);
 
       // Now, gate is applied to [qmin, ..., qmax]
       std::vector<Index> indices;
@@ -1536,23 +1545,18 @@ class MatrixProductStateImpl {
         theta *= tensors[q];
       }
 
-      std::cout << "theta = \n";
-      print(theta);
-      std::cout << "\n";
       theta = noPrime(theta * matrix_to_tensor(gate, indices_p, indices));
-      print(theta);
-      std::cout << "\n";
       reset_from_tensor(theta, std::make_pair(qmin, qmax));
 
       // Reverse swaps
-      //for (size_t j = swaps.size() - 1; j >= 0; j--) {
-        //auto [q1, q2] = swaps[j];
-        //std::cout << fmt::format("Called swap({}, {})\n", q1, q2);
-        //swap(q1, q2);
-      //}
+      for (size_t j = swaps.size(); j > 0; j--) {
+        auto [q1, q2] = swaps[j - 1];
+        swap(q1, q2);
+      }
     }
 
     void reset_from_tensor(const ITensor& tensor, QubitInterval support) {
+      set_debug_level(1);
       if (!support) {
         return;
       }
@@ -1572,10 +1576,6 @@ class MatrixProductStateImpl {
         right = internal_idx(q2 - 1, InternalDir::Right);
       }
 
-      std::cout << fmt::format("q1 = {}, q2 = {}, right = ", q1, q2);
-      print(right);
-      std::cout << "\n";
-
       for (size_t i = q1; i < q2 - 1; i++) {
         std::vector<Index> u_inds = {left, external_idx(i)};
 
@@ -1584,11 +1584,6 @@ class MatrixProductStateImpl {
           v_inds.push_back(external_idx(j));
         }
         
-        print(c);
-        print(u_inds);
-        std::cout << "\n";
-        print(v_inds);
-        std::cout << "\n";
         auto [U, S, V] = svd(c, u_inds, v_inds, {
           "SVDMethod=","gesvd",
           "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
@@ -1600,7 +1595,6 @@ class MatrixProductStateImpl {
         log.push_back(truncerr);
 
         // Renormalize singular values
-        PrintData(S);
         size_t N = dim(inds(S)[0]);
         double d = 0.0;
         for (uint32_t p = 1; p <= N; p++) {
@@ -1608,9 +1602,9 @@ class MatrixProductStateImpl {
           double c = elt(S, assignment);
           d += c*c;
         }
-        S /= std::sqrt(d);
-        std::cout << fmt::format("d = {}\n", d);
-        PrintData(S);
+        d = std::sqrt(d);
+        S /= d;
+        U *= d;
 
         c = V;
         tensors[i] = U;
@@ -1639,6 +1633,9 @@ class MatrixProductStateImpl {
       if (q2 != num_qubits) {
         tensors[q2 - 1] *= apply(singular_values[q2 - 1], inv);
       }
+
+      set_left_ortho_lim(q1);
+      set_right_ortho_lim(q2-1);
 
       assert_state_valid(fmt::format("Failed after reset_from_tensor"));
     }
