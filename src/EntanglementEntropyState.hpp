@@ -33,7 +33,7 @@ class EntanglementEntropyState {
       std::vector<T> entanglement(system_size);
 
       for (uint32_t i = 0; i < system_size; i++) {
-        entanglement[i] = cum_entanglement<T>(i, index, false);
+        entanglement[i] = cum_entanglement<T>(i, index, true);
       }
 
       return entanglement;
