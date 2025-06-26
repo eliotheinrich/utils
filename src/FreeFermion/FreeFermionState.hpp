@@ -215,10 +215,10 @@ class AmplitudeFermionState : public FreeFermionState {
       size_t r = amplitudes.rows();
       size_t c = amplitudes.cols();
       Eigen::MatrixXcd Q(r, c);
-      for (int i = 0; i < c; i++) {
+      for (uint32_t i = 0; i < c; i++) {
         Eigen::VectorXcd q = amplitudes.col(i);
 
-        for (int j = 0; j < i; ++j) {
+        for (uint32_t j = 0; j < i; ++j) {
           q -= Q.col(j).adjoint() * amplitudes.col(i) * Q.col(j);
         }
 

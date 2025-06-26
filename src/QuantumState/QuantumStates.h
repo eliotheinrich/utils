@@ -206,6 +206,7 @@ class QuantumState : public EntanglementEntropyState, public std::enable_shared_
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const;
 
 		virtual std::vector<double> probabilities() const=0;
+    virtual std::vector<std::vector<double>> partial_probabilities(const std::vector<QubitSupport>& supports) const;
     virtual std::vector<std::vector<double>> marginal_probabilities(const std::vector<QubitSupport>& supports) const;
     virtual double purity() const=0;
 

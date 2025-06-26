@@ -39,9 +39,3 @@ class EntanglementEntropyState {
       return entanglement;
     }
 };
-
-// TODO find a better place for this to live
-static inline uint32_t mod(int a, int b) {
-  int c = a % b;
-  return (c < 0) ? c + b : c;
-}

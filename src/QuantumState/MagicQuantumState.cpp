@@ -153,7 +153,7 @@ std::vector<PauliAmplitudes> MagicQuantumState::sample_paulis_montecarlo(const s
   PauliString p(num_qubits);
 
   for (size_t i = 0; i < equilibration_timesteps; i++) {
-    double t = perform_mutation(p);
+    perform_mutation(p);
   }
 
   std::vector<PauliAmplitudes> samples(num_samples);

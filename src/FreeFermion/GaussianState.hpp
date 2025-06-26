@@ -116,7 +116,7 @@ class GaussianState : public FreeFermionState {
       size_t r = amplitudes.rows();
       size_t c = amplitudes.cols();
       Eigen::MatrixXcd Q(r, c);
-      for (int i = 0; i < c; i++) {
+      for (uint32_t i = 0; i < c; i++) {
         Eigen::VectorXcd q = amplitudes.col(i);
 
         for (int j = 0; j < i; ++j) {

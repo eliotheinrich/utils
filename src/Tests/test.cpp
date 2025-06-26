@@ -1529,9 +1529,10 @@ bool test_marginal_distributions() {
   constexpr size_t nqb = 8;
 
   Statevector psi(nqb);
-  randomize_state_haar(psi);
 
   for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(psi);
+
     std::vector<QubitSupport> supports;
 
     size_t num_supports = 5;
@@ -1553,6 +1554,38 @@ bool test_marginal_distributions() {
       for (uint32_t z = 0; z < (1u << nqb); z++) {
         uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
         ASSERT(is_close(prob_s[zA], marginals[j + 1][z]));
+      }
+    }
+  }
+
+  return true;
+}
+
+bool test_partial_distributions() {
+  constexpr size_t nqb = 8;
+  Statevector psi(nqb);
+
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(psi);
+
+    std::vector<QubitSupport> supports;
+
+    size_t num_supports = 5;
+    for (size_t j = 0; j < num_supports; j++) {
+      size_t k = randi(0, nqb);
+      auto qubits = random_qubits(nqb, k);
+      supports.push_back(qubits);
+    }
+
+    auto partials = psi.partial_probabilities(supports);
+
+    for (size_t j = 0; j < num_supports; j++) {
+      auto support = supports[j];
+      auto p1 = psi.partial_trace(to_qubits(support_complement(support, nqb)))->probabilities();
+      auto p2 = partials[j+1];
+
+      for (uint32_t z = 0; z < p1.size(); z++) {
+        ASSERT(is_close(p1[z], p2[z]));
       }
     }
   }
@@ -1867,6 +1900,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_sample_bitstrings);
   ADD_TEST(test_mps_mixed_sample_bitstrings);
   ADD_TEST(test_marginal_distributions);
+  ADD_TEST(test_partial_distributions);
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);

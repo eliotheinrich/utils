@@ -1,6 +1,6 @@
 #pragma once
 
-#define FMT_HEADER_ONLY
+#include <stdint.h>
 
+#include "Support.hpp"
 #include "MonteCarlo/MonteCarlo.hpp"
-#include "EntropyState.hpp"

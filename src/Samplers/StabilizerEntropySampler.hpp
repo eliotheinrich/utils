@@ -160,7 +160,7 @@ class GenericMagicSampler : public StabilizerEntropySampler {
       std::vector<std::vector<double>> tB4;
       std::vector<std::vector<double>> tAB4;
 
-      for (auto const [t2, t4] : data) {
+      for (auto const& [t2, t4] : data) {
         auto tAB2_ = t2[0];
         auto tA2_ = t2[1];
         auto tB2_ = t2[2];

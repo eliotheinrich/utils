@@ -1,5 +1,4 @@
 from qutils.qutils_bindings import QUTILS_BUILT_WITH_GLFW
-from time import time, sleep
 
 if QUTILS_BUILT_WITH_GLFW:
     class GLFW:
@@ -138,6 +137,7 @@ if QUTILS_BUILT_WITH_GLFW:
             self.animator = GLFWAnimator(*self.background_color)
 
         def start(self, width, height):
+            from time import time, sleep
             self.animator.start(width, height)
 
             while True:

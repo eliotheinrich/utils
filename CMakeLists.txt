@@ -80,12 +80,9 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumState)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/CliffordState)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
 if (DEFINED BUILD_GLFW)
-  message("BUILDING GLFW!!!!")
   add_compile_definitions(BUILD_GLFW)
   set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
   add_subdirectory(${DISPLAY_DIR})
-else()
-  message("NOT BUILDING GLFW!!!!!")
 endif()
 
 if (BUILDING_PYQUTILS)
@@ -114,8 +111,6 @@ if (BUILDING_PYQUTILS)
   if (DEFINED BUILD_GLFW)
     list(APPEND qutils_libs simulator_display)
   endif()
-
-  message("qutils_libs = ${qutils_libs}")
 
   target_link_libraries(qutils_bindings PUBLIC ${qutils_libs})
 

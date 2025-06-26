@@ -7,8 +7,6 @@
 
 #include <Simulator.hpp>
 
-#define PI 3.14159265
-
 enum BoundaryCondition { Periodic, Open };
 
 typedef std::pair<uint32_t, int> Bond;
@@ -35,7 +33,7 @@ inline double const_T(int n, int n_max, double Ti, double Tf) {
 }
 
 inline double trig_T(int n, int n_max, double Ti, double Tf) {
-  return Ti + 0.5*(Tf - Ti)*(1 - cos(n*PI/n_max));
+  return Ti + 0.5*(Tf - Ti)*(1 - cos(n*M_PI/n_max));
 }
 
 inline double linear_T(int n, int n_max, double Ti, double Tf) {
@@ -65,7 +63,8 @@ class MonteCarloSimulator : public Simulator {
       num_cooling_updates = dataframe::utils::get<int>(params, "num_cooling_updates", 100);
       cooling_schedule = parse_cooling_schedule(dataframe::utils::get<std::string>(params, "cooling_schedule", "constant"));
     }
-    virtual ~MonteCarloSimulator()=default;
+
+    virtual ~MonteCarloSimulator();
 
     // Implement Simulator methods but introduce MonteCarlo methods
     virtual void timesteps(uint32_t num_steps) override {
@@ -89,9 +88,15 @@ class MonteCarloSimulator : public Simulator {
       for (uint64_t i = 0; i < num_cooling_updates; i++) {
         timesteps(steps_per_update);
         switch (cooling_schedule) {
-          case(CoolingSchedule::Constant) : temperature = const_T(i, num_cooling_updates, init_temperature, final_temperature);
-          case(CoolingSchedule::Linear) : temperature = linear_T(i, num_cooling_updates, init_temperature, final_temperature);
-          case(CoolingSchedule::Trig) : temperature = trig_T(i, num_cooling_updates, init_temperature, final_temperature);
+          case(CoolingSchedule::Constant):
+            temperature = const_T(i, num_cooling_updates, init_temperature, final_temperature);
+            break;
+          case(CoolingSchedule::Linear): 
+            temperature = linear_T(i, num_cooling_updates, init_temperature, final_temperature);
+            break;
+          case(CoolingSchedule::Trig):
+            temperature = trig_T(i, num_cooling_updates, init_temperature, final_temperature);
+            break;
         }
       }
 
@@ -103,12 +108,12 @@ class MonteCarloSimulator : public Simulator {
     virtual void key_callback(int key) override;
 
     // To be overridden by child classes
-    virtual double energy() const = 0;
-    virtual double energy_change() = 0;
-    virtual void generate_mutation() = 0;
-    virtual void accept_mutation() = 0;
-    virtual void reject_mutation() = 0;
-    virtual uint64_t system_size() const = 0;
+    virtual double energy() const=0;
+    virtual double energy_change()=0;
+    virtual void generate_mutation()=0;
+    virtual void accept_mutation()=0;
+    virtual void reject_mutation()=0;
+    virtual uint64_t system_size() const=0;
 
   protected:
     double temperature;

@@ -350,7 +350,6 @@ bool DensityMatrix::measure(const Measurement& m) {
 bool DensityMatrix::weak_measure(const WeakMeasurement& m) {
   Qubits qubits = m.qubits;
   PauliString pauli = m.get_pauli();
-  double beta = m.beta;
 
   PauliString pauli_ = pauli.superstring(qubits, num_qubits);
   Eigen::MatrixXcd matrix = m.beta * pauli_.to_matrix();

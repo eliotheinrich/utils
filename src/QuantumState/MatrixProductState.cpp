@@ -1856,13 +1856,8 @@ class MatrixProductStateImpl {
       PauliString pauli = m.get_pauli();
       Qubits qubits = m.qubits;
 
-      auto [q1, q2] = to_interval(qubits).value();
-
       auto pm = pauli.to_matrix();
-      auto id = Eigen::MatrixXcd::Identity(1u << pauli.num_qubits, 1u << pauli.num_qubits);
-      Eigen::MatrixXcd proj0 = (id + pm)/2.0;
 
-      //double prob_zero = (1.0 + expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
       double prob_zero = (1 + std::tanh(2*m.beta) * expectation(pauli.superstring(qubits, num_qubits)).real())/2.0;
 
       bool b;
@@ -1986,7 +1981,7 @@ class MatrixProductStateImpl {
       for (size_t i = 0; i < num_qubits - 1; i++) {
         size_t d = dim(inds(singular_values[i])[0]);
         double s = 0.0;
-        for (int j = 1; j <= d; j++) {
+        for (uint32_t j = 1; j <= d; j++) {
           double v = elt(singular_values[i], j, j);
           s += v*v;
           // Valid singular values (between 0 and 1)
@@ -2082,11 +2077,11 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
 
   auto ampo = AutoMPO(sites);
-  for(int j = 1; j < num_qubits; ++j) {
+  for (int j = 1; j < num_qubits; ++j) {
     ampo += -2.0, "Sx", j, "Sx", j + 1;
   }
 
-  for(int j = 1; j <= num_qubits; ++j) {
+  for (int j = 1; j <= num_qubits; ++j) {
     ampo += -h, "Sz", j;
   }
   auto H = toMPO(ampo);
@@ -2127,7 +2122,7 @@ double MatrixProductState::entanglement(const QubitSupport& support, uint32_t in
 	std::sort(sorted_qubits.begin(), sorted_qubits.end());
 
 	if ((sorted_qubits[0] != 0) || !support_contiguous(sorted_qubits)) {
-		throw std::runtime_error("Invalid qubits passed to MatrixProductState.entanglement; must be a continuous interval with left side qubit = 0.");
+		throw std::runtime_error(fmt::format("Invalid qubits {} passed to MatrixProductState.entanglement; must be a continuous interval with left side qubit = 0.", qubits));
 	}
 
 	uint32_t q = sorted_qubits.back() + 1;

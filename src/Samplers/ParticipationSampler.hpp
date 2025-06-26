@@ -91,14 +91,8 @@ class GenericParticipationSampler : public ParticipationSampler {
 
         M = estimate_renyi_entropy(1, samplesA, 2) + estimate_renyi_entropy(1, samplesB, 2) - estimate_renyi_entropy(1, samplesAB, 2);
       } else if (participation_entropy_method == "exhaustive") {
-        auto stateA = state->partial_trace(qubitsB);
-        auto stateB = state->partial_trace(qubitsA);
-
-        auto pAB = state->probabilities();
-        auto pA = stateA->probabilities();
-        auto pB = stateB->probabilities();
-
-        M = renyi_entropy(1, pA, 2) + renyi_entropy(1, pB, 2) - renyi_entropy(1, pAB, 2);
+        auto partial_distributions = state->partial_probabilities({qubitsA, qubitsB});
+        M = renyi_entropy(1, partial_distributions[1], 2) + renyi_entropy(1, partial_distributions[2], 2) - renyi_entropy(1, partial_distributions[0], 2);
       }
 
       dataframe::utils::emplace(samples, PARTICIPATION_ENTROPY_MUTUAL, M);
@@ -122,21 +116,13 @@ class GenericParticipationSampler : public ParticipationSampler {
       } else if (participation_entropy_method == "exhaustive") {
         std::vector<double> entropy_(N);
 
-        double W = renyi_entropy(1, state->probabilities(), 2);
+        auto partials = state->partial_probabilities(supports);
+        double W = renyi_entropy(1, partials[0], 2);
 
         auto supports = get_bipartite_supports(num_qubits);
         for (size_t i = 0; i < N; i++) {
-          auto qubitsA = to_qubits(supports[i]);
-          auto qubitsB = to_qubits(supports[i + N]);
-          if (qubitsA.size() + qubitsB.size() != num_qubits) {
-            throw std::runtime_error(fmt::format("Qubits {} and {} are not a bipartition!", qubitsA, qubitsB));
-          }
-
-          auto stateA = state->partial_trace(qubitsB);
-          auto stateB = state->partial_trace(qubitsA);
-
-          double WA = renyi_entropy(1, stateA->probabilities(), 2);
-          double WB = renyi_entropy(1, stateB->probabilities(), 2);
+          double WA = renyi_entropy(1, partials[i + 1], 2);
+          double WB = renyi_entropy(1, partials[i + 1 + N], 2);
 
           entropy[i] = WA + WB - W;
         }

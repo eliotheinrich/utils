@@ -7,6 +7,11 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+static inline uint32_t mod(int a, int b) {
+  int c = a % b;
+  return (c < 0) ? c + b : c;
+}
+
 using QubitInterval = std::optional<std::pair<uint32_t, uint32_t>>;
 using Qubits = std::vector<uint32_t>;
 using QubitSupport = std::variant<Qubits, QubitInterval>;

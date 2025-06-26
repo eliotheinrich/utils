@@ -4,7 +4,6 @@
 Measurement::Measurement(const Qubits& qubits, std::optional<PauliString> pauli, std::optional<bool> outcome)
 : qubits(qubits), pauli(pauli), outcome(outcome) {
   PauliString p = pauli ? pauli.value() : PauliString("+Z");
-  size_t expected_num_qubits = p.num_qubits;
   if (qubits.size() != p.num_qubits) {
     throw std::runtime_error(fmt::format("Invalid number of qubits {} passed to measurement of pauli {}.", qubits, pauli.value()));
   }
@@ -46,7 +45,6 @@ bool Measurement::get_outcome() const {
 WeakMeasurement::WeakMeasurement(const Qubits& qubits, double beta, std::optional<PauliString> pauli, std::optional<bool> outcome)
 : qubits(qubits), beta(beta), pauli(pauli), outcome(outcome) {
   PauliString p = pauli ? pauli.value() : PauliString("+Z");
-  size_t expected_num_qubits = p.num_qubits;
   if (qubits.size() != p.num_qubits) {
     throw std::runtime_error(fmt::format("Invalid number of qubits {} passed to weak measurement of pauli {}.", qubits, pauli.value()));
   }

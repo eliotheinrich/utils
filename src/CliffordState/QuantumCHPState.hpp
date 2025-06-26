@@ -161,7 +161,6 @@ class QuantumCHPState : public CliffordState {
     void deserialize(const std::vector<dataframe::byte_t>& bytes);
 
     Texture get_texture(Color x_color, Color z_color, Color y_color) {
-      size_t N = num_qubits*num_qubits;
       Texture texture(num_qubits, num_qubits);
 
       for (size_t r = 0; r < num_qubits; r++) {

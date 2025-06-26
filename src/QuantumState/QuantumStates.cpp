@@ -1,30 +1,47 @@
 #include "QuantumStates.h"
 
 std::vector<std::vector<double>> QuantumState::marginal_probabilities(const std::vector<QubitSupport>& supports) const {
-  std::vector<double> probs = probabilities();
-
   size_t num_supports = supports.size();
 
+  auto partials = partial_probabilities(supports);
   std::vector<std::vector<double>> marginals(num_supports + 1, std::vector<double>(basis, 0.0));
-  marginals[0] = probs;
+  marginals[0] = partials[0];
 
   for (size_t i = 0; i < num_supports; i++) {
     auto qubits = to_qubits(supports[i]);
     std::sort(qubits.begin(), qubits.end());
 
-    std::vector<double> marginal(1u << qubits.size());
     for (uint32_t z = 0; z < basis; z++) {
       uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
-      marginal[zA] += probs[z];
-    }
-
-    for (uint32_t z = 0; z < basis; z++) {
-      uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
-      marginals[i + 1][z] = marginal[zA];
+      marginals[i + 1][z] = partials[i + 1][zA];
     }
   }
 
   return marginals;
+}
+
+std::vector<std::vector<double>> QuantumState::partial_probabilities(const std::vector<QubitSupport>& supports) const {
+  std::vector<double> probs = probabilities();
+
+  size_t num_supports = supports.size();
+
+  std::vector<std::vector<double>> partials(num_supports + 1);
+  partials[0] = probs;
+
+  for (size_t i = 0; i < num_supports; i++) {
+    auto qubits = to_qubits(supports[i]);
+    std::sort(qubits.begin(), qubits.end());
+
+    std::vector<double> partial(1u << qubits.size(), 0.0);
+    for (uint32_t z = 0; z < basis; z++) {
+      uint32_t zA = quantumstate_utils::reduce_bits(z, qubits);
+      partial[zA] += probs[z];
+    }
+
+    partials[i + 1] = partial;
+  }
+
+  return partials;
 }
 
 std::vector<BitAmplitudes> QuantumState::sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
