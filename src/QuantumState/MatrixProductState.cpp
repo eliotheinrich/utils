@@ -2118,16 +2118,25 @@ double MatrixProductState::entanglement(const QubitSupport& support, uint32_t in
 		return 0.0;
 	}
 
-	std::vector<uint32_t> sorted_qubits(qubits);
+	Qubits sorted_qubits(qubits);
 	std::sort(sorted_qubits.begin(), sorted_qubits.end());
 
-	if ((sorted_qubits[0] != 0) || !support_contiguous(sorted_qubits)) {
-		throw std::runtime_error(fmt::format("Invalid qubits {} passed to MatrixProductState.entanglement; must be a continuous interval with left side qubit = 0.", qubits));
-	}
+  // TODO add support for this with swap gates
+  // beware exploding bond dimension
+  if (!support_contiguous(sorted_qubits)) {
+    throw std::runtime_error(fmt::format("Cannot compute MPS.entanglement of non-contiguous qubits {}.", qubits));
+  }
 
-	uint32_t q = sorted_qubits.back() + 1;
+  uint32_t first = sorted_qubits[0];
+  uint32_t last = sorted_qubits[sorted_qubits.size() - 1];
 
-	return impl->entanglement(q, index);
+  if (first == 0) {
+    return impl->entanglement(last + 1, index);
+  } else if (last == num_qubits - 1) {
+    return impl->entanglement(first, index);
+  } else {
+    throw std::runtime_error(fmt::format("Cannot compute MPS.entanglement of qubits which do not border the boundary: {}", qubits));
+  }
 }
 
 std::vector<double> MatrixProductState::singular_values(uint32_t i) const {
