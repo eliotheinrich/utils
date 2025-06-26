@@ -5,7 +5,6 @@
 #include "Random.hpp"
 
 #include <algorithm>
-#include <format>
 
 enum CliffordType { CHP, GraphSim };
 
@@ -75,7 +74,7 @@ class CliffordState : public EntanglementEntropyState {
           } else if (name == "SWAP") {
             swap(gate->qubits[0], gate->qubits[1]);
           } else {
-            throw std::runtime_error(std::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
+            throw std::runtime_error(fmt::format("Invalid instruction \"{}\" provided to CliffordState.evolve.", name));
           }
 				},
 				[this](const Measurement& m) { 

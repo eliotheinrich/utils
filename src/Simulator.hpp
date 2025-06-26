@@ -1,7 +1,6 @@
 #pragma once
 
 #include <random>
-#include <format>
 #include <iostream>
 
 #include <Frame.h>
@@ -16,10 +15,10 @@ struct Color {
 };
 
 template <>
-struct std::formatter<Color> : std::formatter<std::string> {
-  auto format(Color c, format_context& ctx) const {
-    return formatter<string>::format(
-      std::format("{}, {}, {}, {}", c.r, c.g, c.b, c.w), ctx);
+struct fmt::formatter<Color> : fmt::formatter<std::string> {
+  auto format(const Color& c, fmt::format_context& ctx) const {
+    return fmt::formatter<std::string>::format(
+      fmt::format("{}, {}, {}, {}", c.r, c.g, c.b, c.w), ctx);
   }
 };
 
