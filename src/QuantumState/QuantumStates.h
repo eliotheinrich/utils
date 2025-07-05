@@ -124,7 +124,10 @@ class QuantumState : public EntanglementEntropyState, public std::enable_shared_
     DEFINE_TWO_QUBIT_GATE(swap, SWAP);
 
     void random_clifford(const Qubits& qubits) {
-      random_clifford_impl(qubits, *this);
+      Qubits qubits_ = argsort(qubits);
+      QuantumCircuit qc(qubits.size());
+      random_clifford_impl(qubits_, qc);
+      evolve(qc, qubits);
     }
 
 		virtual void evolve(const Eigen::MatrixXcd& gate) {
@@ -302,6 +305,15 @@ class DensityMatrix : public MagicQuantumState {
 			QuantumState::evolve(circuit); 
 		}
 
+		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
+      if (circuit.is_unitary() && qubits.size() < 4) {
+        Eigen::MatrixXcd matrix = circuit.to_matrix();
+        evolve(matrix, qubits);
+      } else {
+        QuantumState::evolve(circuit, qubits);
+      }
+    }
+
 		double mzr_prob(uint32_t q, bool outcome) const;
 		bool mzr(uint32_t q);
     bool forced_mzr(uint32_t q, bool outcome);
@@ -369,6 +381,15 @@ class Statevector : public MagicQuantumState {
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
+
+		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
+      if (circuit.is_unitary() && qubits.size() < 4) {
+        Eigen::MatrixXcd matrix = circuit.to_matrix();
+        evolve(matrix, qubits);
+      } else {
+        QuantumState::evolve(circuit, qubits);
+      }
+    }
 
 		double mzr_prob(uint32_t q, bool outcome) const;
 		bool mzr(uint32_t q);
@@ -451,6 +472,15 @@ class MatrixProductState : public MagicQuantumState {
 		virtual void evolve(const QuantumCircuit& circuit) override { 
 			QuantumState::evolve(circuit); 
 		}
+
+		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
+      if (circuit.is_unitary() && qubits.size() < 4) {
+        Eigen::MatrixXcd matrix = circuit.to_matrix();
+        evolve(matrix, qubits);
+      } else {
+        QuantumState::evolve(circuit, qubits);
+      }
+    }
 
 		virtual std::vector<double> probabilities() const override;
 

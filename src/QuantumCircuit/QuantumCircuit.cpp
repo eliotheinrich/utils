@@ -1,8 +1,9 @@
 #include "QuantumCircuit.h"
-#include "PauliString.hpp"
-#include <assert.h>
+#include "Clifford.hpp"
 
 #include <fmt/format.h>
+
+#include <set>
 
 std::string QuantumCircuit::to_string() const {
 	std::string s = "";
@@ -80,18 +81,24 @@ uint32_t QuantumCircuit::length() const {
   return instructions.size();
 }
 
-bool QuantumCircuit::contains_measurement() const {
+bool QuantumCircuit::is_unitary() const {
   for (auto const &inst : instructions) {
-    if (inst.index() == 1) {
-      return true;
+    bool valid = std::visit(quantumcircuit_utils::overloaded {
+			[](std::shared_ptr<Gate> gate) -> uint32_t { return true; },
+			[](const Measurement &m) -> uint32_t { return false; },
+			[](const WeakMeasurement& m) -> uint32_t { return false; }
+		}, inst);
+
+    if (!valid) {
+      return false;
     }
   }
 
-  return false;
+  return true;
 }
 
 void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
-  for (auto inst : instructions) {
+  for (auto& inst : instructions) {
 		std::visit(quantumcircuit_utils::overloaded {
 			[&qubits](std::shared_ptr<Gate> gate) {
         Qubits _qubits(gate->num_qubits);
@@ -120,6 +127,53 @@ void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
 		}, inst);
   }
 }
+
+Qubits QuantumCircuit::get_support() const {
+  std::set<uint32_t> support;
+
+  for (auto const& inst : instructions) {
+		std::visit(quantumcircuit_utils::overloaded {
+      [&](const std::shared_ptr<Gate> gate) { 
+        for (const uint32_t q : gate->qubits) {
+          support.insert(q);
+        }
+      },
+      [&](const Measurement& m) { 
+        for (const uint32_t q : m.qubits) {
+          support.insert(q);
+        }
+      },
+      [&](const WeakMeasurement& m) {
+        for (const uint32_t q : m.qubits) {
+          support.insert(q);
+        }
+      }
+    }, inst);
+  }
+
+  Qubits support_(support.begin(), support.end());
+
+  return support_;
+}
+
+std::pair<QuantumCircuit, Qubits> QuantumCircuit::reduce() const {
+  Qubits support = get_support();
+  Qubits reduced_support = argsort(support);
+  Qubits map(num_qubits);
+  for (size_t i = 0; i < support.size(); i++) {
+    map[support[i]] = reduced_support[i];
+  }
+
+  std::cout << fmt::format("support = {}, reduced_support = {}, map = {}\n", support, reduced_support, map);
+  QuantumCircuit qc(*this);
+  std::cout << "Before applying qubit map:\n" << qc.to_string();
+  qc.apply_qubit_map(map);
+  std::cout << "After applying qubit map:\n" << qc.to_string();
+  qc.resize(support.size());
+  std::cout << "After resizing:\n" << qc.to_string();
+  return {qc, support};
+}
+
 
 void QuantumCircuit::validate_instruction(const Instruction& inst) const {
   size_t num_qubits = this->num_qubits;
@@ -318,6 +372,50 @@ QuantumCircuit QuantumCircuit::conjugate(const QuantumCircuit& other) const {
   qc.append(*this);
   qc.append(other.adjoint());
   return qc;
+}
+
+std::vector<QuantumCircuit> QuantumCircuit::split_into_unitary_components() const {
+  std::vector<QuantumCircuit> components;
+
+  if (instructions.size() == 0) {
+    return components;
+  }
+
+  auto is_unitary = [](const Instruction& inst) {
+    return std::visit(quantumcircuit_utils::overloaded {
+      [](std::shared_ptr<Gate> gate) { return true; },
+      [](const Measurement& m) { return false; },
+      [](const WeakMeasurement& m) { return false; }
+    }, inst);
+  };
+
+  bool on_unitary_section = is_unitary(instructions[0]);
+  QuantumCircuit qc(num_qubits);
+  for (const auto& inst : instructions) {
+    if (on_unitary_section) {
+      if (is_unitary(inst)) {
+        qc.add_instruction(inst);
+      } else {
+        components.push_back(qc);
+        qc = QuantumCircuit(num_qubits);
+        qc.add_instruction(inst);
+        on_unitary_section = false;
+      }
+    } else {
+      if (is_unitary(inst)) {
+        components.push_back(qc);
+        qc = QuantumCircuit(num_qubits);
+        qc.add_instruction(inst);
+        on_unitary_section = true;
+      } else {
+        qc.add_instruction(inst);
+      }
+    }
+  }
+
+  components.push_back(qc);
+
+  return components;
 }
 
 Eigen::MatrixXcd QuantumCircuit::to_matrix(const std::optional<std::vector<double>>& params_opt) const {

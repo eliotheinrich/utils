@@ -255,44 +255,15 @@ class SymbolicGate : public Gate {
       }
     }
 
-    Eigen::MatrixXcd to_data(SymbolicGate::GateLabel g) const {
-      switch (g) {
-        case SymbolicGate::GateLabel::H:
-          return gates::H::value;
-        case SymbolicGate::GateLabel::X:
-          return gates::X::value;
-        case SymbolicGate::GateLabel::Y:
-          return gates::Y::value;
-        case SymbolicGate::GateLabel::Z:
-          return gates::Z::value;
-        case SymbolicGate::GateLabel::sqrtX:
-          return gates::sqrtX::value;
-        case SymbolicGate::GateLabel::sqrtY:
-          return gates::sqrtY::value;
-        case SymbolicGate::GateLabel::S:
-          return gates::sqrtZ::value;
-        case SymbolicGate::GateLabel::sqrtXd:
-          return gates::sqrtXd::value;
-        case SymbolicGate::GateLabel::sqrtYd:
-          return gates::sqrtYd::value;
-        case SymbolicGate::GateLabel::Sd:
-          return gates::sqrtZd::value;
-        case SymbolicGate::GateLabel::T:
-          return gates::T::value;
-        case SymbolicGate::GateLabel::Td:
-          return gates::Td::value;
-        case SymbolicGate::GateLabel::CX:
-          return gates::CX::value;
-        case SymbolicGate::GateLabel::CY:
-          return gates::CY::value;
-        case SymbolicGate::GateLabel::CZ:
-          return gates::CZ::value;
-        case SymbolicGate::GateLabel::SWAP:
-          return gates::SWAP::value;
-        default:
-          return gates::I::value;
+    static Eigen::MatrixXcd process_gate_data(const Eigen::MatrixXcd& data) {
+      if (data.rows() == data.cols()) {
+        return data;
+      } else {
+        return data.asDiagonal();
       }
     }
+
+    static const std::unordered_map<SymbolicGate::GateLabel, Eigen::MatrixXcd> gate_map;
 
   public:
     SymbolicGate::GateLabel type;
@@ -323,7 +294,7 @@ class SymbolicGate : public Gate {
         throw std::invalid_argument("Cannot pass parameters to SymbolicGate.");
       }
 
-      return to_data(type);
+      return gate_map.at(type);
     }
 
     virtual std::shared_ptr<Gate> adjoint() const override {
@@ -660,8 +631,6 @@ static std::shared_ptr<Gate> parse_gate(const std::string& s, const Qubits& qubi
   }
 }
 
-class PauliString;
-
 struct Measurement {
   Qubits qubits;
   std::optional<PauliString> pauli;
@@ -687,7 +656,7 @@ struct WeakMeasurement {
   bool get_outcome() const;
 };
 
-typedef std::variant<std::shared_ptr<Gate>, Measurement, WeakMeasurement> Instruction;
+using Instruction = std::variant<std::shared_ptr<Gate>, Measurement, WeakMeasurement>;
 
 static Instruction copy_instruction(const Instruction& inst) {
   return std::visit(quantumcircuit_utils::overloaded {

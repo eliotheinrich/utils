@@ -42,7 +42,7 @@ class QuantumCircuit {
     uint32_t num_params() const;
     uint32_t length() const;
 
-    bool contains_measurement() const;
+    bool is_unitary() const;
     bool is_clifford() const;
 
     template <typename... QuantumStates>
@@ -56,7 +56,21 @@ class QuantumCircuit {
       }(), ...);
     }
 
+    template <typename... QuantumStates>
+    void apply(const Qubits& qubits, QuantumStates&... states) const {
+      ([&] {
+       if constexpr (std::is_same_v<std::decay_t<QuantumStates>, QuantumCircuit>) {
+         states.append(*this, qubits);
+       } else {
+         states.evolve(*this, qubits);
+       }
+      }(), ...);
+    }
+
     void apply_qubit_map(const Qubits& qubits);
+
+    Qubits get_support() const;
+    std::pair<QuantumCircuit, Qubits> reduce() const;
 
     void validate_instruction(const Instruction& inst) const;
 
@@ -162,6 +176,8 @@ class QuantumCircuit {
     QuantumCircuit adjoint(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
     QuantumCircuit reverse() const;
     QuantumCircuit conjugate(const QuantumCircuit& other) const;
+
+    std::vector<QuantumCircuit> split_into_unitary_components() const;
 
     Eigen::MatrixXcd to_matrix(const std::optional<std::vector<double>>& params_opt = std::nullopt) const;
 };

@@ -170,11 +170,9 @@ void randomize_state_clifford(size_t depth, QuantumStates&... states) {
       uint32_t q2 = q1 + 1;
 
       QuantumCircuit rc = random_clifford(2);
-      qc.append(random_clifford(2), {q1, q2});
+      rc.apply({q1, q2}, states...);
     }
   }
-
-  qc.apply(states...);
 }
 
 Qubits random_qubits(size_t num_qubits, size_t k) {
@@ -231,6 +229,37 @@ bool test_statevector() {
     } else {
       ASSERT(is_close(d, 1.0));
     }
+  }
+
+  return true;
+}
+
+bool test_qc_reduce() {
+  constexpr size_t nqb = 10;
+  QuantumCircuit qc(nqb);
+  auto qubits = random_qubits(nqb, 4);
+  PauliString p = PauliString::randh(4);
+  qc.h(0);
+  qc.h(5);
+  qc.add_measurement(qubits, p);
+  qc.cx(0, 2);
+  qc.swap(6, 2);
+  qc.x(1);
+  Qubits support = qc.get_support();
+
+  std::cout << "Full: \n";
+  std::cout << qc.to_string() << "\n";
+  fmt::format("support = {}\n", support);
+
+  auto [qc_, support_] = qc.reduce();
+
+  std::cout << "Reduced: \n";
+  std::cout << qc_.to_string() << "\n";
+  fmt::format("support_ = {}\n", support_);
+
+  auto components = qc.split_into_unitary_components();
+  for (auto circuit : components) {
+    std::cout << "circuit = \n" << circuit.to_string() << "\n";
   }
 
   return true;
@@ -1897,6 +1926,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);
+  ADD_TEST(test_qc_reduce);
   //ADD_TEST(test_extended_majorana_state);
 
 

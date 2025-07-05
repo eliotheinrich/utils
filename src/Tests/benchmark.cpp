@@ -179,6 +179,45 @@ void benchmark_clifford_circuit() {
   }
 }
 
+void benchmark_clifford_circuit_sv() {
+  constexpr uint32_t nqb = 18;
+
+  Statevector psi(nqb);
+
+  for (size_t i = 0; i < nqb; i++) {
+    for (uint32_t q = 0; q < nqb/2; q++) {
+      Qubits qubits;
+      if (i % 2) {
+        qubits = {2*q, 2*q + 1};
+      } else {
+        qubits = {2*q + 1, (2*q + 2) % nqb};
+      }
+      
+      psi.random_clifford(qubits);
+    }
+  }
+}
+
+void benchmark_clifford_circuit_mps() {
+  constexpr uint32_t nqb = 18;
+
+  MatrixProductState mps(nqb, 32);
+
+  for (size_t i = 0; i < nqb; i++) {
+    for (uint32_t q = 0; q < nqb/2; q++) {
+      Qubits qubits;
+      if (i % 2) {
+        qubits = {2*q, 2*q + 1};
+      } else {
+        qubits = {2*q + 1, (2*q + 2) % nqb};
+      }
+      
+      mps.random_clifford(qubits);
+    }
+  }
+}
+
+
 #define DO_BENCHMARK(x)                                                           \
 if (run_all || benchmarks.contains(#x)) {                                         \
   auto start = std::chrono::high_resolution_clock::now();                         \
@@ -205,6 +244,8 @@ int main(int argc, char *argv[]) {
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy);
   DO_BENCHMARK(benchmark_stabilizer_renyi_entropy_montecarlo);
   DO_BENCHMARK(benchmark_clifford_circuit);
+  DO_BENCHMARK(benchmark_clifford_circuit_sv);
+  DO_BENCHMARK(benchmark_clifford_circuit_mps);
 
   if (benchmarks_results.size() == 0) {
     std::cout << "No benchmarks to run.\n";

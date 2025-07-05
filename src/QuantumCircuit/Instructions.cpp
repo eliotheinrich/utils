@@ -1,6 +1,25 @@
 #include "Instructions.hpp"
 #include "PauliString.hpp"
 
+const std::unordered_map<SymbolicGate::GateLabel, Eigen::MatrixXcd> SymbolicGate::gate_map = {
+  { SymbolicGate::GateLabel::H,      process_gate_data(gates::H::value)},
+  { SymbolicGate::GateLabel::X,      process_gate_data(gates::X::value)},
+  { SymbolicGate::GateLabel::Y,      process_gate_data(gates::Y::value)},
+  { SymbolicGate::GateLabel::Z,      process_gate_data(gates::Z::value)},
+  { SymbolicGate::GateLabel::sqrtX,  process_gate_data(gates::sqrtX::value)},
+  { SymbolicGate::GateLabel::sqrtY,  process_gate_data(gates::sqrtY::value)},
+  { SymbolicGate::GateLabel::S,      process_gate_data(gates::sqrtZ::value)},
+  { SymbolicGate::GateLabel::sqrtXd, process_gate_data(gates::sqrtXd::value)},
+  { SymbolicGate::GateLabel::sqrtYd, process_gate_data(gates::sqrtYd::value)},
+  { SymbolicGate::GateLabel::Sd,     process_gate_data(gates::sqrtZd::value)},
+  { SymbolicGate::GateLabel::T,      process_gate_data(gates::T::value)},
+  { SymbolicGate::GateLabel::Td,     process_gate_data(gates::Td::value)},
+  { SymbolicGate::GateLabel::CX,     process_gate_data(gates::CX::value)},
+  { SymbolicGate::GateLabel::CY,     process_gate_data(gates::CY::value)},
+  { SymbolicGate::GateLabel::CZ,     process_gate_data(gates::CZ::value)},
+  { SymbolicGate::GateLabel::SWAP,   process_gate_data(gates::SWAP::value)},
+};
+
 Measurement::Measurement(const Qubits& qubits, std::optional<PauliString> pauli, std::optional<bool> outcome)
 : qubits(qubits), pauli(pauli), outcome(outcome) {
   PauliString p = pauli ? pauli.value() : PauliString("+Z");

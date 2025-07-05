@@ -126,3 +126,14 @@ static bool support_contiguous(const QubitSupport& support) {
     }
   }, support);
 }
+
+template <typename T>
+std::vector<uint32_t> argsort(const std::vector<T>& vec) {
+  std::vector<uint32_t> inds(vec.size());
+  std::iota(inds.begin(), inds.end(), 0);
+  std::sort(inds.begin(), inds.end(), [&](size_t i, size_t j) {
+    return vec[i] < vec[j];
+  });
+
+  return inds;
+}

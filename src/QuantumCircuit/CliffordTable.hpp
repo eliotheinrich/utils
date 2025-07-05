@@ -1,7 +1,6 @@
 #pragma once
 
-#include "PauliString.hpp"
-#include "QuantumCircuit.h"
+#include "Clifford.hpp"
 
 class CliffordTable {
   private:
@@ -70,10 +69,15 @@ class CliffordTable {
 
     template <typename... Args>
     void apply_random(const Qubits& qubits, Args&... args) {
-      auto [X, Z, r2] = circuits[randi() % circuits.size()];
+      //auto [X, Z, r2] = circuits[randi() % circuits.size()];
+      //QuantumCircuit qc(2);
 
-      reduce_paulis(X, Z, qubits, args...);
-      (single_qubit_clifford_impl(args, qubits[0], r2), ...);
+      //reduce_paulis(X, Z, qubits, args...);
+      //(single_qubit_clifford_impl(args, qubits[0], r2), ...);
+
+      uint32_t r = randi(0, circuits.size());
+      QuantumCircuit qc = get_circuit(r);
+      qc.apply(qubits, args...);
     } 
 };
 

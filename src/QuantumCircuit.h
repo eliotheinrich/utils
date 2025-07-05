@@ -5,3 +5,4 @@
 #include "QuantumCircuit/CircuitUtils.h"
 #include "QuantumCircuit/PauliString.hpp"
 #include "QuantumCircuit/CliffordTable.hpp"
+#include "QuantumCircuit/Clifford.hpp"

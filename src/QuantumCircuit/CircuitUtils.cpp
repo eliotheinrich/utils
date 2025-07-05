@@ -93,9 +93,9 @@ Eigen::MatrixXcd random_real_unitary() {
   double st2 = std::sin(t2);
 
   u << ct1*ct2, ct1*st2, ct2*st1,-st1*st2,
-    -ct1*st2, ct1*ct2,-st1*st2,-ct2*st1,
-    -ct2*st1,-st1*st2, ct1*ct2,-ct1*st2,
-    st1*st2,-ct2*st1,-ct1*st2,-ct1*ct2;
+      -ct1*st2, ct1*ct2,-st1*st2,-ct2*st1,
+      -ct2*st1,-st1*st2, ct1*ct2,-ct1*st2,
+       st1*st2,-ct2*st1,-ct1*st2,-ct1*ct2;
 
   return u;
 }
