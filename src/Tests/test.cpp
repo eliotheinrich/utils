@@ -16,7 +16,7 @@
 using namespace dataframe;
 using namespace dataframe::utils;
 
-#define MPS_DEBUG_LEVEL 2
+#define MPS_DEBUG_LEVEL 1
 
 #define GET_MACRO(_1, _2, NAME, ...) NAME
 #define ASSERT(...) GET_MACRO(__VA_ARGS__, ASSERT_TWO_ARGS, ASSERT_ONE_ARG)(__VA_ARGS__)
@@ -352,8 +352,23 @@ bool test_weak_measure() {
   return true;
 }
 
+bool test_mps_orthogonality() {
+  constexpr size_t nqb = 16;
+  MatrixProductState mps(nqb, 4);
+  mps.set_debug_level(1);
+  double beta = 0.8;
+  for (size_t i = 0; i < 100; i++) {
+    randomize_state_haar(mps);
+    for (size_t j = 0; j < nqb; j++) {
+      mps.weak_measure(WeakMeasurement({j}, beta, PauliString("+Z")));
+    }
+  }
+
+  return true;
+}
+
 bool test_mps_vs_statevector() {
-  constexpr size_t nqb = 6;
+  constexpr size_t nqb = 8;
 
   Statevector psi(nqb);
   MatrixProductState mps(nqb, 1u << nqb);
@@ -719,9 +734,14 @@ bool test_z2_clifford() {
   CliffordTable tXX(XX_sym);
   CliffordTable tZZ(ZZ_sym);
 
-  MatrixProductState state(nqb, 1u << nqb);
-  state.set_debug_level(MPS_DEBUG_LEVEL);
-  randomize_state_haar(state);
+  CliffordTable<Eigen::MatrixXcd> tXX_(XX_sym);
+  CliffordTable<Eigen::MatrixXcd> tZZ_(ZZ_sym);
+
+  MatrixProductState mps(nqb, 1u << nqb);
+  MatrixProductState mps_(nqb, 1u << nqb);
+  mps.set_debug_level(MPS_DEBUG_LEVEL);
+  mps_.set_debug_level(MPS_DEBUG_LEVEL);
+  randomize_state_haar(mps, mps_);
 
   std::string sx, sz;
   for (size_t i = 0; i < nqb; i++) {
@@ -733,17 +753,37 @@ bool test_z2_clifford() {
   PauliString Tz(sz);
 
   for (size_t i = 0; i < 1000; i++) {
-    uint32_t q = randi() % (nqb - 1);
-    double tz1 = state.expectation(Tz).real();
-    tZZ.apply_random({q, q+1}, state);
-    double tz2 = state.expectation(Tz).real();
-    ASSERT(is_close_eps(1e-5, tz1, tz2), fmt::format("Expectation of {} changed from {} to {}", Tz, tz1, tz2));
+    uint32_t q = randi(0, nqb-1);
 
-    q = randi() % (nqb - 1);
-    double tx1 = state.expectation(Tx).real();
-    tXX.apply_random({q, q+1}, state);
-    double tx2 = state.expectation(Tx).real();
-    ASSERT(is_close_eps(1e-5, tx1, tx2), fmt::format("Expectation of {} changed from {} to {}", Tx, tx1, tx2));
+    int s = randi();
+
+    Random::seed_rng(s);
+    double tz1 = mps.expectation(Tz).real();
+    tZZ.apply_random({q, q+1}, mps);
+    double tz2 = mps.expectation(Tz).real();
+
+    Random::seed_rng(s);
+    double tz1_ = mps_.expectation(Tz).real();
+    tZZ_.apply_random({q, q+1}, mps_);
+    double tz2_ = mps_.expectation(Tz).real();
+
+    ASSERT(is_close_eps(1e-5, tz1, tz2, tz1_, tz2_), fmt::format("Expectation of {} changed from {} to {} ({} to {}).", Tz, tz1, tz2, tz1_, tz2_));
+
+    q = randi(0, nqb-1);
+
+    s = randi();
+
+    Random::seed_rng(s);
+    double tx1 = mps.expectation(Tx).real();
+    tXX.apply_random({q, q+1}, mps);
+    double tx2 = mps.expectation(Tx).real();
+
+    Random::seed_rng(s);
+    double tx1_ = mps_.expectation(Tx).real();
+    tXX_.apply_random({q, q+1}, mps_);
+    double tx2_ = mps_.expectation(Tx).real();
+
+    ASSERT(is_close_eps(1e-5, tx1, tx2, tx1_, tx2_), fmt::format("Expectation of {} changed from {} to {} ({} to {})", Tx, tx1, tx2, tx1_, tx2_));
   }
   
   return true;
@@ -1891,6 +1931,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_statevector);
   ADD_TEST(test_measure);
   ADD_TEST(test_weak_measure);
+  ADD_TEST(test_mps_orthogonality);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
   ADD_TEST(test_mpo_expectation);

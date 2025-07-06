@@ -285,6 +285,7 @@ void Statevector::evolve(const Eigen::MatrixXcd &gate, const Qubits& qubits) {
   }
 
   data = ndata;
+  normalize();
 }
 
 void Statevector::evolve(const Eigen::MatrixXcd &gate) {
@@ -293,6 +294,7 @@ void Statevector::evolve(const Eigen::MatrixXcd &gate) {
   }
 
   data = gate*data;
+  normalize();
 }
 
 void Statevector::evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) {
@@ -307,22 +309,12 @@ void Statevector::evolve_diagonal(const Eigen::VectorXcd& gate, const Qubits& qu
     throw std::invalid_argument("Invalid gate dimensions for provided qubits.");
   }
 
-  //  uint32_t b1 = quantumstate_utils::reduce_bits(a1, qubits);
-
-  //  for (uint32_t b2 = 0; b2 < h; b2++) {
-  //    uint32_t a2 = a1;
-  //    for (uint32_t j = 0; j < qubits.size(); j++) {
-  //      a2 = quantumstate_utils::set_bit(a2, qubits[j], b2, j);
-  //    }
-
-  //    ndata(a1) += gate(b1, b2)*data(a2);
-  //  }
-
-
   for (uint32_t a = 0; a < basis; a++) {
     uint32_t b = quantumstate_utils::reduce_bits(a, qubits);
     data(a) *= gate(b);
   }
+
+  normalize();
 }
 
 void Statevector::evolve_diagonal(const Eigen::VectorXcd& gate) {
@@ -333,6 +325,7 @@ void Statevector::evolve_diagonal(const Eigen::VectorXcd& gate) {
   for (uint32_t a = 0; a < basis; a++) {
     data(a) *= gate(a);
   }
+  normalize();
 }
 
 double Statevector::norm() const {
@@ -362,19 +355,6 @@ void Statevector::fix_gauge() {
 
   data = data/a;
 }
-
-//double Statevector::probabilities(uint32_t z, const Qubits& qubits) const {
-//  uint32_t s = 1u << num_qubits;
-//  double p = 0.;
-//  for (uint32_t i = 0; i < s; i++) {
-//
-//    if (quantumstate_utils::bits_congruent(i, z, qubits)) {
-//      p += std::pow(std::abs(data(i)), 2);
-//    }
-//  }
-//
-//  return p;
-//}
 
 std::map<uint32_t, double> Statevector::probabilities_map() const {
   std::vector<double> probs = probabilities();

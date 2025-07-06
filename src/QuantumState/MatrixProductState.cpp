@@ -679,6 +679,7 @@ class MatrixProductStateImpl {
     }
 
     void left_orthogonalize(uint32_t q) {
+      //std::cout << fmt::format("Called right_orthogonalize({})\n", q);
       while (left_ortho_lim < q) {
         svd_bond(left_ortho_lim++, nullptr, false);
         if (left_ortho_lim > right_ortho_lim) {
@@ -688,6 +689,7 @@ class MatrixProductStateImpl {
     }
 
     void right_orthogonalize(uint32_t q) {
+      //std::cout << fmt::format("Called right_orthogonalize({})\n", q);
       while (right_ortho_lim > q) {
         svd_bond(--right_ortho_lim, nullptr, false);
         if (right_ortho_lim < left_ortho_lim) {
@@ -697,6 +699,7 @@ class MatrixProductStateImpl {
     }
 
     void orthogonalize(size_t q) {
+      //std::cout << fmt::format("Called orthogonalize({}). lims = ({}, {}))\n", q, left_ortho_lim, right_ortho_lim);
       if (orthogonality_level == 0) {
         return;
       }
@@ -705,17 +708,30 @@ class MatrixProductStateImpl {
         throw std::runtime_error(fmt::format("Cannot move orthogonality center of state with {} qubits to site {}\n", num_qubits, q));
       }
 
+      //std::string s1 = fmt::format("Before calling orthogonalize({}): \n{}\n", q, print_orthogonal_sites());
+
       left_orthogonalize(q);
       right_orthogonalize(q);
+
+      //std::string s2 = fmt::format("After calling orthogonalize({}): \n{}\n", q, print_orthogonal_sites());
+
+      //assert_state_valid(fmt::format("Error after calling orthogonalize({}). \n{}\n{}\n", q, s1, s2));
     }
 
     void orthogonalize(size_t q1, size_t q2) {
+      //std::cout << fmt::format("Called orthogonalize({}, {}). lims = ({}, {}))\n", q1, q2, left_ortho_lim, right_ortho_lim);
       if (orthogonality_level == 0) {
         return;
       }
       
+      //std::string s1 = fmt::format("Before calling orthogonalize({}, {}): \n{}\n", q1, q2, print_orthogonal_sites());
+
       left_orthogonalize(q1);
       right_orthogonalize(q2 - 1);
+
+      //std::string s2 = fmt::format("After calling orthogonalize({}, {}): \n{}\n", q1, q2, print_orthogonal_sites());
+
+      //assert_state_valid(fmt::format("Error after calling orthogonalize({}, {}). \n{}\n{}\n", q1, q2, s1, s2));
     }
 
     bool is_orthogonal() const {
@@ -1358,6 +1374,7 @@ class MatrixProductStateImpl {
     }
 
     void svd_bond(uint32_t q, ITensor* T=nullptr, bool truncate=true) {
+      //std::cout << fmt::format("Called svd_bond({})\n", q);
       size_t q1 = q;
       size_t q2 = q + 1;
 
@@ -1486,7 +1503,6 @@ class MatrixProductStateImpl {
       std::stringstream stream;
       stream << "Error after applying gate \n" << gate << fmt::format("\n to qubits ({}, {}).", q1_, q2_);
       assert_state_valid(stream.str());
-
     }
 
     void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) {

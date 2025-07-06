@@ -105,7 +105,7 @@ class Tableau {
     }
 
     // Put tableau into reduced row echelon form
-    void rref(const std::vector<uint32_t>& sites) {
+    void rref(const Qubits& sites) {
       uint32_t r1 = track_destabilizers ? num_qubits : 0;
       uint32_t r2 = num_rows();
 
@@ -144,7 +144,65 @@ class Tableau {
       }
     }
 
-    uint32_t rank(const std::vector<uint32_t>& sites) {
+    void xrref(const Qubits& sites) {
+      uint32_t r1 = track_destabilizers ? num_qubits : 0;
+      uint32_t r2 = num_rows();
+
+      uint32_t pivot_row = 0;
+      uint32_t row = r1;
+
+      for (uint32_t k = 0; k < 2*sites.size(); k++) {
+        uint32_t c = sites[k % sites.size()];
+        bool z = k < sites.size();
+        bool found_pivot = false;
+        for (uint32_t i = row; i < r2; i++) {
+          if (!z && rows[i].get_x(c)) {
+            pivot_row = i;
+            found_pivot = true;
+            break;
+          }
+        }
+
+        if (found_pivot) {
+          std::swap(rows[row], rows[pivot_row]);
+
+          for (uint32_t i = r1; i < r2; i++) {
+            if (i == row) {
+              continue;
+            }
+
+            if (!z && rows[i].get_x(c)) {
+              rowsum(i, row);
+            }
+          }
+
+          row += 1;
+        } else {
+          continue;
+        }
+      }
+    }
+
+    uint32_t xrank(const Qubits& sites) {
+      xrref(sites);
+
+      uint32_t r1 = track_destabilizers ? num_qubits : 0;
+      uint32_t r2 = num_rows();
+
+      uint32_t r = 0;
+      for (uint32_t i = r1; i < r2; i++) {
+        for (uint32_t j = 0; j < sites.size(); j++) {
+          if (rows[i].get_x(sites[j])) {
+            r++;
+            break;
+          }
+        }
+      }
+
+      return r;
+    }
+
+    uint32_t rank(const Qubits& sites) {
       rref(sites);
 
       uint32_t r1 = track_destabilizers ? num_qubits : 0;
@@ -312,7 +370,7 @@ class Tableau {
 
     // Returns a pair containing (1) wether the outcome of a measurement on qubit a is deterministic
     // and (2) the index on which the CHP algorithm performs rowsum if the mzr is random
-    std::pair<bool, uint32_t> mzr_deterministic(uint32_t a) {
+    std::pair<bool, uint32_t> mzr_deterministic(uint32_t a) const {
       if (!track_destabilizers) {
         throw std::invalid_argument("Cannot check mzr_deterministic without track_destabilizers.");
       }

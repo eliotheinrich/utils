@@ -35,6 +35,23 @@ NB_MODULE(qutils_bindings, m) {
     .def("__rmul__", &PauliString::operator*)
     .def("__eq__", &PauliString::operator==)
     .def("__neq__", &PauliString::operator!=)
+    .def("__getitem__", [](PauliString& self, size_t i) {
+      if (i < self.num_qubits) {
+        bool x = self.get_x(i);
+        bool z = self.get_z(i);
+        if (x && z) {
+          return "Y";
+        } else if (x && !z) {
+          return "X";
+        } else if (!x && z) {
+          return "Z";
+        } else {
+          return "I";
+        }
+      } else {
+        throw nanobind::index_error("Invalid index.");
+      }
+    })
     .def("to_matrix", [](PauliString& self) { return self.to_matrix(); })
     .def("to_projector", [](PauliString& self) { 
       Eigen::MatrixXcd I = Eigen::MatrixXcd::Identity(1u << self.num_qubits, 1u << self.num_qubits);
@@ -160,7 +177,21 @@ NB_MODULE(qutils_bindings, m) {
     .def("partial_trace", [](MagicQuantumState& self, const Qubits& qubits) { return std::dynamic_pointer_cast<MagicQuantumState>(self.partial_trace(qubits)); })
     .def("expectation", [](const MagicQuantumState& self, const PauliString& pauli) { return self.expectation(pauli); })
     .def("expectation", [](const MagicQuantumState& self, const BitString& bits, std::optional<Qubits> support) { return self.expectation(bits, support); }, "bits"_a, "support"_a = nanobind::none())
-    .def("probabilities", [](MagicQuantumState& self) { return to_nbarray(self.probabilities()); } )
+    .def("probabilities", [](const MagicQuantumState& self) { return to_nbarray(self.probabilities()); } )
+    .def("marginal_probabilities", [](const MagicQuantumState& self, const std::vector<Qubits>& qubits) {
+      std::vector<QubitSupport> supports;
+      for (const auto& q : qubits) {
+        supports.push_back(q);
+      }
+      return self.marginal_probabilities(supports);
+    })
+    .def("partial_probabilities", [](const MagicQuantumState& self, const std::vector<Qubits>& qubits) {
+      std::vector<QubitSupport> supports;
+      for (const auto& q : qubits) {
+        supports.push_back(q);
+      }
+      return self.partial_probabilities(supports);
+    })
     .def("purity", &MagicQuantumState::purity)
     .def("mzr", [](MagicQuantumState& self, uint32_t q, std::optional<bool> outcome) {
       return self.measure(Measurement::computational_basis(q, outcome));
@@ -216,6 +247,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("inner", &Statevector::inner)
     .def("expectation_m", [](Statevector& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](Statevector& self, const QuantumCircuit& qc) { self.evolve(qc); })
+    .def("evolve", [](Statevector& self, const QuantumCircuit& qc, const Qubits& qubits) { self.evolve(qc, qubits); })
     .def("evolve", [](Statevector& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](Statevector& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
@@ -229,6 +261,7 @@ NB_MODULE(qutils_bindings, m) {
     .def_ro("data", &DensityMatrix::data)
     .def("expectation_matrix", [](DensityMatrix& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc) { self.evolve(qc); })
+    .def("evolve", [](DensityMatrix& self, const QuantumCircuit& qc, const Qubits& qubits) { self.evolve(qc, qubits); })
     .def("evolve", [](DensityMatrix& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](DensityMatrix& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
@@ -253,6 +286,7 @@ NB_MODULE(qutils_bindings, m) {
     .def("conjugate", &MatrixProductState::conjugate)
     .def("inner", &MatrixProductState::inner)
     .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc) { self.evolve(qc); })
+    .def("evolve", [](MatrixProductState& self, const QuantumCircuit& qc, const Qubits& qubits) { self.evolve(qc, qubits); })
     .def("evolve", [](MatrixProductState& self, const Eigen::Matrix2cd& gate, uint32_t q) { self.evolve(gate, q); })
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
@@ -365,8 +399,22 @@ NB_MODULE(qutils_bindings, m) {
     .def("get_x", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.get_x(i, j); })
     .def("get_z", [](QuantumCHPState& self, size_t i, size_t j) { return self.tableau.get_z(i, j); })
     .def("tableau", [](QuantumCHPState& self) { return self.tableau.to_matrix(); })
-    .def("partial_rank", &QuantumCHPState::partial_rank)
     .def("evolve", [](QuantumCHPState& self, const QuantumCircuit& circuit) { circuit.apply(self); })
+    .def("evolve", [](QuantumCHPState& self, const QuantumCircuit& circuit, const Qubits& qubits) { circuit.apply(qubits, self); })
+    .def("stabilizers", [](const QuantumCHPState& self) { return self.stabilizers(); })
+    .def("__getitem__", [](const QuantumCHPState& self, size_t i) { 
+        if (i < self.size()) {
+          return self.get_row(i); 
+        } else {
+          throw nanobind::index_error("Index out of bounds.");
+        }
+    })
+    .def("mzr_deterministic", [](const QuantumCHPState& self, size_t i) {
+      auto [det, _] = self.tableau.mzr_deterministic(i);
+      return det;
+    })
+    .def("rank", [](QuantumCHPState& self, const Qubits& qubits) { return self.partial_rank(qubits); })
+    .def("xrank", [](QuantumCHPState& self, const Qubits& qubits) { return self.partial_xrank(qubits); })
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
     .def("s", [](QuantumCHPState& self, uint32_t q) { self.s(q); })
     .def("sd", [](QuantumCHPState& self, uint32_t q) { self.sd(q); })
@@ -410,8 +458,8 @@ NB_MODULE(qutils_bindings, m) {
       return {std::vector<float>{data, data + texture.len()}, texture.n, texture.m};
     });
 
-  nanobind::class_<CliffordTable>(m, "CliffordTable")
-    .def("__init__", [](CliffordTable *t, const std::vector<PauliString>& p1, const std::vector<PauliString>& p2) {
+  nanobind::class_<CliffordTable<QuantumCircuit>>(m, "CliffordTable")
+    .def("__init__", [](CliffordTable<QuantumCircuit> *t, const std::vector<PauliString>& p1, const std::vector<PauliString>& p2) {
         if (p1.size() != p2.size()) {
           throw std::runtime_error("Mismatched length of PauliStrings in filter function for CliffordTable.");
         }
@@ -428,11 +476,11 @@ NB_MODULE(qutils_bindings, m) {
 
           return true;
         };
-        new (t) CliffordTable(filter); 
+        new (t) CliffordTable<QuantumCircuit>(filter); 
     })
-    .def("circuits", &CliffordTable::get_circuits)
-    .def("num_elements", &CliffordTable::num_elements)
-    .def("random_circuit", [](CliffordTable& self) {
+    .def("circuits", &CliffordTable<QuantumCircuit>::get_circuits)
+    .def("num_elements", &CliffordTable<QuantumCircuit>::num_elements)
+    .def("random_circuit", [](CliffordTable<QuantumCircuit>& self) {
       QuantumCircuit qc(2);
       self.apply_random({0, 1}, qc);
       return qc;

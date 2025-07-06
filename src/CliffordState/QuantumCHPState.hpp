@@ -98,6 +98,19 @@ class QuantumCHPState : public CliffordState {
       tableau.h(b);
     }
 
+    PauliString get_row(size_t i) const {
+      return tableau.rows[i];
+    }
+
+    std::vector<PauliString> stabilizers() const {
+      std::vector<PauliString> stabs(tableau.rows.begin() + num_qubits, tableau.rows.end() - 1);
+      return stabs;
+    }
+
+    size_t size() const {
+      return tableau.rows.size() - 1;
+    }
+
     virtual void random_clifford(const Qubits& qubits) override {
       random_clifford_impl(qubits, *this);
     }
@@ -144,6 +157,22 @@ class QuantumCHPState : public CliffordState {
       return static_cast<double>(s);
     }
 
+    int xrank() {
+      Qubits qubits(num_qubits);
+      std::iota(qubits.begin(), qubits.end(), 0);
+      return tableau.xrank(qubits);
+    }
+
+    int partial_xrank(const Qubits& qubits) {
+      return tableau.xrank(qubits);
+    }
+
+    int rank() {
+      Qubits qubits(num_qubits);
+      std::iota(qubits.begin(), qubits.end(), 0);
+      return tableau.rank(qubits);
+    }
+
     int partial_rank(const Qubits& qubits) {
       return tableau.rank(qubits);
     }
@@ -154,6 +183,16 @@ class QuantumCHPState : public CliffordState {
 
     void set_z(size_t i, size_t j, bool v) {
       tableau.set_z(i, j, v);
+    }
+
+    double participation_entropy() const {
+      //int s = 0;
+      //for (size_t i = 0; i < num_qubits; i++) {
+      //  PauliString p(num_qubits);
+      //  p.set_z(i, 1);
+      //  if 
+
+      //}
     }
 
     std::vector<dataframe::byte_t> serialize() const;
