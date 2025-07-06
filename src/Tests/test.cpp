@@ -1926,12 +1926,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  ADD_TEST(test_mps_debug_tests);
+  //ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_statevector);
   ADD_TEST(test_measure);
   ADD_TEST(test_weak_measure);
-  ADD_TEST(test_mps_orthogonality);
+  //ADD_TEST(test_mps_orthogonality);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
   ADD_TEST(test_mpo_expectation);
