@@ -359,7 +359,7 @@ bool test_mps_orthogonality() {
   double beta = 0.8;
   for (size_t i = 0; i < 100; i++) {
     randomize_state_haar(mps);
-    for (size_t j = 0; j < nqb; j++) {
+    for (uint32_t j = 0; j < nqb; j++) {
       mps.weak_measure(WeakMeasurement({j}, beta, PauliString("+Z")));
     }
   }

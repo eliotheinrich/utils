@@ -184,65 +184,6 @@ ITensor projection_tensor(bool z, Index i1, Index i2) {
   }
 }
 
-void swap_tags(Index& idx1, Index& idx2) {
-  IndexSet idxs = {idx1, idx2};
-  auto new_idxs = swapTags(idxs, idx1.tags(), idx2.tags());
-  idx1 = new_idxs[0];
-  idx2 = new_idxs[1];
-}
-
-template <typename T1, typename T2, typename... Args>
-void swap_tags(Index& idx1, Index& idx2, T1& first, T2& second, Args&... args) {
-  auto tags1 = idx1.tags();
-  auto tags2 = idx2.tags();
-
-  first.swapTags(tags1, tags2);
-  second.swapTags(tags2, tags1);
-
-  if constexpr (sizeof...(args) == 0) {
-    swap_tags(idx1, idx2);
-  } else {
-    swap_tags(idx1, idx2, args...);
-  }
-}
-
-template <typename T1, typename T2, typename... Args>
-void swap_tags_(const Index& idx1, const Index& idx2, T1& first, T2& second, Args&... args) {
-  auto tags1 = idx1.tags();
-  auto tags2 = idx2.tags();
-
-  first.swapTags(tags1, tags2);
-  second.swapTags(tags2, tags1);
-
-  if constexpr (sizeof...(args) == 0) {
-    return;
-  } else {
-    swap_tags(idx1, idx2, args...);
-  }
-}
-
-template <typename... Tensors>
-void match_indices(const std::string& tags, const ITensor& base, Tensors&... tensors) {
-  const auto idx = noPrime(findInds(base, tags)[0]);
-  auto do_match = [&idx, &tags](ITensor& tensor) {
-    auto like_indices = findInds(tensor, tags);
-    for (const auto idx_ : like_indices) {
-      tensor.replaceInds({idx_}, {prime(idx, primeLevel(idx_))});
-    }
-  };
-
-  auto do_match_wrapper = [&do_match](ITensor& tensor) {
-    try {
-      do_match(tensor);
-    } catch (const ITError& error) {
-      tensor = toDense(tensor);
-      do_match(tensor);
-    }
-  };
-
-  (do_match_wrapper(tensors), ...);
-}
-
 bool is_bipartition(const Qubits& qubitsA, const Qubits& qubitsB, size_t num_qubits) {
   std::vector<bool> mask(num_qubits, false);
   for (const uint32_t q : qubitsA) {
@@ -308,7 +249,7 @@ class MatrixProductStateImpl {
     ~MatrixProductStateImpl()=default;
 
     MatrixProductStateImpl(uint32_t num_qubits, uint32_t bond_dimension, double sv_threshold) 
-      : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(num_qubits - 1), right_ortho_lim(0),
+      : num_qubits(num_qubits), bond_dimension(bond_dimension), sv_threshold(sv_threshold), left_ortho_lim(0), right_ortho_lim(0),
         debug_level(0), orthogonality_level(1) {
         if (sv_threshold < 1e-15) {
           throw std::runtime_error("sv_threshold must be finite ( > 0) or else the MPS may be numerically unstable.");
@@ -638,9 +579,9 @@ class MatrixProductStateImpl {
     }
 
     void left_orthogonalize(uint32_t q) {
-      //std::cout << fmt::format("Called right_orthogonalize({})\n", q);
+      std::cout << fmt::format("Called left_orthogonalize({})\n", q);
       while (left_ortho_lim < q) {
-        svd_bond(left_ortho_lim++, nullptr, false, InternalDir::Left);
+        svd_bond(left_ortho_lim++, nullptr, false, InternalDir::Right);
         if (left_ortho_lim > right_ortho_lim) {
           right_ortho_lim++;
         }
@@ -648,9 +589,9 @@ class MatrixProductStateImpl {
     }
 
     void right_orthogonalize(uint32_t q) {
-      //std::cout << fmt::format("Called right_orthogonalize({})\n", q);
+      std::cout << fmt::format("Called right_orthogonalize({})\n", q);
       while (right_ortho_lim > q) {
-        svd_bond(--right_ortho_lim, nullptr, false, InternalDir::Right);
+        svd_bond(--right_ortho_lim, nullptr, false, InternalDir::Left);
         if (right_ortho_lim < left_ortho_lim) {
           left_ortho_lim--;
         }
@@ -658,7 +599,7 @@ class MatrixProductStateImpl {
     }
 
     ITensor orthogonalize(size_t q) {
-      //std::cout << fmt::format("Called orthogonalize({}). lims = ({}, {}))\n", q, left_ortho_lim, right_ortho_lim);
+      std::cout << fmt::format("Called orthogonalize({}). lims = ({}, {})\n", q, left_ortho_lim, right_ortho_lim);
       if (q > num_qubits - 1 || q < 0) {
         throw std::runtime_error(fmt::format("Cannot move orthogonality center of state with {} qubits to site {}\n", num_qubits, q));
       }
@@ -671,11 +612,11 @@ class MatrixProductStateImpl {
       //std::string s2 = fmt::format("After calling orthogonalize({}): \n{}\n", q, print_orthogonal_sites());
 
       //assert_state_valid(fmt::format("Error after calling orthogonalize({}). \n{}\n{}\n", q, s1, s2));
-      return svd_bond(q);
+      return svd_bond(q, nullptr, false, InternalDir::Right);
     }
 
     void orthogonalize(size_t q1, size_t q2) {
-      //std::cout << fmt::format("Called orthogonalize({}, {}). lims = ({}, {}))\n", q1, q2, left_ortho_lim, right_ortho_lim);
+      std::cout << fmt::format("Called orthogonalize({}, {}). lims = ({}, {}))\n", q1, q2, left_ortho_lim, right_ortho_lim);
       if (orthogonality_level == 0) {
         return;
       }
@@ -1297,13 +1238,17 @@ class MatrixProductStateImpl {
       Left, Right
     };
 
+    std::string to_string(InternalDir dir) const {
+      if (dir == InternalDir::Left) { return "Left"; } else { return "Right"; }
+    }
+
     ITensor svd_bond(uint32_t q, ITensor* T=nullptr, bool truncate=true, InternalDir dir=InternalDir::Left) {
-      //std::cout << fmt::format("Called svd_bond({})\n", q);
+      std::cout << fmt::format("Called svd_bond({}, {})\n", q, to_string(dir));
+      std::cout << fmt::format("{}\n", print_orthogonal_sites());
       size_t q1 = q;
       size_t q2 = q + 1;
 
-      ITensor theta = tensors[q1];
-      theta *= tensors[q2];
+      ITensor theta = tensors[q1] * tensors[q2];
       if (T) {
         theta = noPrime(theta * (*T));
       }
@@ -1331,7 +1276,7 @@ class MatrixProductStateImpl {
 
       std::string left_tags = fmt::format("tmp,Internal,n={}", q1);
       std::string right_tags = fmt::format("Internal,n={}", q1);
-      if (dir = InternalDir::Right) {
+      if (dir = InternalDir::Left) {
         std::swap(left_tags, right_tags);
       }
 
@@ -1355,25 +1300,24 @@ class MatrixProductStateImpl {
       }
       S /= std::sqrt(d);
 
-      auto inv = [&](Real r) { 
-        if (r > sv_threshold) {
-          return 1.0/r;
-        } else {
-          return 0.0;
-        }
-      };
+      // SHOULD BE IDENTITY
+      PrintData(U * conj(prime(U, commonIndex(U, S))));
+      PrintData(V * conj(prime(V, commonIndex(V, S))));
 
-      if (dir = InternalDir::Left) {
+      if (dir = InternalDir::Right) {
         U *= S;
       } else {
         V *= S;
       }
 
-      internal_indices[q1]   = commonIndex(U, V);
+      internal_indices[q1] = commonIndex(U, V);
+      tensors[q1] = U;
+      tensors[q2] = V;
 
-      tensors[q1]         = U;
-      tensors[q2]         = V;
+      //PrintData(U * conj(prime(U, commonIndex(U, S))));
+      //PrintData(V * conj(prime(V, commonIndex(V, S))));
 
+      std::cout << fmt::format("{}\n", print_orthogonal_sites());
       return S;
     }
 
@@ -1389,6 +1333,7 @@ class MatrixProductStateImpl {
     }
 
     void evolve(const Eigen::Matrix4cd& gate, uint32_t q1_, uint32_t q2_) {
+      std::cout << fmt::format("Called evolve on {}, {}\n", q1_, q2_);
       uint32_t q1 = std::min(q1_, q2_);
       uint32_t q2 = std::max(q1_, q2_);
 
@@ -1422,9 +1367,10 @@ class MatrixProductStateImpl {
         {i1,        i2}
       );
 
+      std::cout << fmt::format("About to call svd_bond from evolve\n");
       svd_bond(q1, &gate_tensor);
       set_left_ortho_lim(q1);
-      set_right_ortho_lim(q1);
+      set_right_ortho_lim(q1+1);
 
       std::stringstream stream;
       stream << "Error after applying gate \n" << gate << fmt::format("\n to qubits ({}, {}).", q1_, q2_);
@@ -1795,23 +1741,25 @@ class MatrixProductStateImpl {
 
     // ======================================= DEBUG FUNCTIONS ======================================= //
     ITensor orthogonality_tensor_r(uint32_t q) const {
-      ITensor A_l = tensors[q];
+      ITensor A = tensors[q];
       Index left_index = left_boundary_index;
       if (q != 0) {
         left_index = internal_idx(q - 1);
       }
 
-      return A_l * conj(prime(A_l, left_index));
+      ITensor I = A * conj(prime(A, left_index));
+      return I;
     }
 
     ITensor orthogonality_tensor_l(uint32_t q) const {
-      ITensor A_r = tensors[q];
+      ITensor A = tensors[q];
       Index right_index = right_boundary_index;
       if (q != num_qubits - 1) {
         right_index = internal_idx(q);
       }
       
-      return A_r * conj(prime(A_r, right_index));
+      ITensor I = A * conj(prime(A, right_index));
+      return I;
     }
 
     std::string print_orthogonal_sites() const {
