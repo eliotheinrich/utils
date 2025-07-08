@@ -617,10 +617,6 @@ class MatrixProductStateImpl {
     }
 
     void orthogonalize(size_t q1, size_t q2) {
-      if (orthogonality_level == 0) {
-        return;
-      }
-
       left_orthogonalize(q1);
       right_orthogonalize(q2 - 1);
     }
