@@ -432,6 +432,9 @@ class MatrixProductState : public MagicQuantumState {
     MatrixProductState(const std::unique_ptr<MatrixProductStateImpl>& impl);
     MatrixProductState& operator=(const MatrixProductState& other);
 
+    void set_left_ortho_lim(uint32_t q);
+    void set_right_ortho_lim(uint32_t q);
+
     static MatrixProductState ising_ground_state(size_t num_qubits, double h, size_t max_bond_dimension=64, double sv_threshold=1e-8, size_t num_sweeps=10);
 
 		virtual std::string to_string() const override;

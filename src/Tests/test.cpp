@@ -247,20 +247,9 @@ bool test_qc_reduce() {
   qc.x(1);
   Qubits support = qc.get_support();
 
-  std::cout << "Full: \n";
-  std::cout << qc.to_string() << "\n";
-  fmt::format("support = {}\n", support);
-
   auto [qc_, support_] = qc.reduce();
 
-  std::cout << "Reduced: \n";
-  std::cout << qc_.to_string() << "\n";
-  fmt::format("support_ = {}\n", support_);
-
   auto components = qc.split_into_unitary_components();
-  for (auto circuit : components) {
-    std::cout << "circuit = \n" << circuit.to_string() << "\n";
-  }
 
   return true;
 }
@@ -301,8 +290,38 @@ bool test_measure() {
     PauliString P_exp = PauliString::randh(nqb);
     std::complex<double> c1 = rho.expectation(P_exp);
     std::complex<double> c2 = p0 * psi0.expectation(P_exp) + p1 * psi1.expectation(P_exp);
-    std::complex<double> c3 = p0 * mps0.expectation(P_exp) + p1 * mps1.expectation(P_exp);
+    std::complex<double> c3 = p0 * mps0.expectation(P_exp) + p1 * mps1.expectation(P_exp); 
     ASSERT(is_close(c1, c2, c3), fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i, c3 = {:.3f} + {:.3f}i are not close for P = {}", c1.real(), c1.imag(), c2.real(), c2.imag(), c3.real(), c3.imag(), P_exp));
+  }
+
+  return true;
+}
+
+
+bool test_measure_simple() {
+  constexpr size_t nqb = 8;
+  Statevector psi(nqb);
+  MatrixProductState mps(nqb, 1u << nqb);
+
+  for (size_t i = 0; i < 10; i++) {
+    randomize_state_haar(psi, mps);
+  }
+
+  PauliString P = PauliString::randh(nqb);
+
+  Qubits qubits(nqb);
+  std::iota(qubits.begin(), qubits.end(), 0);
+
+
+  bool outcome = true;
+  psi.measure(Measurement(qubits, P, outcome));
+  mps.measure(Measurement(qubits, P, outcome));
+
+  for (size_t i = 0; i < 10; i++) {
+    PauliString P_exp = PauliString::randh(nqb);
+    std::complex<double> c1 = mps.expectation(P_exp);
+    std::complex<double> c2 = psi.expectation(P_exp);
+    ASSERT(is_close_eps(1e-3, c1, c2), fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i are not close for P = {}", c1.real(), c1.imag(), c2.real(), c2.imag(), P_exp));
   }
 
   return true;
@@ -392,8 +411,14 @@ bool test_mps_vs_statevector() {
     auto e1 = psi.get_entanglement<double>(index);
     auto e2 = mps.get_entanglement<double>(index);
 
+    PauliString p = PauliString::randh(nqb);
+
+    auto c1 = psi.expectation(p);
+    auto c2 = mps.expectation(p);
+
 
     ASSERT(is_close_eps(1e-4, s1, s2), fmt::format("Entanglement does not match! s1 = {}, s2 = {}", s1, s2));
+    ASSERT(is_close_eps(1e-4, c1, c2), fmt::format("Pauli expectation does not match! s1 = {}, s2 = {}", s1, s2));
     ASSERT(states_close(psi, mps), "States do not match!");
   }
 
@@ -1157,9 +1182,9 @@ bool test_participation_entropy_sampling() {
   ExperimentParams params3 = params;
   MPSParticipationSampler sampler3(params3);
 
+
   for (size_t k = 0; k < 5; k++) {
     randomize_state_haar(*psi.get(), *mps.get());
-
     SampleMap samples1;
     sampler1.add_samples(samples1, psi);
 
@@ -1826,7 +1851,6 @@ bool test_free_fermion_state() {
     std::vector<double> s1 = psi.get_entanglement(index);
     std::vector<double> s2 = fermion_state.get_entanglement(index);
     std::vector<double> s3 = majorana_state.get_entanglement(index);
-    //std::cout << fmt::format("s = \n{::.5f}\n{::.5f}\n{::.5f}\n", s1, s2, s3);
 
     for (size_t i = 0; i < nqb; i++) {
       ASSERT(is_close(s1[i], s2[i], s3[i]), fmt::format("Entanglement {} at {} is not equal: \n{::.5f}\n{::.5f}\n{::.5f}", index, i, s1, s2, s3));
@@ -1926,12 +1950,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  //ADD_TEST(test_mps_debug_tests);
+  ADD_TEST(test_mps_debug_tests);
   ADD_TEST(test_nonlocal_mps);
   ADD_TEST(test_statevector);
   ADD_TEST(test_measure);
   ADD_TEST(test_weak_measure);
-  //ADD_TEST(test_mps_orthogonality);
   ADD_TEST(test_mps_vs_statevector);
   ADD_TEST(test_mps_expectation);
   ADD_TEST(test_mpo_expectation);
@@ -1969,6 +1992,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_free_fermion_state);
   ADD_TEST(test_qc_reduce);
   //ADD_TEST(test_extended_majorana_state);
+  ADD_TEST(test_measure_simple);
 
 
 
