@@ -1,7 +1,7 @@
 #pragma once
 
+#include "QuantumState.h"
 #include "QuantumCircuit.h"
-#include "EntanglementEntropyState.hpp"
 #include "Random.hpp"
 
 #include <algorithm>
@@ -18,15 +18,15 @@ static inline CliffordType parse_clifford_type(std::string s) {
   }
 }
 
-class CliffordState : public EntanglementEntropyState {
+class CliffordState : public QuantumState {
   public:
     size_t num_qubits;
     CliffordState()=default;
 
-    CliffordState(uint32_t num_qubits) : EntanglementEntropyState(num_qubits), num_qubits(num_qubits) {}
+    CliffordState(uint32_t num_qubits) : QuantumState(num_qubits), num_qubits(num_qubits) {}
     virtual ~CliffordState() {}
 
-    void evolve(const QuantumCircuit& qc, const Qubits& qubits) {
+    virtual void evolve(const QuantumCircuit& qc, const Qubits& qubits) override {
       if (qubits.size() != qc.get_num_qubits()) {
         throw std::runtime_error("Provided qubits do not match size of circuit.");
       }
@@ -38,7 +38,7 @@ class CliffordState : public EntanglementEntropyState {
       evolve(qc_mapped);
     }
 
-    void evolve(const QuantumCircuit& qc) {
+    virtual void evolve(const QuantumCircuit& qc) override {
       if (!qc.is_clifford()) {
         throw std::runtime_error("Provided circuit is not Clifford.");
       }
@@ -48,7 +48,7 @@ class CliffordState : public EntanglementEntropyState {
 			}
     }
 
-		void evolve(const Instruction& inst) {
+		virtual void evolve(const Instruction& inst) override {
 			std::visit(quantumcircuit_utils::overloaded{
 				[this](std::shared_ptr<Gate> gate) { 
           std::string name = gate->label();
@@ -78,17 +78,17 @@ class CliffordState : public EntanglementEntropyState {
           }
 				},
 				[this](const Measurement& m) { 
-          if (!m.is_basis()) {
-            throw std::runtime_error("Currently, can only perform measurements in computational basis on Clifford states.");
-          }
-
-          mzr(m.qubits[0]);
+          measure(m);
 				},
         [this](const WeakMeasurement& m) {
           throw std::runtime_error("Cannot perform weak measurements on Clifford states.");
         }
 			}, inst);
 		}
+
+    virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) override {
+      throw std::runtime_error("Cannot evolve arbitrary gate on Clifford state.");
+    }
 
     virtual void h(uint32_t a)=0;
 
@@ -188,7 +188,8 @@ class CliffordState : public EntanglementEntropyState {
       cx(c, d);
     }
 
-    virtual double mzr_expectation(uint32_t a)=0;
+    virtual double mzr_expectation(uint32_t a) const=0;
+
     virtual double mzr_expectation() {
       double e = 0.0;
 
@@ -233,27 +234,129 @@ class CliffordState : public EntanglementEntropyState {
       return e/num_qubits;
     }
 
-    virtual bool mzr(uint32_t a)=0;
+    virtual bool mzr(uint32_t a, std::optional<bool> outcome=std::nullopt)=0;
 
-    virtual bool mxr(uint32_t a) {
+    virtual bool mxr(uint32_t a, std::optional<bool> outcome=std::nullopt) {
       h(a);
-      bool outcome = mzr(a);
+      bool b = mzr(a, outcome);
       h(a);
-      return outcome;
+      return b;
     }
 
-    virtual bool myr(uint32_t a) {
+    virtual bool myr(uint32_t a, std::optional<bool> outcome=std::nullopt) {
       s(a);
       h(a);
-      bool outcome = mzr(a);
+      bool b = mzr(a, outcome);
       h(a);
       sd(a);
-      return outcome;
+      return b;
     }
-
-    virtual void random_clifford(const Qubits& qubits)=0;
 
     virtual std::string to_string() const=0;
 
     virtual double sparsity() const=0;
+
+    virtual bool measure(const Measurement& m) override {
+      if (m.is_basis()) {
+        return mzr(m.qubits[0]);
+      } else {
+        QuantumCircuit qc(m.qubits.size());
+        auto args = std::make_pair(&qc, m.qubits);
+        m.pauli.value().reduce(true, std::make_pair(&qc, m.qubits));
+
+        uint32_t q = std::ranges::min(m.qubits);
+
+        evolve(qc, m.qubits);
+        bool outcome = mzr(q, m.outcome);
+        evolve(qc.adjoint(), m.qubits);
+
+        return outcome;
+      }
+    }
+
+    virtual bool weak_measure(const WeakMeasurement& m) override {
+      throw std::runtime_error("Cannot call a weak measurement on a Clifford state.");
+    }
+
+    // TODO there is a bug in the sign of expectations. Fix it.
+    virtual std::complex<double> expectation(const PauliString& pauli) const {
+      QuantumCircuit qc(num_qubits);
+      Qubits qubits(num_qubits);
+      std::iota(qubits.begin(), qubits.end(), 0);
+      uint32_t q = std::ranges::min(qubits);
+
+      //PauliString p = pauli;
+      //pauli.reduce(true, std::make_pair(&qc, qubits), std::make_pair(&p, qubits));
+      //std::cout << fmt::format("After reduction p = {}\n", p);
+      pauli.reduce(true, std::make_pair(&qc, qubits));
+
+      auto self = const_cast<CliffordState*>(this);
+      self->evolve(qc);
+      double exp = self->mzr_expectation(q);
+      self->evolve(qc.adjoint());
+      //std::cout << fmt::format("p = {}\n", pauli);
+      //std::cout << fmt::format("exp = {:.5f}\n", exp);
+      //std::cout << fmt::format("sign = {:.5f} + {:.5f}i\n", pauli.sign().real(), pauli.sign().imag());
+      return pauli.sign() * std::complex<double>(exp, 0.0);
+    }
+
+    virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const override {
+      throw std::runtime_error("Not yet implemented!");
+    }
+
+    // TEST THIS
+    virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
+      if (num_qubits > 15) {
+        throw std::runtime_error("Cannot sample bitstrings for Clifford state with n > 15 qubits.");
+      }
+
+      std::vector<double> probs = probabilities();
+      auto marginal_probs = marginal_probabilities(supports);
+
+      std::discrete_distribution<> dist(probs.begin(), probs.end()); 
+      std::minstd_rand rng(randi());
+
+      std::vector<BitAmplitudes> samples;
+
+      for (size_t i = 0; i < num_samples; i++) {
+        size_t z = dist(rng);
+        BitString bits = BitString::from_bits(z, num_qubits);
+        std::vector<double> amplitudes = {probs[z]};
+        for (size_t n = 0; n < supports.size(); n++) {
+          amplitudes[n-1] = marginal_probs[n][z];
+        }
+
+        samples.push_back({bits, amplitudes});
+      }
+
+      return samples;
+    }
+
+		virtual std::vector<double> probabilities() const {
+      if (num_qubits > 15) {
+        throw std::runtime_error("Cannot generate probabilities for Clifford state with n > 15 qubits.");
+      }
+
+      size_t b = 1u << num_qubits;
+      std::vector<double> probs(b);
+      for (size_t i = 0; i < b; i++) {
+        double p = 1.0;
+        for (size_t q = 0; q < num_qubits; q++) {
+          if (std::abs(mzr_expectation(q)) < 1e-5) {
+            p *= 0.5;
+          }
+        }
+        probs[i] = p;
+      }
+
+      return probs;
+    }
+
+    virtual double purity() const override {
+      return 1.0;
+    }
+
+    virtual std::shared_ptr<QuantumState> partial_trace(const Qubits& qubits) const override {
+      throw std::runtime_error("Cannot evaluate partial_trace on Clifford states.");
+    }
 };

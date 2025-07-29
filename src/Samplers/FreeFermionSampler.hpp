@@ -25,7 +25,9 @@ class FreeFermionSampler {
         }
       }
 
-      dataframe::utils::emplace(samples, "correlations", correlations);
+      std::vector<size_t> shape = {L};
+      auto data = dataframe::utils::samples_to_dataobject(correlations, shape);
+      dataframe::utils::emplace(samples, "correlations", std::move(data));
     }
 
     void take_samples(dataframe::SampleMap& samples, std::shared_ptr<AmplitudeFermionState>& state) {

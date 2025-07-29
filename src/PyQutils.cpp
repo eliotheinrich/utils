@@ -177,7 +177,10 @@ NB_MODULE(qutils_bindings, m) {
     .def("partial_trace", [](MagicQuantumState& self, const Qubits& qubits) { return std::dynamic_pointer_cast<MagicQuantumState>(self.partial_trace(qubits)); })
     .def("expectation", [](const MagicQuantumState& self, const PauliString& pauli) { return self.expectation(pauli); })
     .def("expectation", [](const MagicQuantumState& self, const BitString& bits, std::optional<Qubits> support) { return self.expectation(bits, support); }, "bits"_a, "support"_a = nanobind::none())
-    .def("probabilities", [](const MagicQuantumState& self) { return to_nbarray(self.probabilities()); } )
+    .def("probabilities", [](const MagicQuantumState& self) { 
+      std::vector<size_t> shape = {self.basis};
+      return to_ndarray(self.probabilities(), shape); 
+    })
     .def("marginal_probabilities", [](const MagicQuantumState& self, const std::vector<Qubits>& qubits) {
       std::vector<QubitSupport> supports;
       for (const auto& q : qubits) {
@@ -277,9 +280,20 @@ NB_MODULE(qutils_bindings, m) {
     .def("set_debug_level", &MatrixProductState::set_debug_level)
     .def("set_orthogonality_level", &MatrixProductState::set_orthogonality_level)
     .def("bond_dimension_at_site", &MatrixProductState::bond_dimension)
-    .def("singular_values", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.singular_values(q)); })
-    .def("tensor", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.tensor(q)); })
-    .def("get_logged_truncerr", [](MatrixProductState& self, uint32_t q) { return to_nbarray(self.get_logged_truncerr()); })
+    .def("singular_values", [](MatrixProductState& self, uint32_t q) { 
+      std::vector<double> singular_values = self.singular_values(q);
+      std::vector<size_t> shape = {singular_values.size()};
+      return to_ndarray(singular_values, shape);
+    }) 
+    .def("tensor", [](MatrixProductState& self, uint32_t q) { 
+      auto [shape, tensor] = self.tensor(q);
+      return to_ndarray(tensor, shape); 
+    })
+    .def("get_logged_truncerr", [](MatrixProductState& self, uint32_t q) { 
+      std::vector<double> truncerr = self.get_logged_truncerr();
+      std::vector<size_t> shape = {truncerr.size()};
+      return to_ndarray(truncerr, shape); 
+    })
     .def("trace", &MatrixProductState::trace)
     .def("expectation_matrix", [](MatrixProductState& self, const Eigen::MatrixXcd& m, const std::vector<uint32_t>& qubits) { return self.expectation(m, qubits); })
     .def("concatenate", &MatrixProductState::concatenate)
@@ -297,7 +311,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<EntropySampler>(m, "EntropySampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      EntropySampler sampler(params);
+      auto sampler = std::make_shared<EntropySampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntanglementEntropyState> state) {
@@ -309,7 +323,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<InterfaceSampler>(m, "InterfaceSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      InterfaceSampler sampler(params);
+      auto sampler = std::make_shared<InterfaceSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](InterfaceSampler& sampler, const std::vector<int>& surface) {
@@ -321,7 +335,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<QuantumStateSampler>(m, "QuantumStateSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      QuantumStateSampler sampler(params);
+      auto sampler = std::make_shared<QuantumStateSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](QuantumStateSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
@@ -334,7 +348,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<GenericParticipationSampler>(m, "GenericParticipationSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      GenericParticipationSampler sampler(params);
+      auto sampler = std::make_shared<GenericParticipationSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](GenericParticipationSampler& sampler, const std::shared_ptr<MagicQuantumState>& state) {
@@ -347,7 +361,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<MPSParticipationSampler>(m, "MPSParticipationSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      MPSParticipationSampler sampler(params);
+      auto sampler = std::make_shared<MPSParticipationSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](MPSParticipationSampler& sampler, const std::shared_ptr<MatrixProductState>& state) {
@@ -359,7 +373,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<GenericMagicSampler>(m, "GenericMagicSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      GenericMagicSampler sampler(params);
+      auto sampler = std::make_shared<GenericMagicSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("set_sre_montecarlo_update", [](GenericMagicSampler& self, PyMutationFunc func) {
@@ -375,7 +389,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<MPSMagicSampler>(m, "MPSMagicSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      MPSMagicSampler sampler(params);
+      auto sampler = std::make_shared<MPSMagicSampler>(params);
       return std::make_pair(sampler, params);
     })
     .def("take_samples", [](MPSMagicSampler& sampler, const std::shared_ptr<MatrixProductState>& state) {
@@ -431,6 +445,10 @@ NB_MODULE(qutils_bindings, m) {
     .def("cy", [](QuantumCHPState& self, uint32_t q1, uint32_t q2) { self.cy(q1, q2); })
     .def("cz", [](QuantumCHPState& self, uint32_t q1, uint32_t q2) { self.cz(q1, q2); })
     .def("swap", [](QuantumCHPState& self, uint32_t q1, uint32_t q2) { self.swap(q1, q2); })
+    .def("measure", [](QuantumCHPState& self, const Qubits& qubits, const PauliString& pauli, std::optional<bool> outcome) { 
+      return self.expectation(pauli); 
+    }, "qubits"_a, "pauli"_a, "outcome"_a=std::nullopt)
+    .def("expectation", [](QuantumCHPState& self, const PauliString& pauli) { return self.expectation(pauli); })
     .def("mxr", [](QuantumCHPState& self, uint32_t q) { return self.mxr(q); })
     .def("myr", [](QuantumCHPState& self, uint32_t q) { return self.myr(q); })
     .def("mzr", [](QuantumCHPState& self, uint32_t q) { return self.mzr(q); })

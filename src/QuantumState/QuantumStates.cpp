@@ -103,7 +103,7 @@ double renyi_entropy(size_t index, const std::vector<double>& probs, double base
   double s = 0.0;
   if (index == 1) {
     for (auto p : probs) {
-      if (p > 1e-6) {
+      if (p > 1e-14) {
         s += p * log(p, base);
       }
     }
@@ -136,13 +136,18 @@ double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, 
   }
 }
 
-double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base) {
+double estimate_mutual_renyi_entropy(size_t index, const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base) {
   size_t N = samplesAB.size();
 
-  double p = 0.0;
-  for (size_t i = 0; i < N; i++) {
-    p += log(samplesAB[i] / (samplesA[i] * samplesB[i]), base);
+  if (index == 1) {
+    double p = 0.0;
+    for (size_t i = 0; i < N; i++) {
+      p += log(samplesAB[i] / (samplesA[i] * samplesB[i]), base);
+    }
+    return p/N;
+  } else {
+    for (size_t i = 0; i < N; i++) {
+      return estimate_renyi_entropy(index, samplesA, 2) + estimate_renyi_entropy(index, samplesB, 2) - estimate_renyi_entropy(index, samplesAB, 2);
+    }
   }
-
-  return p/N;
 }

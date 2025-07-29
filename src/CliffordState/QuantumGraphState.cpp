@@ -373,7 +373,7 @@ void QuantumGraphState::random_clifford(const Qubits& qubits) {
   random_clifford_impl(qubits, *this);
 }
 
-double QuantumGraphState::mzr_expectation(uint32_t a) {
+double QuantumGraphState::mzr_expectation(uint32_t a) const {
   uint32_t basis = CONJUGATION_TABLE[graph.get_val(a)];
   bool positive = basis > 3;
   if ((basis == 1) || (basis == 4)) {
@@ -386,7 +386,7 @@ double QuantumGraphState::mzr_expectation(uint32_t a) {
 }
 
 
-bool QuantumGraphState::mzr(uint32_t a) {
+bool QuantumGraphState::mzr(uint32_t a, std::optional<bool> outcome) {
   uint32_t basis = CONJUGATION_TABLE[graph.get_val(a)];
   bool positive = basis <= 3;
 
@@ -396,8 +396,13 @@ bool QuantumGraphState::mzr(uint32_t a) {
     }
   }
 
-  bool outcome = rand() % 2;
-  bool real_outcome = positive ? outcome : !outcome;
+  bool b;
+  if (outcome) {
+    b = outcome.value();
+  } else {
+    b = randi() % 2;
+  }
+  bool real_outcome = positive ? b : !b;
 
   if ((basis == 1) || (basis == 4)) {
     mxr_graph(a, real_outcome);
@@ -407,7 +412,8 @@ bool QuantumGraphState::mzr(uint32_t a) {
     mzr_graph(a, real_outcome);
   }
 
-  return outcome;
+  // TODO check for invalid forced measurements
+  return b;
 }
 
 void QuantumGraphState::toggle_edge_gate(uint32_t a, uint32_t b) {
@@ -573,3 +579,19 @@ struct glz::meta<QuantumGraphState> {
     "graph", &QuantumGraphState::graph
   );
 };
+
+std::vector<dataframe::byte_t> QuantumGraphState::serialize() const {
+  std::vector<dataframe::byte_t> bytes;
+  auto write_error = glz::write_beve(*this, bytes);
+  if (write_error) {
+    throw std::runtime_error(fmt::format("Error writing QuantumGraphState to binary: \n{}", glz::format_error(write_error, bytes)));
+  }
+  return bytes;
+}
+
+void QuantumGraphState::deserialize(const std::vector<dataframe::byte_t>& bytes) {
+  auto parse_error = glz::read_beve(*this, bytes);
+  if (parse_error) {
+    throw std::runtime_error(fmt::format("Error reading QuantumGraphState from binary: \n{}", glz::format_error(parse_error, bytes)));
+  }
+}

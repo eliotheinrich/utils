@@ -64,7 +64,10 @@ class EntropySampler {
         entanglement_samples = {state->cum_entanglement(partition_size, index)};
       }
       std::string key = "entanglement" + std::to_string(index) + "_" + std::to_string(partition_size);
-      dataframe::utils::emplace(samples, key, entanglement_samples);
+      std::vector<size_t> shape = {1};
+      std::vector<std::vector<double>> entanglement_samples_ = {entanglement_samples};
+      auto data = dataframe::utils::samples_to_dataobject(entanglement_samples_, shape);
+      dataframe::utils::emplace(samples, key, std::move(data));
     }
 
     void add_mutual_information_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
@@ -92,9 +95,12 @@ class EntropySampler {
           mutual_information_samples[idx].push_back(sample);
         }
       }
+
+      std::vector<size_t> shape = {num_eta_bins};
+      auto data = dataframe::utils::samples_to_dataobject(mutual_information_samples, shape);
       
       std::string key = "mutual_information" + std::to_string(index);
-      dataframe::utils::emplace(samples, key, mutual_information_samples);
+      dataframe::utils::emplace(samples, key, std::move(data));
     }
 
     void add_fixed_mutual_information_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
@@ -123,7 +129,6 @@ class EntropySampler {
           }
         }
 
-        // CHECK THIS
         if (spatially_average) {
           mutual_information_samples[i] = spatial_entanglement_samples(sites, index, state);
         } else {
@@ -131,7 +136,10 @@ class EntropySampler {
         }
       }
 
-      dataframe::utils::emplace(samples, "variable_mutual_information", mutual_information_samples);
+      std::vector<size_t> shape = {system_size/2};
+      auto data = dataframe::utils::samples_to_dataobject(mutual_information_samples, shape);
+
+      dataframe::utils::emplace(samples, "variable_mutual_information", std::move(data));
     }
 
     void add_entanglement_all_partition_sizes(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
@@ -147,8 +155,11 @@ class EntropySampler {
         entanglement_samples[i] = s;
       }
 
+      std::vector<size_t> shape = {system_size};
+      auto data = dataframe::utils::samples_to_dataobject(entanglement_samples, shape);
+
       std::string key = "entanglement" + std::to_string(index);
-      dataframe::utils::emplace(samples, key, entanglement_samples);
+      dataframe::utils::emplace(samples, key, std::move(data));
     }
 
     void add_correlation_distance_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
@@ -170,9 +181,12 @@ class EntropySampler {
           bins[i].push_back(I);
         }
       }
+
+      std::vector<size_t> shape = {num_distance_bins};
+      auto data = dataframe::utils::samples_to_dataobject(bins, shape);
       
       std::string key = "correlation_distance" + std::to_string(index);
-      dataframe::utils::emplace(samples, key, bins);
+      dataframe::utils::emplace(samples, key, std::move(data));
     }
 
     void add_samples(dataframe::SampleMap &samples, std::shared_ptr<EntanglementEntropyState> state) {
@@ -307,7 +321,7 @@ class EntropySampler {
       return table;
     }
 
-    std::vector<double> spatial_entanglement_samples(const std::vector<uint32_t> &sites, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
+    std::vector<double> spatial_entanglement_samples(const std::vector<uint32_t>& sites, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
       uint32_t num_partitions = std::max((system_size - partition_size)/spacing, 1u);
 
       std::vector<double> samples(num_partitions);

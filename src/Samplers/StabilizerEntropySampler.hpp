@@ -7,6 +7,21 @@
 #define STABILIZER_ENTROPY_MUTUAL "stabilizer_entropy_mutual"
 #define STABILIZER_ENTROPY_BIPARTITE "stabilizer_entropy_bipartite"
 
+static inline std::vector<size_t> parse_renyi_indices(const std::string &renyi_indices_str) {
+  std::vector<size_t> indices;
+  std::stringstream ss(renyi_indices_str);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    try {
+      uint32_t number = std::stoi(dataframe::utils::strip(token));
+      indices.push_back(number);
+    } catch (const std::exception &e) {}
+  }
+
+  return indices;
+}
+
 class StabilizerEntropySampler {
   public:
     StabilizerEntropySampler(dataframe::ExperimentParams& params) {
@@ -39,21 +54,6 @@ class StabilizerEntropySampler {
     size_t stabilizer_entropy_mutual_subsystem_size;
     bool sample_stabilizer_entropy_bipartite;
 
-  private:
-    static std::vector<size_t> parse_renyi_indices(const std::string &renyi_indices_str) {
-      std::vector<size_t> indices;
-      std::stringstream ss(renyi_indices_str);
-      std::string token;
-
-      while (std::getline(ss, token, ',')) {
-        try {
-          uint32_t number = std::stoi(dataframe::utils::strip(token));
-          indices.push_back(number);
-        } catch (const std::exception &e) {}
-      }
-
-      return indices;
-    }
 };
 
 class GenericMagicSampler : public StabilizerEntropySampler {
@@ -152,13 +152,14 @@ class GenericMagicSampler : public StabilizerEntropySampler {
     }
 
     void add_mmi_samples(dataframe::SampleMap& samples, const std::vector<MutualMagicData>& data) const {
-      std::vector<std::vector<double>> tA2;
-      std::vector<std::vector<double>> tB2;
-      std::vector<std::vector<double>> tAB2;
-
-      std::vector<std::vector<double>> tA4;
-      std::vector<std::vector<double>> tB4;
-      std::vector<std::vector<double>> tAB4;
+      size_t L1 = data.size();
+      size_t L2 = data[0].first.size();
+      std::vector<double> tA2;
+      std::vector<double> tB2;
+      std::vector<double> tAB2;
+      std::vector<double> tA4;
+      std::vector<double> tB4;
+      std::vector<double> tAB4;
 
       for (auto const& [t2, t4] : data) {
         auto tAB2_ = t2[0];
@@ -169,20 +170,22 @@ class GenericMagicSampler : public StabilizerEntropySampler {
         auto tA4_ = t4[1];
         auto tB4_ = t4[2];
 
-        tA2.push_back(tA2_);
-        tB2.push_back(tB2_);
-        tAB2.push_back(tAB2_);
-        tA4.push_back(tA4_);
-        tB4.push_back(tB4_);
-        tAB4.push_back(tAB4_);
+        tA2.insert(tA2.end(), tA2_.begin(), tA2_.end());
+        tB2.insert(tB2.end(), tB2_.begin(), tB2_.end());
+        tAB2.insert(tAB2.end(), tAB2_.begin(), tAB2_.end());
+        tA4.insert(tA4.end(), tA4_.begin(), tA4_.end());
+        tB4.insert(tB4.end(), tB4_.begin(), tB4_.end());
+        tAB4.insert(tAB4.end(), tAB4_.begin(), tAB4_.end());
       }
 
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tA2", tA2);
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tB2", tB2);
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tAB2", tAB2);
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tA4", tA4);
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tB4", tB4);
-      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tAB4", tAB4);
+      std::vector<size_t> shape = {L1, L2};
+
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tA2", tA2, shape);
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tB2", tB2, shape);
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tAB2", tAB2, shape);
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tA4", tA4, shape);
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tB4", tB4, shape);
+      dataframe::utils::emplace(samples, "stabilizer_entropy_mutual_tAB4", tAB4, shape);
     }
 
     void add_stabilizer_entropy_mutual_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {

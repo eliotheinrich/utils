@@ -4,6 +4,7 @@
 #include <vector>
 #include <variant>
 #include <numeric>
+#include <algorithm>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>

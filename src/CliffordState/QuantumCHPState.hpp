@@ -9,41 +9,13 @@
 #include <glaze/glaze.hpp>
 
 class QuantumCHPState : public CliffordState {
-  private:
-    static uint32_t get_num_qubits(const std::string &s) {
-      auto substrings = dataframe::utils::split(s, "\n");
-      return substrings.size()/2;
-    }
-
-
   public:
-    Tableau tableau;
+    mutable Tableau tableau;
 
     QuantumCHPState()=default;
 
     QuantumCHPState(uint32_t num_qubits)
       : CliffordState(num_qubits), tableau(Tableau(num_qubits)) {
-    }
-
-    QuantumCHPState(const std::string &s) : CliffordState(get_num_qubits(s)) {
-      auto substrings = dataframe::utils::split(s, "\n");
-
-      tableau = Tableau(num_qubits);
-
-      for (uint32_t i = 0; i < substrings.size()-1; i++) {
-        substrings[i] = substrings[i].substr(1, substrings[i].size() - 3);
-        auto chars = dataframe::utils::split(substrings[i], " | ");
-
-        auto row = chars[0];
-        bool r = chars[1][0] == '1';
-
-        for (uint32_t j = 0; j < num_qubits; j++) {
-          tableau.set_x(i, j, row[j] == '1');
-          tableau.set_z(i, j, row[j + num_qubits] == '1');
-        }
-
-        tableau.set_r(i, r);
-      }
     }
 
     bool operator==(QuantumCHPState& other) {
@@ -115,17 +87,18 @@ class QuantumCHPState : public CliffordState {
       random_clifford_impl(qubits, *this);
     }
 
-    virtual double mzr_expectation(uint32_t a) override {
+    virtual double mzr_expectation(uint32_t a) const override {
       auto [deterministic, _] = tableau.mzr_deterministic(a);
+      Tableau tmp = tableau; // TODO do this without copying?
       if (deterministic) {
-        return 2*int(mzr(a)) - 1.0;
+        return 2*int(tmp.mzr(a)) - 1.0;
       } else {
         return 0.0;
       }
     }
 
-    virtual bool mzr(uint32_t a) override {
-      return tableau.mzr(a);
+    virtual bool mzr(uint32_t a, std::optional<bool> outcome=std::nullopt) override {
+      return tableau.mzr(a, outcome);
     }
 
     virtual double sparsity() const override {
@@ -185,18 +158,7 @@ class QuantumCHPState : public CliffordState {
       tableau.set_z(i, j, v);
     }
 
-    double participation_entropy() const {
-      //int s = 0;
-      //for (size_t i = 0; i < num_qubits; i++) {
-      //  PauliString p(num_qubits);
-      //  p.set_z(i, 1);
-      //  if 
-
-      //}
-    }
-
     std::vector<dataframe::byte_t> serialize() const;
-
     void deserialize(const std::vector<dataframe::byte_t>& bytes);
 
     Texture get_texture(Color x_color, Color z_color, Color y_color) {

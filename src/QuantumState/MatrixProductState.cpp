@@ -647,7 +647,7 @@ class MatrixProductStateImpl {
       return sv;
     }
 
-    std::vector<std::vector<std::vector<std::complex<double>>>> get_tensor(uint32_t q) {
+    std::pair<std::vector<size_t>, std::vector<std::complex<double>>> get_tensor(uint32_t q) {
       orthogonalize(q);
 
       ITensor T = tensors[q];
@@ -670,19 +670,14 @@ class MatrixProductStateImpl {
       }
       size_t d2 = dim(right_idx);
 
-      std::vector<std::vector<std::vector<std::complex<double>>>> values =
-        std::vector<std::vector<std::vector<std::complex<double>>>>(d1, 
-                     std::vector<std::vector<std::complex<double>>>(d2, 
-                                  std::vector<std::complex<double>>(2, std::complex<double>(0.0, 0.0))));
-      for (uint32_t a1 = 0; a1 < d1; a1++) {
-        for (uint32_t a2 = 0; a2 < d2; a2++) {
-          for (uint32_t i = 0; i < 2; i++) {
-            values[a1][a2][i] = eltC(T, left_idx=a1+1, right_idx=a2+1, ext=i+1);
-          }
-        }
-      }
+      auto extract_data = [](Dense<Cplx> const& d) {
+        return d.store;
+      };
 
-      return values;
+      auto vec = applyFunc(extract_data, T.store());
+      std::vector<std::complex<double>> values(vec.begin(), vec.end());
+      std::vector<size_t> shape = {dim(left_idx), dim(right_idx), 2};
+      return std::make_pair(shape, values);
     }
 
     double entanglement(uint32_t q, uint32_t index) {
@@ -1105,7 +1100,7 @@ class MatrixProductStateImpl {
       return magic;
     }
 
-    std::vector<double> process_bipartite_bit_samples(const std::vector<BitAmplitudes>& bit_samples) {
+    std::vector<std::vector<double>> process_bipartite_bit_samples(const std::vector<size_t>& renyi_indices, const std::vector<BitAmplitudes>& bit_samples) {
       int level = orthogonality_level;
       size_t N = num_qubits/2 - 1;
       size_t num_samples = bit_samples.size();
@@ -1161,9 +1156,11 @@ class MatrixProductStateImpl {
         }
       }
 
-      std::vector<double> data(N);
-      for (size_t n = 0; n < N; n++) {
-        data[n] = estimate_mutual_renyi_entropy(samplesAB[n], samplesA[n], samplesB[n], 2);
+      std::vector<std::vector<double>> data(renyi_indices.size(), std::vector<double>(N));
+      for (size_t i = 0; i < renyi_indices.size(); i++) {
+        for (size_t n = 0; n < N; n++) {
+          data[i][n] = estimate_mutual_renyi_entropy(renyi_indices[i], samplesAB[n], samplesA[n], samplesB[n], 2);
+        }
       }
 
       return data;
@@ -1282,6 +1279,12 @@ class MatrixProductStateImpl {
       if (dir == InternalDir::Right) {
         std::swap(left_tags, right_tags);
       }
+
+      // TODO can this be removed?
+      theta = apply(theta, [](Cplx c) { 
+        double mask = std::abs(c) >= 1e-14;
+        return Cplx(c.real() * mask, c.imag() * mask);
+      });
 
       auto [U, S, V] = svd(theta, u_inds, v_inds, {
         "SVDMethod=","gesvd",
@@ -1943,7 +1946,7 @@ std::vector<double> MatrixProductState::singular_values(uint32_t i) const {
   return impl->singular_values_to_vector(i);
 }
 
-std::vector<std::vector<std::vector<std::complex<double>>>> MatrixProductState::tensor(uint32_t q) const {
+std::pair<std::vector<size_t>, std::vector<std::complex<double>>> MatrixProductState::tensor(uint32_t q) const {
   return impl->get_tensor(q);
 }
 
@@ -1983,8 +1986,8 @@ std::vector<BitAmplitudes> MatrixProductState::sample_bitstrings(const std::vect
   return impl->sample_bitstrings(supports, num_samples);
 }
 
-std::vector<double> MatrixProductState::process_bipartite_bit_samples(const std::vector<BitAmplitudes>& samples) const {
-  return impl->process_bipartite_bit_samples(samples);
+std::vector<std::vector<double>> MatrixProductState::process_bipartite_bit_samples(const std::vector<size_t>& renyi_indices, const std::vector<BitAmplitudes>& samples) const {
+  return impl->process_bipartite_bit_samples(renyi_indices, samples);
 }
 
 std::vector<PauliAmplitudes> MatrixProductState::sample_paulis(const std::vector<QubitSupport>& supports, size_t num_samples) {
