@@ -387,6 +387,7 @@ NB_MODULE(qutils_bindings, m) {
   nanobind::class_<QuantumCHPState, EntanglementEntropyState>(m, "QuantumCHPState")
     .def(nanobind::init<uint32_t>())
     .def_ro("num_qubits", &QuantumCHPState::num_qubits)
+    .def("set_print_mode", &QuantumCHPState::set_print_mode)
     .def("__str__", &QuantumCHPState::to_string)
     .def("__getstate__", [](const QuantumCHPState& self) { return convert_bytes(self.serialize()); })
     .def("__setstate__", [](QuantumCHPState& self, const nanobind::bytes& bytes) { 
@@ -413,6 +414,9 @@ NB_MODULE(qutils_bindings, m) {
       auto [det, _] = self.tableau.mzr_deterministic(i);
       return det;
     })
+    .def("rowsum", [](QuantumCHPState& self, uint32_t q1, uint32_t q2) { self.tableau.rowsum(q1 + self.num_qubits, q2 + self.num_qubits); })
+    .def("rref", &QuantumCHPState::rref)
+    .def("xrref", &QuantumCHPState::xrref)
     .def("rank", [](QuantumCHPState& self, const Qubits& qubits) { return self.partial_rank(qubits); })
     .def("xrank", [](QuantumCHPState& self, const Qubits& qubits) { return self.partial_xrank(qubits); })
     .def("h", [](QuantumCHPState& self, uint32_t q) { self.h(q); })
