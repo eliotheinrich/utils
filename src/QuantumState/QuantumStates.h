@@ -19,7 +19,7 @@ class QuantumState;
       
 double renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
 double estimate_renyi_entropy(size_t index, const std::vector<double>& samples, double base=std::numbers::e);
-double estimate_mutual_renyi_entropy(const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base=std::numbers::e);
+double estimate_mutual_renyi_entropy(size_t index, const std::vector<double>& samplesAB, const std::vector<double>& samplesA, const std::vector<double>& samplesB, double base=std::numbers::e);
 
 using PauliAmplitudes = std::pair<PauliString, std::vector<double>>;
 using BitAmplitudes = std::pair<BitString, std::vector<double>>;
@@ -123,7 +123,7 @@ class QuantumState : public EntanglementEntropyState, public std::enable_shared_
     DEFINE_TWO_QUBIT_GATE(cz, CZ);
     DEFINE_TWO_QUBIT_GATE(swap, SWAP);
 
-    void random_clifford(const Qubits& qubits) {
+    virtual void random_clifford(const Qubits& qubits) {
       Qubits qubits_ = argsort(qubits);
       QuantumCircuit qc(qubits.size());
       random_clifford_impl(qubits_, qc);
@@ -441,9 +441,9 @@ class MatrixProductState : public MagicQuantumState {
 
 		virtual double entanglement(const QubitSupport& support, uint32_t index) override;
     std::vector<double> singular_values(uint32_t i) const;
-    std::vector<std::vector<std::vector<std::complex<double>>>> tensor(uint32_t q) const;
+    std::pair<std::vector<size_t>, std::vector<std::complex<double>>> tensor(uint32_t q) const;
 
-    std::vector<double> process_bipartite_bit_samples(const std::vector<BitAmplitudes>& samples) const;
+    std::vector<std::vector<double>> process_bipartite_bit_samples(const std::vector<size_t>& renyi_indices, const std::vector<BitAmplitudes>& samples) const;
     virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const override;
 
     static double calculate_magic_mutual_information_from_samples2(const std::vector<double>& tAB, const std::vector<double>& tA, const std::vector<double>& tB);

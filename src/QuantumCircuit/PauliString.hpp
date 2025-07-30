@@ -831,14 +831,14 @@ class PauliString {
     }
 
     template <typename... Args>
-    void reduce(bool z, Args... args) const {
+    void reduce(bool to_z, Args... args) const {
       PauliString p(*this);
-      p.reduce_inplace(z, args...);
+      p.reduce_inplace(to_z, args...);
     }
 
     template <typename... Args>
-    void reduce_inplace(bool z, Args... args) {
-      if (z) {
+    void reduce_inplace(bool to_z, Args... args) {
+      if (to_z) {
         h(0);
         (args.first->h(args.second[0]), ...);
       }
@@ -893,10 +893,20 @@ class PauliString {
         }
       }
 
-      if (z) {
-        // tableau is discarded after function exits, so no need to apply it here. Just add to circuit.
+      if (to_z) {
         h(0);
         (args.first->h(args.second[0]), ...);
+
+        // TODO check this for !z case
+        if (phase == 2) {
+          x(0);
+          (args.first->x(args.second[0]), ...);
+        }
+      } else {
+        if (phase == 2) {
+          z(0);
+          (args.first->z(args.second[0]), ...);
+        }
       }
     }
 

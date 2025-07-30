@@ -298,35 +298,6 @@ bool test_measure() {
 }
 
 
-bool test_measure_simple() {
-  constexpr size_t nqb = 8;
-  Statevector psi(nqb);
-  MatrixProductState mps(nqb, 1u << nqb);
-
-  for (size_t i = 0; i < 10; i++) {
-    randomize_state_haar(psi, mps);
-  }
-
-  PauliString P = PauliString::randh(nqb);
-
-  Qubits qubits(nqb);
-  std::iota(qubits.begin(), qubits.end(), 0);
-
-
-  bool outcome = true;
-  psi.measure(Measurement(qubits, P, outcome));
-  mps.measure(Measurement(qubits, P, outcome));
-
-  for (size_t i = 0; i < 10; i++) {
-    PauliString P_exp = PauliString::randh(nqb);
-    std::complex<double> c1 = mps.expectation(P_exp);
-    std::complex<double> c2 = psi.expectation(P_exp);
-    ASSERT(is_close_eps(1e-3, c1, c2), fmt::format("c1 = {:.3f} + {:.3f}i, c2 = {:.3f} + {:.3f}i are not close for P = {}", c1.real(), c1.imag(), c2.real(), c2.imag(), P_exp));
-  }
-
-  return true;
-}
-
 bool test_weak_measure() {
   constexpr size_t nqb = 6;
 
@@ -514,31 +485,63 @@ bool test_mpo_expectation() {
   return true;
 }
 
-bool test_clifford_states_unitary() {
+bool test_clifford_states() {
   constexpr size_t nqb = 6;
   QuantumCHPState chp(nqb);
-  QuantumGraphState graph(nqb);
   Statevector psi(nqb);
 
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < 100; i++) {
     QuantumCircuit qc(nqb);
     qc.append(random_clifford(nqb));
+    PauliString p = PauliString::randh(nqb);
+    Qubits qubits(nqb);
+    std::iota(qubits.begin(), qubits.end(), 0);
+    Measurement m(qubits, p, true);
 
-    // TODO include measurements
-    //for (size_t j = 0; j < 3; j++) {
-    //  size_t q = rng() % nqb;
-    //  qc.mzr(q);
-    //}
+    qc.apply(psi, chp);
+    bool b1 = psi.measure(m);
+    bool b2 = chp.measure(m);
 
-    qc.apply(psi, chp, graph);
+    Statevector psi_chp = chp.to_statevector();
 
+    ASSERT(states_close(psi, psi_chp), fmt::format("Clifford simulators disagree."));
 
+    for (size_t k = 0; k < 100; k++) {
+      PauliString P_exp = PauliString::randh(nqb);
 
-    Statevector sv_chp = chp.to_statevector();
-    //Statevector sv_graph = graph.to_statevector();
-
-    ASSERT(states_close(psi, sv_chp), fmt::format("Clifford simulators disagree."));
+      auto c1 = psi.expectation(P_exp);
+      auto c2 = chp.expectation(P_exp);
+      std::cout << fmt::format("Expectation of {} = {:.5f} + {:.5f}i, {:.5f} + {:.5f}i.\n", P_exp, c1.real(), c1.imag(), c2.real(), c2.imag());
+      ASSERT(is_close(c1, c2), fmt::format("Expectation of {} = {:.5f} + {:.5f}i, {:.5f} + {:.5f}i is not equal.", P_exp, c1.real(), c1.imag(), c2.real(), c2.imag()));
+    }
   }
+
+  return true;
+}
+
+bool test_simple() {
+  constexpr size_t nqb = 6;
+
+  QuantumCHPState chp(nqb);
+  Statevector psi(nqb);
+
+  QuantumCircuit qc(nqb);
+  qc.h(0);
+  qc.h(1);
+  qc.cx(0, 1);
+
+  Measurement m({0,1}, PauliString("ZZ"));
+
+  psi.evolve(qc);
+  chp.evolve(qc);
+
+  bool b1 = psi.measure(m);
+  bool b2 = chp.measure(m);
+
+  Statevector psi_chp = chp.to_statevector();
+  std::cout << fmt::format("outcomes = {}, {}\n", b1, b2);
+  std::cout << psi.to_string() << "\n";
+  std::cout << psi_chp.to_string() << "\n";
 
   return true;
 }
@@ -1170,6 +1173,8 @@ bool test_participation_entropy_sampling() {
   params["sample_participation_entropy_mutual"] = 1;
   params["sample_participation_entropy_bipartite"] = 1;
   params["participation_entropy_num_samples"] = 10000;
+  params["participation_entropy_indices"] = "1,2";
+  std::vector<size_t> indices = {1, 2}; 
 
   ExperimentParams params1 = params;
   params1["participation_entropy_method"] = "exhaustive";
@@ -1194,23 +1199,26 @@ bool test_participation_entropy_sampling() {
     SampleMap samples3;
     sampler3.add_samples(samples3, mps);
 
-    double W1 = samples1[PARTICIPATION_ENTROPY][0][0];
-    double W2 = samples2[PARTICIPATION_ENTROPY][0][0];
-    double W3 = samples3[PARTICIPATION_ENTROPY][0][0];
+    for (size_t i = 0; i < indices.size(); i++) {
+      size_t idx = indices[i];
+      double W1 = samples1[PARTICIPATION_ENTROPY(idx)][0][0];
+      double W2 = samples2[PARTICIPATION_ENTROPY(idx)][0][0];
+      double W3 = samples3[PARTICIPATION_ENTROPY(idx)][0][0];
 
-    ASSERT(is_close_eps(0.1, W1, W2, W3), fmt::format("PE does not match: {:.5f}, {:.5f}, {:.5f}\n", W1, W2, W3));
+      ASSERT(is_close_eps(0.1, W1, W2, W3), fmt::format("PE({}) does not match: {:.5f}, {:.5f}, {:.5f}\n", idx, W1, W2, W3));
 
-    double L1 = samples1[PARTICIPATION_ENTROPY_MUTUAL][0][0];
-    double L2 = samples2[PARTICIPATION_ENTROPY_MUTUAL][0][0];
-    double L3 = samples3[PARTICIPATION_ENTROPY_MUTUAL][0][0];
+      double L1 = samples1[PARTICIPATION_ENTROPY_MUTUAL(idx)][0][0];
+      double L2 = samples2[PARTICIPATION_ENTROPY_MUTUAL(idx)][0][0];
+      double L3 = samples3[PARTICIPATION_ENTROPY_MUTUAL(idx)][0][0];
 
-    ASSERT(is_close_eps(0.1, L1, L2, L3), fmt::format("PE mutual information does not match: {:.5f}, {:.5f}, {:.5f}\n", L1, L2, L3));
+      ASSERT(is_close_eps(0.1, L1, L2, L3), fmt::format("PE({}) mutual information does not match: {:.5f}, {:.5f}, {:.5f}\n", idx, L1, L2, L3));
 
-    std::vector<double> L1b = samples1[PARTICIPATION_ENTROPY_BIPARTITE][0];
-    std::vector<double> L2b = samples2[PARTICIPATION_ENTROPY_BIPARTITE][0];
-    std::vector<double> L3b = samples3[PARTICIPATION_ENTROPY_BIPARTITE][0];
-    for (size_t i = 0; i < nqb/2 - 1; i++) {
-      ASSERT(is_close_eps(0.1, L1b[i], L2b[i], L3b[i]), fmt::format("PE mutual bipartite information does not match: {::.5f}, {::.5f}, {::.5f}\n", L1b, L2b, L3b));
+      std::vector<double> L1b = samples1[PARTICIPATION_ENTROPY_BIPARTITE(idx)][0];
+      std::vector<double> L2b = samples2[PARTICIPATION_ENTROPY_BIPARTITE(idx)][0];
+      std::vector<double> L3b = samples3[PARTICIPATION_ENTROPY_BIPARTITE(idx)][0];
+      for (size_t i = 0; i < nqb/2 - 1; i++) {
+        ASSERT(is_close_eps(0.1, L1b[i], L2b[i], L3b[i]), fmt::format("PE({}) mutual bipartite information does not match: {::.5f}, {::.5f}, {::.5f}\n", idx, L1b, L2b, L3b));
+      }
     }
   }
 
@@ -1959,7 +1967,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_expectation);
   ADD_TEST(test_mpo_expectation);
   ADD_TEST(test_partial_trace);
-  ADD_TEST(test_clifford_states_unitary);
+  ADD_TEST(test_clifford_states);
   ADD_TEST(test_pauli_reduce);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mps_inner);
@@ -1991,8 +1999,8 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);
   ADD_TEST(test_qc_reduce);
+  ADD_TEST(test_simple);
   //ADD_TEST(test_extended_majorana_state);
-  ADD_TEST(test_measure_simple);
 
 
 

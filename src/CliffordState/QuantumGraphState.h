@@ -67,8 +67,8 @@ class QuantumGraphState : public CliffordState {
     virtual void random_clifford(const std::vector<uint32_t> &qubits) override;
 
     virtual void cz(uint32_t a, uint b) override;
-    virtual double mzr_expectation(uint32_t a) override;
-    virtual bool mzr(uint32_t a) override;
+    virtual double mzr_expectation(uint32_t a) const override;
+    virtual bool mzr(uint32_t a, std::optional<bool> outcome=std::nullopt) override;
 
     void mzr_graph(uint32_t a, bool outcome);
 
@@ -80,4 +80,7 @@ class QuantumGraphState : public CliffordState {
     virtual double entanglement(const QubitSupport &support, uint32_t index) override;
 
     virtual double sparsity() const override;
+    
+    std::vector<dataframe::byte_t> serialize() const;
+    void deserialize(const std::vector<dataframe::byte_t>& bytes);
 };

@@ -392,7 +392,7 @@ class Tableau {
       return std::pair(true, 0);
     }
 
-    bool mzr(uint32_t a) {
+    bool mzr(uint32_t a, std::optional<bool> outcome=std::nullopt) {
       validate_qubit(a);
       if (!track_destabilizers) {
         throw std::invalid_argument("Cannot mzr without track_destabilizers.");
@@ -402,7 +402,13 @@ class Tableau {
       auto [deterministic, p] = mzr_deterministic(a);
 
       if (!deterministic) {
-        bool outcome = randi() % 2;
+        bool b;
+        if (outcome) {
+          b = outcome.value();
+        } else {
+          b = randi() % 2;
+        }
+
         for (uint32_t i = 0; i < 2*num_qubits; i++) {
           if (i != p && get_x(i, a)) {
             rowsum(i, p);
@@ -412,17 +418,24 @@ class Tableau {
         std::swap(rows[p - num_qubits], rows[p]);
         rows[p] = PauliString(num_qubits);
 
-        set_r(p, outcome);
+        set_r(p, b);
         set_z(p, a, true);
 
-        return outcome;
+        return b;
       } else { // deterministic
         rows[2*num_qubits] = PauliString(num_qubits);
         for (uint32_t i = 0; i < num_qubits; i++) {
           rowsum(2*num_qubits, i + num_qubits);
         }
 
-        return get_r(2*num_qubits);
+        bool b = get_r(2*num_qubits);
+        if (outcome) {
+          if (b != outcome.value()) {
+            throw std::runtime_error("Invalid forced measurement of QuantumCHPState.");
+          }
+        }
+
+        return b;
       }
     }
 

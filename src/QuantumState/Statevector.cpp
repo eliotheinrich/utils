@@ -338,6 +338,12 @@ double Statevector::norm() const {
 }
 
 void Statevector::normalize() {
+  for (size_t i = 0; i < basis; i++) {
+    if (std::abs(data(i)) < 1e-14) {
+      data(i) = 0.0;
+    }
+  }
+
   data = data/norm();
 }
 

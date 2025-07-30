@@ -58,13 +58,15 @@ class LinearCodeSampler {
       all_sites.insert(all_sites.end(), sites1.begin(), sites1.end());
       all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
 
-      slide.add_data("sym");
-      slide.push_samples("sym", (double) matrix->sym(sites1, sites2));
+      std::vector<size_t> shape = {1};
+      std::vector<double> sym = {matrix->sym(sites1, sites2)};
+      slide.add_data("sym", std::move(shape), std::move(sym));
     }
 
     void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
-      slide.add_data("locality");
-      slide.push_samples_to_data("locality", static_cast<double>(matrix->generator_locality(sites)));
+      std::vector<size_t> shape = {1};
+      std::vector<double> loc = {matrix->generator_locality(sites)};
+      slide.add_data("locality", std::move(shape), std::move(loc));
     }
 
     void add_all_locality_samples(dataframe::DataSlide& slide, std::shared_ptr<GeneratorMatrix> matrix) const {
@@ -83,8 +85,8 @@ class LinearCodeSampler {
         }
       }
 
-      slide.add_data("locality", num_samples);
-      slide.push_samples_to_data("locality", s);
+      std::vector<size_t> shape = {num_samples};
+      slide.add_data("locality", std::move(shape), std::move(s));
     }
 
     void add_leaf_removal_samples(dataframe::DataSlide& slide, std::shared_ptr<ParityCheckMatrix> matrix) const {
@@ -114,14 +116,17 @@ class LinearCodeSampler {
       }
 
       size_t core_size = H.num_rows;
-      slide.add_data("core_size");
-      slide.push_samples_to_data("core_size", core_size);
 
-      slide.add_data("leafs", _max_size);
+      std::vector<size_t> shape = {1};
+      std::vector<double> values = {core_size};
+
+      slide.add_data("core_size", std::move(shape), std::move(values));
+
+      shape = {_max_size};
       for (size_t i = 0; i < _num_steps; i++) {
         std::vector<double> samples(_max_size);
         std::transform(sizes[i].begin(), sizes[i].end(), samples.begin(), [](size_t val) { return static_cast<double>(val); });
-        slide.push_samples_to_data("leafs", samples);
+        slide.add_data("leafs", std::move(shape), std::move(samples));
       }
     }
 
@@ -138,12 +143,9 @@ class LinearCodeSampler {
         avg_w += w;
       }
 
-      slide.add_data("generator_weights");
-      if (G->num_rows == 0) {
-        slide.push_samples_to_data("generator_weights", 0.0);
-      } else {
-        slide.push_samples_to_data("generator_weights", avg_w/G->num_rows);
-      }
+      std::vector<size_t> shape = {1};
+      std::vector<double> values = {G->num_rows ? avg_w/G->num_rows : 0.0};
+      slide.add_data("generator_weights", std::move(shape), std::move(values));
     }
 
     void add_samples(dataframe::DataSlide &slide, LinearCodeMatrix matrix, const std::optional<std::vector<size_t>>& sites1 = std::nullopt, const std::optional<std::vector<size_t>>& sites2 = std::nullopt) {
@@ -163,9 +165,11 @@ class LinearCodeSampler {
 
       uint32_t r;
       if (sample_rank) {
-        slide.add_data("rank");
         r = G->rank(inplace);
-        slide.push_samples_to_data("rank", r);
+
+        std::vector<size_t> shape = {1};
+        std::vector<double> values = {static_cast<double>(r)};
+        slide.add_data("rank", std::move(shape), std::move(values));
       }
 
       if (sample_solveable) {
@@ -174,8 +178,10 @@ class LinearCodeSampler {
         }
 
         bool solveable = (r >= 1);
-        slide.add_data("solveable");
-        slide.push_samples_to_data("solveable", solveable);
+
+        std::vector<size_t> shape = {1};
+        std::vector<double> values = {static_cast<double>(solveable)};
+        slide.add_data("solveable", std::move(shape), std::move(values));
       }
 
       if (sample_locality) {
