@@ -670,13 +670,18 @@ class MatrixProductStateImpl {
       }
       size_t d2 = dim(right_idx);
 
-      auto extract_data = [](Dense<Cplx> const& d) {
-        return d.store;
-      };
+      std::vector<size_t> shape = {d1, d2, 2};
+      std::vector<std::complex<double>> values(d1*d2*2);
 
-      auto vec = applyFunc(extract_data, T.store());
-      std::vector<std::complex<double>> values(vec.begin(), vec.end());
-      std::vector<size_t> shape = {dim(left_idx), dim(right_idx), 2};
+      size_t k = 0;
+      for (uint32_t a1 = 0; a1 < d1; a1++) {
+        for (uint32_t a2 = 0; a2 < d2; a2++) {
+          for (uint32_t i = 0; i < 2; i++) {
+            values[k++] = eltC(T, left_idx=a1+1, right_idx=a2+1, ext=i+1);
+          }
+        }
+      }
+
       return std::make_pair(shape, values);
     }
 
@@ -1876,26 +1881,15 @@ MatrixProductState& MatrixProductState::operator=(const MatrixProductState& othe
   return *this;
 }
 
-MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, double h, size_t bond_dimension, double sv_threshold, size_t num_sweeps) {
-  SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
-
-  auto ampo = AutoMPO(sites);
-  for (int j = 1; j < num_qubits; ++j) {
-    ampo += -2.0, "Sx", j, "Sx", j + 1;
-  }
-
-  for (int j = 1; j <= num_qubits; ++j) {
-    ampo += -h, "Sz", j;
-  }
-  auto H = toMPO(ampo);
-
+MatrixProductState dmrg_state(SiteSet& sites, MPO& mpo, size_t num_sweeps, size_t num_qubits, size_t bond_dimension, double sv_threshold) {
   auto psi = randomMPS(sites, bond_dimension);
+
   auto sweeps = Sweeps(num_sweeps);
   sweeps.maxdim() = bond_dimension;
   sweeps.cutoff() = sv_threshold;
-  sweeps.noise() = 1E-8;
+  sweeps.noise() = 1e-8;
 
-  auto [energy, psi0] = dmrg(H, psi, sweeps, {"Silent=",true});
+  auto [energy, psi0] = dmrg(mpo, psi, sweeps, {"Silent=",true});
   psi0.normalize();
 
   auto impl = std::make_unique<MatrixProductStateImpl>(MatrixProductStateImpl::from_mps(psi0, bond_dimension, sv_threshold));
@@ -1908,6 +1902,36 @@ MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, dou
   mps.impl = std::move(impl);
 
   return mps;
+}
+
+MatrixProductState MatrixProductState::ising_ground_state(size_t num_qubits, double h, size_t max_bond_dimension, double sv_threshold, size_t num_sweeps) {
+  SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
+
+  auto ampo = AutoMPO(sites);
+  for (int j = 1; j < num_qubits; ++j) {
+    ampo += -2.0, "Sx", j, "Sx", j + 1;
+  }
+
+  for (int j = 1; j <= num_qubits; ++j) {
+    ampo += -h, "Sz", j;
+  }
+  auto H = toMPO(ampo);
+
+  return dmrg_state(sites, H, num_sweeps, num_qubits, max_bond_dimension, sv_threshold);
+}
+
+MatrixProductState MatrixProductState::xxz_ground_state(size_t num_qubits, double delta, size_t max_bond_dimension, double sv_threshold, size_t num_sweeps) {
+  SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
+
+  auto ampo = AutoMPO(sites);
+  for (int j = 1; j < num_qubits; ++j) {
+    ampo += -2.0,       "Sx", j, "Sx", j + 1;
+    ampo += -2.0,       "Sy", j, "Sy", j + 1;
+    ampo += -2.0*delta, "Sz", j, "Sz", j + 1;
+  }
+  auto H = toMPO(ampo);
+
+  return dmrg_state(sites, H, num_sweeps, num_qubits, max_bond_dimension, sv_threshold);
 }
 
 std::string MatrixProductState::to_string() const {

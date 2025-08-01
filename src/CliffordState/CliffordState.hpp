@@ -261,8 +261,9 @@ class CliffordState : public QuantumState {
         return mzr(m.qubits[0]);
       } else {
         QuantumCircuit qc(m.qubits.size());
-        auto args = std::make_pair(&qc, m.qubits);
-        m.pauli.value().reduce(true, std::make_pair(&qc, m.qubits));
+
+        auto args = argsort(m.qubits);
+        m.pauli.value().reduce(true, std::make_pair(&qc, args));
 
         uint32_t q = std::ranges::min(m.qubits);
 
@@ -285,18 +286,13 @@ class CliffordState : public QuantumState {
       std::iota(qubits.begin(), qubits.end(), 0);
       uint32_t q = std::ranges::min(qubits);
 
-      //PauliString p = pauli;
-      //pauli.reduce(true, std::make_pair(&qc, qubits), std::make_pair(&p, qubits));
-      //std::cout << fmt::format("After reduction p = {}\n", p);
       pauli.reduce(true, std::make_pair(&qc, qubits));
 
       auto self = const_cast<CliffordState*>(this);
       self->evolve(qc);
       double exp = self->mzr_expectation(q);
       self->evolve(qc.adjoint());
-      //std::cout << fmt::format("p = {}\n", pauli);
-      //std::cout << fmt::format("exp = {:.5f}\n", exp);
-      //std::cout << fmt::format("sign = {:.5f} + {:.5f}i\n", pauli.sign().real(), pauli.sign().imag());
+
       return pauli.sign() * std::complex<double>(exp, 0.0);
     }
 

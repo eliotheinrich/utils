@@ -164,13 +164,9 @@ std::pair<QuantumCircuit, Qubits> QuantumCircuit::reduce() const {
     map[support[i]] = reduced_support[i];
   }
 
-  std::cout << fmt::format("support = {}, reduced_support = {}, map = {}\n", support, reduced_support, map);
   QuantumCircuit qc(*this);
-  std::cout << "Before applying qubit map:\n" << qc.to_string();
   qc.apply_qubit_map(map);
-  std::cout << "After applying qubit map:\n" << qc.to_string();
   qc.resize(support.size());
-  std::cout << "After resizing:\n" << qc.to_string();
   return {qc, support};
 }
 

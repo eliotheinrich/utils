@@ -62,6 +62,14 @@ class MonteCarloSimulator : public Simulator {
       init_temperature = dataframe::utils::get<double>(params, "initial_temperature", final_temperature);
       num_cooling_updates = dataframe::utils::get<int>(params, "num_cooling_updates", 100);
       cooling_schedule = parse_cooling_schedule(dataframe::utils::get<std::string>(params, "cooling_schedule", "constant"));
+
+      if (temperature < 0) {
+        throw std::runtime_error(fmt::format("Provided temperature {:.3f} is negative.", temperature));
+      }
+
+      if (init_temperature < 0) {
+        throw std::runtime_error(fmt::format("Provided init_temperature {:.3f} is negative.", init_temperature));
+      }
     }
 
     virtual ~MonteCarloSimulator();
@@ -86,6 +94,10 @@ class MonteCarloSimulator : public Simulator {
       uint32_t steps_per_update = num_steps / num_cooling_updates;
       temperature = init_temperature;
       for (uint64_t i = 0; i < num_cooling_updates; i++) {
+        if (temperature < 0) {
+          throw std::runtime_error(fmt::format("In equilibration_timesteps, encountered a negative temperature {:3f}.", temperature));
+        }
+
         timesteps(steps_per_update);
         switch (cooling_schedule) {
           case(CoolingSchedule::Constant):
