@@ -293,7 +293,7 @@ class CliffordState : public QuantumState {
       double exp = self->mzr_expectation(q);
       self->evolve(qc.adjoint());
 
-      return pauli.sign() * std::complex<double>(exp, 0.0);
+      return std::complex<double>(exp, 0.0);
     }
 
     virtual double expectation(const BitString& bits, std::optional<QubitSupport> support=std::nullopt) const override {

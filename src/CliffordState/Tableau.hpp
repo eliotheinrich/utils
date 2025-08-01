@@ -425,11 +425,15 @@ class Tableau {
       } else { // deterministic
         rows[2*num_qubits] = PauliString(num_qubits);
         for (uint32_t i = 0; i < num_qubits; i++) {
+          PauliString p1 = rows[2*num_qubits];
+          PauliString p2 = rows[i + num_qubits];
           rowsum(2*num_qubits, i + num_qubits);
+          std::cout << fmt::format("{} + {} = {}\n", p1, p2, rows[2*num_qubits]);
         }
 
         bool b = get_r(2*num_qubits);
         if (outcome) {
+          std::cout << fmt::format("Deterministic. b = {}, outcome = {}\n", b, outcome.value());
           if (b != outcome.value()) {
             throw std::runtime_error("Invalid forced measurement of QuantumCHPState.");
           }
@@ -463,9 +467,9 @@ class Tableau {
     inline bool get_r(uint32_t i) const { 
       uint8_t r = rows[i].get_r();
       if (r == 0) {
-        return false;
-      } else if (r == 2) {
         return true;
+      } else if (r == 2) {
+        return false;
       } else {
         throw std::runtime_error("Anomolous phase detected in Clifford tableau.");
       }
@@ -480,7 +484,11 @@ class Tableau {
     }
 
     inline void set_r(uint32_t i, bool v) { 
-      rows[i].set_r(2 * static_cast<uint8_t>(v)); 
+      if (v) {
+        rows[i].set_r(0);
+      } else {
+        rows[i].set_r(2);
+      }
     }
 };
 
