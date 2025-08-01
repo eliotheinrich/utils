@@ -502,10 +502,8 @@ bool test_clifford_states() {
     p = PauliString("ZIII");
 
     // Make sure measurement outcomes are the same
-    std::cout << fmt::format("Before measurements, P = {}, states = \n{}\n{}\n", p, psi.to_string(), chp.to_statevector().to_string());
     Measurement m1(qubits, p);
     bool b1 = psi.measure(m1);
-    std::cout << fmt::format("psi measured b1 = {}\n", b1);
 
     Measurement m2(qubits, p, b1);
     bool b2 = chp.measure(m2);
@@ -514,7 +512,6 @@ bool test_clifford_states() {
 
     Statevector psi_chp = chp.to_statevector();
 
-    std::cout << fmt::format("states = \n{}\n{}\n", psi.to_string(), psi_chp.to_string());
     ASSERT(states_close(psi, psi_chp), fmt::format("Clifford simulators disagree."));
 
     for (size_t k = 0; k < 100; k++) {
