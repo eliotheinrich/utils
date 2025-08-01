@@ -11,6 +11,7 @@
 class QuantumCHPState : public CliffordState {
   public:
     mutable Tableau tableau;
+    int print_mode;
 
     QuantumCHPState()=default;
 
@@ -27,11 +28,41 @@ class QuantumCHPState : public CliffordState {
     }
 
     virtual std::string to_string() const override {
-      return tableau.to_string();
+      if (print_mode == 0) {
+        return tableau.to_string(true);
+      } else if (print_mode == 1) {
+        return tableau.to_string(false);
+      } else if (print_mode == 2) {
+        return tableau.to_string_ops(true);
+      } else {
+        return tableau.to_string_ops(false);
+      }
     }
 
-    std::string to_string_ops() const {
-      return tableau.to_string_ops();
+    void rref() {
+      tableau.rref();
+    }
+
+    void xrref() {
+      tableau.xrref();
+    }
+
+    void set_print_mode(const std::string& mode) {
+      if (mode == "binary_all") {
+        print_mode = 0;
+      } else if (mode == "binary") {
+        print_mode = 1;
+      } else if (mode == "paulis_all") {
+        print_mode = 2;
+      } else if (mode == "paulis") {
+        print_mode = 3;
+      } else {
+        throw std::runtime_error(fmt::format("Invalid print mode: {}", mode));
+      }
+    }
+
+    void rowsum(uint32_t q1, uint32_t q2) {
+      tableau.rowsum(q1, q2);
     }
 
     Statevector to_statevector() const {

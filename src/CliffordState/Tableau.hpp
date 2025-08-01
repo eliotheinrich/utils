@@ -21,17 +21,15 @@ class Tableau {
 
     Tableau()=default;
 
-    Tableau(uint32_t num_qubits) :
-      track_destabilizers(true), num_qubits(num_qubits) {
-        rows = std::vector<PauliString>(2*num_qubits + 1, PauliString(num_qubits));
-        for (uint32_t i = 0; i < num_qubits; i++) {
-          rows[i].set_x(i, true);
-          rows[i + num_qubits].set_z(i, true);
-        }
+    Tableau(uint32_t num_qubits) : track_destabilizers(true), num_qubits(num_qubits) {
+      rows = std::vector<PauliString>(2*num_qubits + 1, PauliString(num_qubits));
+      for (uint32_t i = 0; i < num_qubits; i++) {
+        rows[i].set_x(i, true);
+        rows[i + num_qubits].set_z(i, true);
       }
+    }
 
-    Tableau(uint32_t num_qubits, const std::vector<PauliString>& rows)
-      : track_destabilizers(false), num_qubits(num_qubits), rows(rows) {}
+    Tableau(uint32_t num_qubits, const std::vector<PauliString>& rows) : track_destabilizers(false), num_qubits(num_qubits), rows(rows) {}
 
     uint32_t num_rows() const { 
       if (track_destabilizers) { 
@@ -227,6 +225,12 @@ class Tableau {
       rref(qubits);
     }
 
+    void xrref() {
+      std::vector<uint32_t> qubits(num_qubits);
+      std::iota(qubits.begin(), qubits.end(), 0);
+      xrref(qubits);
+    }
+
     uint32_t rank() {
       std::vector<uint32_t> qubits(num_qubits);
       std::iota(qubits.begin(), qubits.end(), 0);
@@ -241,20 +245,22 @@ class Tableau {
       }
     }
 
-    std::string to_string() const {
+    std::string to_string(bool print_destabilizers=true) const {
       std::string s = "";
-      for (uint32_t i = 0; i < num_rows(); i++) {
-        s += (i == 0) ? "[" : " ";
+      uint32_t i1 = print_destabilizers ? 0 : num_qubits;
+      for (uint32_t i = i1; i < num_rows(); i++) {
+        s += (i == i1) ? "[" : " ";
         s += rows[i].to_string();
         s += (i == num_rows() - 1) ? "]" : "\n";
       }
       return s;
     }
 
-    std::string to_string_ops() const {
+    std::string to_string_ops(bool print_destabilizers=true) const {
       std::string s = "";
-      for (uint32_t i = 0; i < num_rows(); i++) {
-        s += (i == 0) ? "[" : " ";
+      uint32_t i1 = print_destabilizers ? 0 : num_qubits;
+      for (uint32_t i = i1; i < num_rows(); i++) {
+        s += (i == i1) ? "[" : " ";
         s += "[" + rows[i].to_string_ops() + "]";
         s += (i == num_rows() - 1) ? "]" : "\n";
       }
