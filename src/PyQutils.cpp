@@ -26,6 +26,7 @@ NB_MODULE(qutils_bindings, m) {
 
   nanobind::class_<PauliString>(m, "PauliString")
     .def(nanobind::init<const std::string&>())
+    .def(nanobind::init<const PauliString&>())
     .def_ro("num_qubits", &PauliString::num_qubits)
     .def_static("from_bits", [](uint32_t num_qubits, uint32_t z) { return PauliString::from_bitstring(num_qubits, z); })
     .def_static("rand", [](uint32_t num_qubits) { return PauliString::rand(num_qubits); })

@@ -9,12 +9,6 @@
 #include <glaze/glaze.hpp>
 
 class QuantumCHPState : public CliffordState {
-  private:
-    static uint32_t get_num_qubits(const std::string &s) {
-      auto substrings = dataframe::utils::split(s, "\n");
-      return substrings.size()/2;
-    }
-
   public:
     mutable Tableau tableau;
     int print_mode;
