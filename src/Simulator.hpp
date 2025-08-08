@@ -105,16 +105,16 @@ class Simulator {
       std::cerr << "Deserialize not implemented for this simulator; skipping.";
     }
 
-    virtual void cleanup() {
-      // By default, nothing to do for cleanup
-    }
-
     virtual void key_callback(int key) {
       return;
     }
 
+    virtual void annealing_callback(int epoch, int num_epochs) {
+
+    }
+
     virtual Texture get_texture() const {
-      return Texture();
+      throw std::runtime_error("Called get_texture on a C++ simulator that does not implement it.");
     }
 
   protected:

@@ -10,6 +10,8 @@ inline std::vector<dataframe::byte_t> concat_bytes(const std::vector<dataframe::
 }
 
 NB_MODULE(qutils_bindings, m) {
+  m.def("seed_rng", &Random::seed_rng);
+
   nanobind::class_<BitString>(m, "BitString")
     .def(nanobind::init<uint32_t>())
     .def("to_integer", &BitString::to_integer)
@@ -306,6 +308,8 @@ NB_MODULE(qutils_bindings, m) {
     .def("evolve", [](MatrixProductState& self, const Eigen::MatrixXcd& gate, const std::vector<uint32_t>& qubits) { self.evolve(gate, qubits); });
 
   m.def("ising_ground_state", &MatrixProductState::ising_ground_state, "num_qubits"_a, "h"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
+  m.def("xxz_ground_state", &MatrixProductState::xxz_ground_state, "num_qubits"_a, "delta"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
+  m.def("spin_chain_ground_state", &MatrixProductState::spin_chain_ground_state, "num_qubits"_a, "Jx"_a, "Jy"_a, "Jz"_a, "bond_dimension"_a=16, "sv_threshold"_a=1e-8, "num_sweeps"_a=10);
 
   nanobind::class_<EntanglementEntropyState>(m, "EntanglementEntropyState");
 

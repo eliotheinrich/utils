@@ -58,6 +58,7 @@ using namespace nanobind::literals;
     .def("equilibration_timesteps", [](A& self, uint32_t num_steps) {                     \
         self.equilibration_timesteps(num_steps);                                          \
     })                                                                                    \
+    .def("annealing_callback", &A::annealing_callback)                                    \
     .def("take_samples", &A::take_samples)                                                \
     .def("serialize", [](A& self) {                                                       \
       return convert_bytes(self.serialize());                                             \

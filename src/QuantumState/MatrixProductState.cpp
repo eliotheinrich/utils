@@ -1934,6 +1934,24 @@ MatrixProductState MatrixProductState::xxz_ground_state(size_t num_qubits, doubl
   return dmrg_state(sites, H, num_sweeps, num_qubits, max_bond_dimension, sv_threshold);
 }
 
+MatrixProductState MatrixProductState::spin_chain_ground_state(size_t num_qubits, const std::vector<double>& Jx, const std::vector<double>& Jy, const std::vector<double>& Jz, size_t max_bond_dimension, double sv_threshold, size_t num_sweeps) {
+  if (Jx.size() != num_qubits - 1 || Jy.size() != num_qubits - 1 || Jz.size() != num_qubits - 1) {
+    throw std::runtime_error("Mismatched coupling sizes.");
+  }
+
+  SiteSet sites = SpinHalf(num_qubits, {"ConserveQNs=",false});
+
+  auto ampo = AutoMPO(sites);
+  for (int j = 1; j < num_qubits; ++j) {
+    ampo += -2.0*Jx[j-1], "Sx", j, "Sx", j + 1;
+    ampo += -2.0*Jy[j-1], "Sy", j, "Sy", j + 1;
+    ampo += -2.0*Jz[j-1], "Sz", j, "Sz", j + 1;
+  }
+  auto H = toMPO(ampo);
+
+  return dmrg_state(sites, H, num_sweeps, num_qubits, max_bond_dimension, sv_threshold);
+}
+
 std::string MatrixProductState::to_string() const {
   return impl->to_string();
 }

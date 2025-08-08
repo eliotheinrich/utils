@@ -59,13 +59,13 @@ class LinearCodeSampler {
       all_sites.insert(all_sites.end(), sites2.begin(), sites2.end());
 
       std::vector<size_t> shape = {1};
-      std::vector<double> sym = {matrix->sym(sites1, sites2)};
+      std::vector<double> sym = {static_cast<double>(matrix->sym(sites1, sites2))};
       slide.add_data("sym", std::move(shape), std::move(sym));
     }
 
     void add_locality_samples(dataframe::DataSlide &slide, std::shared_ptr<GeneratorMatrix> matrix, const std::vector<size_t>& sites) const {
       std::vector<size_t> shape = {1};
-      std::vector<double> loc = {matrix->generator_locality(sites)};
+      std::vector<double> loc = {static_cast<double>(matrix->generator_locality(sites))};
       slide.add_data("locality", std::move(shape), std::move(loc));
     }
 
@@ -118,7 +118,7 @@ class LinearCodeSampler {
       size_t core_size = H.num_rows;
 
       std::vector<size_t> shape = {1};
-      std::vector<double> values = {core_size};
+      std::vector<double> values = {static_cast<double>(core_size)};
 
       slide.add_data("core_size", std::move(shape), std::move(values));
 
