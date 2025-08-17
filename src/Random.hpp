@@ -1,6 +1,8 @@
 #pragma once
 
 #include <random>
+#include <stdexcept>
+#include <fmt/format.h>
 
 class Random {
   public:

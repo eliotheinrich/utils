@@ -1,7 +1,10 @@
 #pragma once
 
+#include "Random.hpp"
+
 #include <fmt/format.h>
 
+#include <iostream>
 #include <vector>
 #include <iterator>
 #include <set>
@@ -11,11 +14,38 @@
 #include <random>
 #include <climits>
 #include <optional>
+#include <ranges>
 
-template <typename T = int, typename V = int>
+struct DirectedTag {};
+struct UndirectedTag {};
+
+template <typename T, bool IsVoidWeight>
+struct NeighborView {};
+
+template <typename T>
+struct NeighborView<T, true> {
+  const std::set<uint32_t>& s;
+  auto begin() const { return s.begin(); }
+  auto end()   const { return s.end(); }
+};
+
+template <typename T>
+struct NeighborView<T, false> {
+  const std::map<uint32_t, T>& m;
+  auto begin() const { return std::views::keys(m).begin(); }
+  auto end()   const { return std::views::keys(m).end(); }
+};
+
+template <typename V = int, typename T = void, typename DirTag = UndirectedTag>
 class Graph {
+  using EdgeContainer = std::conditional_t<
+    std::is_void_v<T>,
+    std::set<uint32_t>,
+    std::map<uint32_t, T>
+  >;
+
   public:
-    std::vector<std::map<uint32_t, T>> edges;
+    std::vector<EdgeContainer> edges;
     std::vector<V> vals;
 
     uint32_t num_vertices;
@@ -34,29 +64,24 @@ class Graph {
       }
 
       for (uint32_t i = 0; i < g.num_vertices; i++) {
-        for (auto const &[j, w] : g.edges[i]) {
-          add_directed_edge(i, j, static_cast<T>(w));
+        if constexpr (std::is_void_v<T>) {
+          for (auto const &j : g.edges[i]) {
+            add_edge(i, j);
+          }
+        } else {
+          for (auto const &[j, w] : g.edges[i]) {
+            add_edge(i, j, w);
+          }
         }
       }
     }
 
-    static std::minstd_rand* get_rng(std::optional<std::minstd_rand*> rng) {
-      if (rng.has_value()) {
-        return rng.value();
-      } else {
-        thread_local std::random_device rd;
-        return new std::minstd_rand(rd());
-      }
-    }
-
-    static Graph<T, V> erdos_renyi_graph(uint32_t num_vertices, double p, std::optional<std::minstd_rand*> rng_opt = std::nullopt) {
-      Graph<T, V> g(num_vertices);
-
-      auto rng = *Graph::get_rng(rng_opt);
+    static Graph<V, T, UndirectedTag> erdos_renyi_graph(uint32_t num_vertices, double p) {
+      Graph<V, T, UndirectedTag> g(num_vertices);
 
       for (uint32_t i = 0; i < num_vertices; i++) {
         for (uint32_t j = i+1; j < num_vertices; j++) {
-          if (double(rng())/double(RAND_MAX) < p) {
+          if (randf() < p) {
             g.toggle_edge(i, j);
           }
         }
@@ -65,7 +90,7 @@ class Graph {
       return g;
     }
 
-    static Graph<T, V> random_regular_graph(uint32_t num_vertices, size_t k, std::optional<std::minstd_rand*> rng_opt = std::nullopt, uint32_t max_depth=0) {
+    static Graph<V, T, UndirectedTag> random_regular_graph(uint32_t num_vertices, size_t k, uint32_t max_depth=0) {
       if (num_vertices*k % 2 == 1) {
         throw std::invalid_argument("To generate random regular graph, num_vertices*k must be even.");
       }
@@ -74,19 +99,18 @@ class Graph {
         throw std::invalid_argument("k must be less than num_vertices.");
       }
 
-      Graph<T, V> buckets(num_vertices*k);
-      Graph<T, V> g(num_vertices);
+      Graph<V, T, UndirectedTag> buckets(num_vertices*k);
+      Graph<V, T, UndirectedTag> g(num_vertices);
       std::vector<size_t> sites(num_vertices*k);
-      std::minstd_rand rng = *Graph::get_rng(rng_opt);
 
-      recursive_random_regular_graph(buckets, g, sites, rng, max_depth, 0);
+      recursive_random_regular_graph(buckets, g, sites, max_depth, 0);
       return g;
     }
 
-    static Graph<T, V> scale_free_graph(uint32_t num_vertices, double alpha, std::optional<std::minstd_rand*> rng_opt = std::nullopt) {
-      Graph<T, V> g(num_vertices);
+    static Graph<V, T, UndirectedTag> scale_free_graph(uint32_t num_vertices, double alpha) {
+      Graph<V, T, UndirectedTag> g(num_vertices);
 
-      auto rng = *Graph::get_rng(rng_opt);
+      std::minstd_rand rng(randi());
       std::uniform_real_distribution<> dis(0.0, 1.0);
 
       std::vector<uint32_t> degrees(num_vertices);
@@ -130,8 +154,14 @@ class Graph {
       std::string s = "";
       for (uint32_t i = 0; i < num_vertices; i++) {
         s += fmt::format("[{}] {} -> ", vals[i], i); 
-        for (auto const&[v, w] : edges[i]) {
-          s += fmt::format("({}: {}) ", v, w);
+        if constexpr (std::is_void_v<T>) {
+          for (auto const& v : edges[i]) {
+            s += fmt::format("({}) ", v);
+          }
+        } else {
+          for (auto const&[v, w] : edges[i]) {
+            s += fmt::format("({}: {}) ", v, w);
+          }
         }
         if (i != num_vertices - 1) {
           s += "\n";
@@ -140,133 +170,187 @@ class Graph {
       return s;
     }
 
-    void add_vertex() { 
-      add_vertex(V()); 
-    }
-
-    void add_vertex(V val) {
+    void add_vertex(std::optional<V> val_opt=std::nullopt) {
       num_vertices++;
-      edges.push_back(std::map<uint32_t, T>());
-      vals.push_back(val);
+      if constexpr (std::is_void_v<T>) {
+        edges.push_back(std::set<uint32_t>());
+      } else {
+        edges.push_back(std::map<uint32_t, T>());
+      }
+      vals.push_back(val_opt.value_or(V()));
     }
 
-    void remove_vertex(uint32_t v) {
+    void remove_vertex(uint32_t u) {
+      if (u >= num_vertices) {
+        throw std::runtime_error(fmt::format("Cannot remove vertex {} from a graph with {} vertices.", u, num_vertices));
+      }
       num_vertices--;
-      edges.erase(edges.begin() + v);
-      vals.erase(vals.begin() + v);
+      edges.erase(edges.begin() + u);
+      vals.erase(vals.begin() + u);
       for (uint32_t i = 0; i < num_vertices; i++) {
-        edges[i].erase(v);
+        edges[i].erase(u);
       }
 
       for (uint32_t i = 0; i < num_vertices; i++) {
-        std::map<uint32_t, T> new_edges;
-        for (auto const &[j, w] : edges[i]) {
-          if (j > v) {
-            new_edges.emplace(j-1, w);
-          } else {
-            new_edges.emplace(j, w);
+        if constexpr (std::is_void_v<T>) {
+          std::set<uint32_t> new_edges;
+
+          for (auto const &j : edges[i]) {
+            if (j > u) {
+              new_edges.insert(j - 1);
+            } else {
+              new_edges.insert(j);
+            }
           }
+          edges[i] = std::move(new_edges);
+        } else {
+          std::map<uint32_t, T> new_edges;
+          for (auto const &[j, w] : edges[i]) {
+            if (j > u) {
+              new_edges.emplace(j-1, w);
+            } else {
+              new_edges.emplace(j, w);
+            }
+          }
+          edges[i] = std::move(new_edges);
         }
-        edges[i] = new_edges;
       }
     }
 
-    void set_val(uint32_t i, V val) {
-      if (i >= num_vertices) {
-        throw std::invalid_argument("Invalid index.");
+    void set_val(uint32_t u, const V& val) {
+      if (u >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertex {} for graph with {} vertices.", u, num_vertices));
       }
-      vals[i] = val;
+
+      vals[u] = val;
     }
 
-    V get_val(uint32_t i) const { 
-      return vals[i]; 
+    V get_val(uint32_t u) const { 
+      if (u >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertex {} for graph with {} vertices.", u, num_vertices));
+      }
+      return vals[u]; 
     }
 
-    std::vector<uint32_t> neighbors(uint32_t a) const {
-      std::vector<uint32_t> neighbors;
-      for (auto const &[e, _] : edges[a]) {
-        neighbors.push_back(e);
+    auto edges_of(uint32_t u) const {
+      if (u >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertex {} for graph with {} vertices.", u, num_vertices));
       }
+
+      if constexpr (std::is_void_v<T>) {
+        return NeighborView<T, true>{edges[u]};
+      } else {
+        return NeighborView<T, false>{edges[u]};
+      }
+    }
+
+    std::vector<uint32_t> neighbors(uint32_t u) const {
+      std::vector<uint32_t> neighbors(edges_of(u).begin(), edges_of(u).end());
       std::sort(neighbors.begin(), neighbors.end());
       return neighbors;
     }
 
-    bool contains_edge(uint32_t v1, uint32_t v2) const {
-      return contains_directed_edge(v1, v2) && contains_directed_edge(v2, v1);
-    }
-
-    T edge_weight(uint32_t v1, uint32_t v2) const {
-      return edges[v1].at(v2);
-    }
-
-    void set_edge_weight(uint32_t v1, uint32_t v2, T w) {
-      edges[v1][v2] = w;
-    }
-
-    void add_edge(uint32_t v1, uint32_t v2) {
-      add_weighted_edge(v1, v2, T());
-    }
-
-    void add_directed_edge(uint32_t v1, uint32_t v2, T w) {
-      if (!contains_edge(v1, v2)) {
-        edges[v1].emplace(v2, w);
+    bool contains_edge(uint32_t u1, uint32_t u2) const {
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
+      }
+      if constexpr (std::is_same_v<DirTag, DirectedTag>) {
+        return edges[u1].contains(u2);
       } else {
-        edges[v1][v2] = w;
+        return edges[u1].contains(u2) && edges[u2].contains(u1);
       }
     }
 
-    bool contains_directed_edge(uint32_t v1, uint32_t v2) const {
-      return edges[v1].count(v2);
-    }
-
-    void add_weighted_edge(uint32_t v1, uint32_t v2, T w) {
-      add_directed_edge(v1, v2, w);
-      if (v1 != v2) {
-        add_directed_edge(v2, v1, w);
+    T edge_weight(uint32_t u1, uint32_t u2) const {
+      static_assert(!std::is_void_v<T>, "Unweighted graph has no edge_weights.");
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
       }
+      return edges[u1].at(u2);
     }
 
-    void remove_directed_edge(uint32_t v1, uint32_t v2) {
-      edges[v1].erase(v2);
-    }
-
-    void remove_edge(uint32_t v1, uint32_t v2) {
-      remove_directed_edge(v1, v2);
-      if (v1 != v2) {
-        remove_directed_edge(v2, v1);
+    void set_edge_weight(uint32_t u1, uint32_t u2, std::conditional_t<std::is_void_v<T>, std::nullptr_t, T> w={}) {
+      static_assert(!std::is_void_v<T>, "Unweighted graph has no edge_weights.");
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
       }
+      edges[u1][u2] = w;
     }
 
-    void toggle_directed_edge(uint32_t v1, uint32_t v2) {
-      if (contains_directed_edge(v1, v2)) {
-        remove_directed_edge(v1, v2);
+    void add_edge(uint32_t u1, uint32_t u2, std::conditional_t<std::is_void_v<T>, std::nullptr_t, T> weight={}) {
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
+      }
+
+      if (contains_edge(u1, u2)) {
+        return; 
+      }
+
+      if constexpr (std::is_void_v<T>) {
+        edges[u1].insert(u2);
       } else {
-        add_directed_edge(v1, v2, 1);
+        edges[u1].emplace(u2, weight);
+      }
+
+      if constexpr(std::is_same_v<DirTag, UndirectedTag>) {
+        if (u1 != u2) {
+          add_edge(u2, u1, weight);
+        }
       }
     }
 
-    void toggle_edge(uint32_t v1, uint32_t v2) {
-      toggle_directed_edge(v1, v2);
-      if (v1 != v2) {
-        toggle_directed_edge(v2, v1);
+    void remove_edge(uint32_t u1, uint32_t u2) {
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
+      }
+
+      edges[u1].erase(u2);
+      if constexpr (std::is_same_v<DirTag, UndirectedTag>) {
+        if (u1 != u2) {
+          edges[u2].erase(u1);
+        }
       }
     }
 
-    T adjacency_matrix(uint32_t v1, uint32_t v2) const {
-      if (contains_directed_edge(v1, v2)) {
-        return edges[v1].at(v2);
+    void toggle_edge(uint32_t u1, uint32_t u2) {
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
+      }
+
+      if (contains_edge(u1, u2)) {
+        remove_edge(u1, u2);
       } else {
-        return 0;
+        add_edge(u1, u2);
       }
     }
 
-    uint32_t degree(uint32_t v) const {
-      return edges[v].size();
+    std::conditional_t<std::is_void_v<T>, bool, std::optional<T>> adjacency_matrix(uint32_t u1, uint32_t u2) const {
+      if (u1 >= num_vertices || u2 >= num_vertices) {
+        throw std::runtime_error(fmt::format("Invalid vertices {} and {} for graph with {} vertices.", u1, u2, num_vertices));
+      }
+
+      if (contains_edge(u1, u2)) {
+        if constexpr (std::is_void_v<T>) {
+          return true;
+        } else {
+          return edges[u1].at(u2);
+        }
+      } else {
+        if constexpr (std::is_void_v<T>) {
+          return false;
+        } else {
+          return std::nullopt;
+        }
+      }
     }
 
-    void local_complement(uint32_t v) {
-      for (auto const &[v1, _] : edges[v]) {
-        for (auto const &[v2, _] : edges[v]) {
+    uint32_t degree(uint32_t u) const {
+      return edges[u].size();
+    }
+
+    void local_complement(uint32_t u) {
+      for (auto const& v1 : edges_of(u)) {
+        for (auto const& v2 : edges_of(u)) {
           if (v1 < v2) {
             toggle_edge(v1, v2);
           }
@@ -282,15 +366,26 @@ class Graph {
       return n;
     }
 
-    Graph<T, V> subgraph(const std::vector<uint32_t>& sites) const {
-      Graph<T, V> g(sites.size());
+    Graph<V, T, DirTag> subgraph(const std::vector<uint32_t>& sites) const {
+      Graph<V, T, DirTag> g(sites.size());
       for (size_t i = 0; i < sites.size(); i++) {
         size_t a = sites[i];
-        for (auto const [b, w] : edges[a]) {
-          for (size_t j = 0; j < sites.size(); j++) {
-            if (sites[j] == b) {
-              g.add_weighted_edge(i, j, w);
-              break;
+        if constexpr (std::is_void_v<T>) {
+          for (auto const& b: edges[a]) {
+            for (size_t j = 0; j < sites.size(); j++) {
+              if (sites[j] == b) {
+                g.add_edge(i, j);
+                break;
+              }
+            }
+          }
+        } else {
+          for (auto const& [b, w] : edges[a]) {
+            for (size_t j = 0; j < sites.size(); j++) {
+              if (sites[j] == b) {
+                g.add_edge(i, j, w);
+                break;
+              }
             }
           }
         }
@@ -299,10 +394,10 @@ class Graph {
       return g;
     }
 
-    Graph<T, bool> partition(const std::vector<uint32_t> &nodes) const {
+    Graph<bool, T, DirectedTag> partition(const std::vector<uint32_t> &nodes) const {
       std::set<uint32_t> nodess;
       std::copy(nodes.begin(), nodes.end(), std::inserter(nodess, nodess.end()));
-      Graph<T, bool> new_graph;
+      Graph<bool, T, DirectedTag> new_graph;
       std::map<uint32_t, uint32_t> new_vertices;
 
       for (const uint32_t a : nodess) {
@@ -312,7 +407,7 @@ class Graph {
 
         new_vertices.emplace(a, new_vertices.size());
         new_graph.add_vertex(true);
-        for (auto const &[b, _] : edges[a]) {
+        for (auto const &b : edges_of(a)) {
           if (nodess.count(b)) {
             continue;
           }
@@ -355,7 +450,8 @@ class Graph {
       return n;
     }
 
-    std::pair<bool, std::vector<uint32_t>> path(uint32_t s, uint32_t t) const {
+    std::pair<bool, std::vector<uint32_t>> path(uint32_t s, uint32_t t) const requires (std::is_integral_v<T>) {
+      std::cout << to_string() << "\n";
       std::vector<uint32_t> stack;
       stack.push_back(s);
 
@@ -364,11 +460,15 @@ class Graph {
 
       while (!stack.empty()) {
         uint32_t v = *(stack.end()-1);
+        std::cout << fmt::format("v = {}\n", v);
         stack.pop_back();
-        if (visited.count(v)) continue;
+        if (visited.count(v)) {
+          continue;
+        }
 
         visited.insert(v);
-        for (auto const &[w, _] : edges[v]) {
+        for (auto const &w : edges_of(v)) {
+          std::cout << fmt::format("neighbor = {}\n", w);
           if (edge_weight(v, w) > 0) {
             if (!visited.count(w)) {
               parent.emplace(w, v);
@@ -393,7 +493,7 @@ class Graph {
       return std::pair(false, std::vector<uint32_t>());
     }
 
-    T max_flow(std::vector<uint32_t> &sources, std::vector<uint32_t> &sinks) const {
+    T max_flow(std::vector<uint32_t> &sources, std::vector<uint32_t> &sinks) const requires (std::is_integral_v<T>) {
       Graph g(*this);
 
       g.add_vertex();
@@ -401,24 +501,26 @@ class Graph {
       g.add_vertex();
       uint32_t t = g.num_vertices - 1;
 
-      for (auto i : sources) {
-        g.add_directed_edge(s, i, INT_MAX);
+      for (const auto& i : sources) {
+        g.add_edge(s, i, INT_MAX);
       }
-      for (auto i : sinks) {
-        g.add_directed_edge(i, t, INT_MAX);
+      for (const auto& i : sinks) {
+        g.add_edge(i, t, INT_MAX);
       }
+
+      std::cout << "g = " << g.to_string() << "\n";
 
       T flow = g.max_flow(s, t);
 
       return flow;
     }
 
-    T max_flow(uint32_t s, uint32_t t) const {
+    T max_flow(uint32_t s, uint32_t t) const requires (std::is_integral_v<T>) {
       Graph residual_graph(*this);
 
       for (uint32_t i = 0; i < num_vertices; i++) {
         for (auto const &[w, _] : residual_graph.edges[i]) {
-          residual_graph.add_weighted_edge(i, w, 0);
+          residual_graph.add_edge(i, w, 0);
         }
       }
 
@@ -485,11 +587,10 @@ class Graph {
     }
 
     std::vector<uint32_t> compute_neighbor_degree_counts() const {
-      thread_local std::minstd_rand rng(std::rand());
       std::vector<uint32_t> counts(num_vertices, 0);
       for (uint32_t i = 0; i < num_vertices; i++) {
         if (degree(i) > 0) {
-          uint32_t v = rng() % degree(i);
+          uint32_t v = randi() % degree(i);
           counts[degree(v)]++;
         }
       }
@@ -549,7 +650,7 @@ class Graph {
       return max_cluster_size;
     }
 
-    double local_clustering_coefficient(uint32_t i) const {
+    double local_clustering_coefficient(uint32_t i) const requires (std::is_arithmetic_v<T>) {
       uint32_t ki = degree(i);
       if (ki == 0 || ki == 1) {
         return 0.;
@@ -558,14 +659,19 @@ class Graph {
       uint32_t c = 0;
       for (uint32_t j = 0; j < num_vertices; j++) {
         for (uint32_t k = 0; k < num_vertices; k++) {
-          c += adjacency_matrix(i, j)*adjacency_matrix(j, k)*adjacency_matrix(k, i);
+          std::optional<T> c1 = adjacency_matrix(i, j);
+          std::optional<T> c2 = adjacency_matrix(j, k);
+          std::optional<T> c3 = adjacency_matrix(k, i);
+          if (c1 && c2 && c3) {
+            c += c1.value() * c2.value() * c3.value();
+          }
         }
       }
 
       return c/(ki*(ki - 1));
     }
       
-    double global_clustering_coefficient() const {
+    double global_clustering_coefficient() const requires (std::is_arithmetic_v<T>) {
       double c = 0.;
       for (uint32_t i = 0; i < num_vertices; i++) {
         c += local_clustering_coefficient(i);
@@ -616,7 +722,7 @@ class Graph {
           max_cluster_size = component_size;
         }
 
-        for (auto v : connected_component) {
+        for (const auto& v : connected_component) {
           if (to_check.count(v)) {
             to_check.erase(v);
           }
@@ -626,53 +732,59 @@ class Graph {
       return double(max_cluster_size)/num_vertices;
     }
 
-  private:
-    static void recursive_random_regular_graph(
-        Graph<T, V>& buckets, 
-        Graph<T, V>& g, 
+    private:
+      static void recursive_random_regular_graph(
+        Graph<V, T, DirTag>& buckets, 
+        Graph<V, T, DirTag>& g, 
         std::vector<size_t>& sites, 
-        std::minstd_rand& rng, 
         uint32_t max_depth, 
         uint32_t depth
       ) {
+        if (max_depth != 0) {
+          if (depth > max_depth) {
+            throw std::invalid_argument("Maximum depth reached.");
+          }
+        }
 
-      if (max_depth != 0) {
-        if (depth > max_depth) {
-          throw std::invalid_argument("Maximum depth reached.");
+        // Create pairs
+        buckets = Graph<V, T, DirTag>(buckets.num_vertices);
+        g = Graph<V, T, DirTag>(g.num_vertices);
+        std::iota(sites.begin(), sites.end(), 0);
+        std::minstd_rand rng(randi());
+        std::shuffle(sites.begin(), sites.end(), rng);
+
+        for (size_t i = 0; i < sites.size()/2; i++) {
+          buckets.add_edge(sites[i], sites[i + sites.size()/2]);
+        }
+
+        size_t num_vertices = g.num_vertices;
+        size_t k = buckets.num_vertices/num_vertices;
+
+        // Collapse nodes
+        for (size_t v1 = 0; v1 < num_vertices*k; v1++) {
+          for (auto const& [v2, _] : buckets.edges[v1]) {
+            // Only consider each edge once
+            if (v2 < v1) {
+              continue;
+            }
+
+            size_t i = v1 / k;
+            size_t j = v2 / k;
+
+            if (i == j || g.contains_edge(i, j)) {
+              recursive_random_regular_graph(buckets, g, sites, max_depth, depth + 1);
+              return;
+            }
+
+            g.add_edge(i, j);
+          }
         }
       }
-
-      // Create pairs
-      buckets = Graph<T, V>(buckets.num_vertices);
-      g = Graph<T, V>(g.num_vertices);
-      std::iota(sites.begin(), sites.end(), 0);
-      std::shuffle(sites.begin(), sites.end(), rng);
-
-      for (size_t i = 0; i < sites.size()/2; i++) {
-        buckets.add_edge(sites[i], sites[i + sites.size()/2]);
-      }
-
-      size_t num_vertices = g.num_vertices;
-      size_t k = buckets.num_vertices/num_vertices;
-
-      // Collapse nodes
-      for (size_t v1 = 0; v1 < num_vertices*k; v1++) {
-        for (auto const& [v2, _] : buckets.edges[v1]) {
-          // Only consider each edge once
-          if (v2 < v1) {
-            continue;
-          }
-
-          size_t i = v1 / k;
-          size_t j = v2 / k;
-
-          if (i == j || g.contains_edge(i, j)) {
-            recursive_random_regular_graph(buckets, g, sites, rng, max_depth, depth + 1);
-            return;
-          }
-
-          g.add_edge(i, j);
-        }
-      }
-    }
 };
+
+template <typename V, typename T=void>
+using DirectedGraph = Graph<V, T, DirectedTag>;
+
+template <typename V, typename T=void>
+using UndirectedGraph = Graph<V, T, UndirectedTag>;
+

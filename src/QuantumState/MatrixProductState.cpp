@@ -1438,7 +1438,9 @@ class MatrixProductStateImpl {
       }
 
       theta = noPrime(theta * matrix_to_tensor(gate, indices_p, indices));
-      reset_from_tensor(theta, std::make_pair(qmin, qmax));
+      // Choose direction at random to avoid introducing bias from SVD truncation
+      InternalDir dir = (randf() < 0.5) ? InternalDir::Left : InternalDir::Right;
+      reset_from_tensor(theta, std::make_pair(qmin, qmax), dir);
 
       // Reverse swaps
       for (size_t j = swaps.size(); j > 0; j--) {
@@ -1447,7 +1449,7 @@ class MatrixProductStateImpl {
       }
     }
 
-    void reset_from_tensor(const ITensor& tensor, QubitInterval support) {
+    void reset_from_tensor(const ITensor& tensor, QubitInterval support, InternalDir dir=InternalDir::Left) {
       if (!support) {
         return;
       }
@@ -1465,42 +1467,81 @@ class MatrixProductStateImpl {
         right = internal_idx(q2 - 1);
       }
 
-      for (size_t i = q1; i < q2 - 1; i++) {
-        std::vector<Index> u_inds = {left, external_idx(i)};
+      if (dir == InternalDir::Left) {
+        for (size_t i = q1; i < q2 - 1; i++) {
+          std::vector<Index> u_inds = {left, external_idx(i)};
 
-        std::vector<Index> v_inds{right};
-        for (size_t j = i + 1; j < q2; j++) {
-          v_inds.push_back(external_idx(j));
+          std::vector<Index> v_inds{right};
+          for (size_t j = i + 1; j < q2; j++) {
+            v_inds.push_back(external_idx(j));
+          }
+          
+          auto [U, S, V] = svd(c, u_inds, v_inds, {
+            "SVDMethod=","gesvd",
+            "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
+            "LeftTags=",fmt::format("tmp,Internal,n={}", i),
+            "RightTags=",fmt::format("Internal,n={}", i)
+          });
+
+          double truncerr = sqr(norm(U*S*V - c)/norm(c));
+          log.push_back(truncerr);
+
+          // Renormalize singular values
+          size_t N = dim(inds(S)[0]);
+          double d = 0.0;
+          for (uint32_t p = 1; p <= N; p++) {
+            std::vector<uint32_t> assignment = {p, p};
+            double c = elt(S, assignment);
+            d += c*c;
+          }
+          S /= std::sqrt(d);
+
+          c = V;
+          tensors[i] = U * S;
+
+          left = commonIndex(V, S);
+          internal_indices[i] = left; //commonIndex(S, V);
         }
-        
-        auto [U, S, V] = svd(c, u_inds, v_inds, {
-          "SVDMethod=","gesvd",
-          "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
-          "LeftTags=",fmt::format("tmp,Internal,n={}", i),
-          "RightTags=",fmt::format("Internal,n={}", i)
-        });
 
-        double truncerr = sqr(norm(U*S*V - c)/norm(c));
-        log.push_back(truncerr);
+        tensors[q2 - 1] = c;
+      } else { 
+        for (int i = static_cast<int>(q2) - 1; i > static_cast<int>(q1); i--) {
+          std::vector<Index> v_inds = {right, external_idx(i)};
 
-        // Renormalize singular values
-        size_t N = dim(inds(S)[0]);
-        double d = 0.0;
-        for (uint32_t p = 1; p <= N; p++) {
-          std::vector<uint32_t> assignment = {p, p};
-          double c = elt(S, assignment);
-          d += c*c;
+          std::vector<Index> u_inds{left};
+          for (int j = i - 1; j >= static_cast<int>(q1); j--) {
+            u_inds.push_back(external_idx(j));
+          }
+
+          auto [U, S, V] = svd(c, u_inds, v_inds, {
+            "SVDMethod=","gesvd",
+            "Cutoff=",sv_threshold,"MaxDim=",bond_dimension,
+            "LeftTags=",fmt::format("Internal,n={}", i-1),
+            "RightTags=",fmt::format("tmp,Internal,n={}", i-1)
+          });
+
+          double truncerr = sqr(norm(U*S*V - c)/norm(c));
+          log.push_back(truncerr);
+
+          // Renormalize singular values
+          size_t N = dim(inds(S)[0]);
+          double d = 0.0;
+          for (uint32_t p = 1; p <= N; p++) {
+            std::vector<uint32_t> assignment = {p, p};
+            double c = elt(S, assignment);
+            d += c*c;
+          }
+          S /= std::sqrt(d);
+
+          c = U;
+          tensors[i] = V * S;
+
+          right = commonIndex(U, S);
+          internal_indices[i-1] = right; //commonIndex(S, U);
         }
-        S /= std::sqrt(d);
 
-        c = V;
-        tensors[i] = U * S;
-
-        left = commonIndex(V, S);
-        internal_indices[i] = commonIndex(S, V);
+        tensors[q1] = c;
       }
-
-      tensors[q2 - 1] = c;
 
       set_left_ortho_lim(q1);
       set_right_ortho_lim(q2-1);
@@ -1653,18 +1694,24 @@ class MatrixProductStateImpl {
       auto [q1, q2] = support_range(qubits).value();
 
       // TODO revisit this logic
-      if (qubits.size() == 1) {
-        const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
-        if (q1 == 0) { // PI
-          auto proj_ = Eigen::kroneckerProduct(id, result.proj);
-          evolve(proj_, {q1, q1 + 1});
-        } else { // IP
-          auto proj_ = Eigen::kroneckerProduct(result.proj, id);
-          evolve(proj_, {q1 - 1, q1});
-        }
-      } else {
-        evolve(result.proj, qubits);
+      evolve(result.proj, qubits);
+      if (q1 < num_qubits - 1) {
+        svd_bond(q1);
       }
+      set_left_ortho_lim(q1);
+      set_right_ortho_lim(q2-1);
+      //if (qubits.size() == 1) {
+      //  const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
+      //  if (q1 == 0) { // PI
+      //    auto proj_ = Eigen::kroneckerProduct(id, result.proj);
+      //    evolve(proj_, {q1, q1 + 1});
+      //  } else { // IP
+      //    auto proj_ = Eigen::kroneckerProduct(result.proj, id);
+      //    evolve(proj_, {q1 - 1, q1});
+      //  }
+      //} else {
+      //  evolve(result.proj, qubits);
+      //}
 
       assert_state_valid(fmt::format("Error after applying measurement on {}.", qubits));
     }

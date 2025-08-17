@@ -1,72 +1,11 @@
-#include <memory>
-#include <random>
-
-#include <fmt/format.h>
-#include <fmt/ranges.h>
+#include "tests.hpp"
 
 #include "QuantumState.h"
 #include "CliffordState.h"
 #include "LinearCode.h"
-#include "Graph.hpp"
-#include "Display.h"
 #include "Samplers.h"
-#include <iostream>
-
-#include <Frame.h>
-using namespace dataframe;
-using namespace dataframe::utils;
 
 #define MPS_DEBUG_LEVEL 1
-
-#define GET_MACRO(_1, _2, NAME, ...) NAME
-#define ASSERT(...) GET_MACRO(__VA_ARGS__, ASSERT_TWO_ARGS, ASSERT_ONE_ARG)(__VA_ARGS__)
-
-#define ASSERT_ONE_ARG(x) if (!(x)) { return false; }
-
-#define ASSERT_TWO_ARGS(x, y) \
-  if (!(x)) {                 \
-    std::cout << y << "\n";   \
-    return false;             \
-  }
-
-template <>
-struct fmt::formatter<std::complex<double>> {
-  template <typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-    auto format(const std::complex<double>& c, FormatContext& ctx) {
-      return format_to(ctx.out(), "{} + {}i", c.real(), c.imag());
-    }
-};
-
-template <typename T, typename V>
-bool is_close_eps(double eps, T first, V second) {
-  return std::abs(first - second) < eps;
-}
-
-template <typename T, typename V>
-bool is_close(T first, V second) {
-  return is_close_eps(1e-8, first, second);
-}
-
-template <typename T, typename V, typename... Args>
-bool is_close_eps(double eps, T first, V second, Args... args) {
-  if (!is_close_eps(eps, first, second)) {
-    return false;
-  } else {
-    return is_close_eps(eps, first, args...);
-  }
-}
-
-template <typename T, typename V, typename... Args>
-bool is_close(T first, V second, Args... args) {
-  if (!is_close(first, second)) {
-    return false;
-  } else {
-    return is_close(first, args...);
-  }
-}
 
 template <typename T, typename V>
 bool states_close(const T& first, const V& second) {
@@ -83,29 +22,6 @@ bool states_close(const T& first, const V& second) {
 template <typename T, typename V, typename... Args>
 bool states_close(const T& first, const V& second, const Args&... args) {
   if (!states_close(first, second)) {
-    return false;
-  } else {
-    return states_close(first, args...);
-  }
-}
-
-template <typename T, typename V>
-bool states_close_pauli_fuzz(const T& first, const V& second) {
-  ASSERT(first.num_qubits == second.num_qubits);
-
-  for (size_t i = 0; i < 100; i++) {
-    PauliString p = PauliString::rand(first.num_qubits);
-    auto c1 = first.expectation(p);
-    auto c2 = second.expectation(p);
-    ASSERT(is_close_eps(1e-4, c1, c2));
-  }
-
-  return true;
-}
-
-template <typename T, typename V, typename... Args>
-bool states_close_pauli_fuzz(const T& first, const V& second, const Args&... args) {
-  if (!states_close_pauli_fuzz(first, second)) {
     return false;
   } else {
     return states_close(first, args...);
@@ -211,6 +127,9 @@ QubitInterval random_interval(size_t num_qubits, size_t k) {
 
   return std::make_pair(q1, q2);
 }
+
+using namespace dataframe;
+using namespace dataframe::utils;
 
 bool test_statevector() {
   constexpr size_t nqb = 3;
@@ -1328,6 +1247,37 @@ bool test_mps_concatenate() {
   return true;
 }
 
+bool test_mps_reflection_symmetry() {
+  //constexpr size_t nqb = 8;
+
+  //MatrixProductState mps(nqb, 1u << nqb);
+
+  //Qubits qubits(nqb/2);
+  //std::iota(qubits.begin(), qubits.end(), 0);
+
+  //Qubits qubitsr(nqb/2);
+  //std::iota(qubitsr.begin(), qubitsr.end(), nqb/2);
+  //std::reverse(qubitsr.begin(), qubitsr.end());
+
+  //std::cout << fmt::format("qubits = {}, qubitsr = {}\n", qubits, qubitsr);
+
+  //for (size_t i = 0; i < 10; i++) {
+  //  Eigen::MatrixXcd U = haar_unitary(nqb/2);
+  //  mps.evolve(U, qubits);
+  //  mps.evolve(U, qubitsr);
+
+  //  state.evolve(qc_clean.adjoint())
+  //  Qubits left = {0};
+  //  Qubits right = {nqb - 1};
+
+  //  double s1 = mps.entanglement(left, 2);
+  //  double s2 = mps.entanglement(right, 2);
+  //  std::cout << fmt::format("Entanglement = {}, {}\n", s1, s2);
+  //}
+
+  return true;
+}
+
 bool test_mps_many_qubit_gate() {
   constexpr size_t nqb = 8;
 
@@ -1996,6 +1946,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_conjugate);
   ADD_TEST(test_mps_concatenate);
+  ADD_TEST(test_mps_reflection_symmetry);
   ADD_TEST(test_mps_many_qubit_gate);
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
@@ -2011,9 +1962,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_free_fermion_state);
   ADD_TEST(test_qc_reduce);
   ADD_TEST(test_simple);
-  //ADD_TEST(test_extended_majorana_state);
-
-
 
   constexpr char green[] = "\033[1;32m";
   constexpr char black[] = "\033[0m";

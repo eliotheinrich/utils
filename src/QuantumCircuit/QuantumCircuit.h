@@ -2,6 +2,8 @@
 
 #include <random>
 #include "CircuitUtils.h"
+#include "Graph.hpp"
+
 #include "Instructions.hpp"
 
 #include <iostream>
@@ -9,6 +11,8 @@
 #include <fmt/format.h>
 
 // --- Definitions for QuantumCircuit --- //
+
+using CircuitDAG = DirectedGraph<Instruction>;
 
 class QuantumCircuit {
   private:
@@ -24,6 +28,8 @@ class QuantumCircuit {
     QuantumCircuit(const QuantumCircuit& qc) : num_qubits(qc.num_qubits) { 
       append(qc); 
     };
+
+    CircuitDAG to_dag() const;
 
     uint32_t get_num_qubits() const {
       return num_qubits;

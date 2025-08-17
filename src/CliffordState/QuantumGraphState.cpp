@@ -445,7 +445,7 @@ uint32_t QuantumGraphState::distance(const QuantumGraphState& other) const {
 }
 
 double QuantumGraphState::graph_state_entanglement(const Qubits& qubits, Graph<>& graph) {
-  Graph<int, bool> bipartite_graph = graph.partition(qubits);
+  auto bipartite_graph = graph.partition(qubits);
   int s = 2*bipartite_graph.num_vertices;
   for (uint32_t i = 0; i < bipartite_graph.num_vertices; i++) {
     if (bipartite_graph.get_val(i)) {

@@ -97,6 +97,10 @@ bool QuantumCircuit::is_unitary() const {
   return true;
 }
 
+CircuitDAG QuantumCircuit::to_dag() const {
+  return CircuitDAG();
+}
+
 void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
   for (auto& inst : instructions) {
 		std::visit(quantumcircuit_utils::overloaded {
