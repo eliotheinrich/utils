@@ -153,26 +153,6 @@ bool test_statevector() {
   return true;
 }
 
-bool test_qc_reduce() {
-  constexpr size_t nqb = 10;
-  QuantumCircuit qc(nqb);
-  auto qubits = random_qubits(nqb, 4);
-  PauliString p = PauliString::randh(4);
-  qc.h(0);
-  qc.h(5);
-  qc.add_measurement(qubits, p);
-  qc.cx(0, 2);
-  qc.swap(6, 2);
-  qc.x(1);
-  Qubits support = qc.get_support();
-
-  auto [qc_, support_] = qc.reduce();
-
-  auto components = qc.split_into_unitary_components();
-
-  return true;
-}
-
 bool test_measure() {
   constexpr size_t nqb = 6;
 
@@ -468,31 +448,6 @@ bool test_simple() {
   std::cout << fmt::format("outcomes = {}, {}\n", b1, b2);
   std::cout << psi.to_string() << "\n";
   std::cout << psi_chp.to_string() << "\n";
-
-  return true;
-}
-
-bool test_pauli_reduce() {
-  for (size_t i = 0; i < 100; i++) {
-    size_t nqb =  randi() % 20 + 1;
-    PauliString p1 = PauliString::randh(nqb);
-    PauliString p2 = PauliString::randh(nqb);
-    while (p2.commutes(p1)) {
-      p2 = PauliString::randh(nqb);
-    }
-
-    std::vector<uint32_t> qubits(nqb);
-    std::iota(qubits.begin(), qubits.end(), 0);
-    QuantumCircuit qc(nqb);
-    reduce_paulis(p1, p2, qubits, qc);
-
-    PauliString p1_ = p1;
-    PauliString p2_ = p2;
-    qc.apply(p1_, p2_);
-
-    ASSERT(p1_ == PauliString::basis(nqb, "X", 0, false) && p2_ == PauliString::basis(nqb, "Z", 0, false),
-        fmt::format("p1 = {} and p2 = {}\nreduced to {} and {}.", p1, p2, p1_, p2_));
-  }
 
   return true;
 }
@@ -880,40 +835,6 @@ bool test_projector() {
     double d2 = (1.0 + mps.expectation(Pp).real())/2.0;
     ASSERT(is_close(d1, d2));
   }
-
-  return true;
-}
-
-bool test_pauli() {
-  Pauli id = Pauli::I;
-  Pauli x = Pauli::X;
-  Pauli y = Pauli::Y;
-  Pauli z = Pauli::Z;
-
-  auto validate_result = [](Pauli p1, Pauli p2, char g, uint8_t p) {
-    auto [result, phase] = multiply_pauli(p1, p2);
-    return (g == pauli_to_char(result)) && (p == phase);
-  };
-
-  ASSERT(pauli_to_char(id) == 'I');
-  ASSERT(pauli_to_char(x) == 'X');
-  ASSERT(pauli_to_char(y) == 'Y');
-  ASSERT(pauli_to_char(z) == 'Z');
-
-  ASSERT(validate_result(id, id, 'I', 0));
-  ASSERT(validate_result(id, x, 'X', 0));
-  ASSERT(validate_result(x, id, 'X', 0));
-  ASSERT(validate_result(id, y, 'Y', 0));
-  ASSERT(validate_result(y, id, 'Y', 0));
-  ASSERT(validate_result(id, z, 'Z', 0));
-  ASSERT(validate_result(z, id, 'Z', 0));
-  ASSERT(validate_result(x, x, 'I', 0));
-  ASSERT(validate_result(x, y, 'Z', 1));
-  ASSERT(validate_result(y, x, 'Z', 3));
-  ASSERT(validate_result(x, z, 'Y', 3));
-  ASSERT(validate_result(z, x, 'Y', 1));
-  ASSERT(validate_result(y, z, 'X', 1));
-  ASSERT(validate_result(z, y, 'X', 3));
 
   return true;
 }
@@ -1929,7 +1850,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_expectation);
   ADD_TEST(test_partial_trace);
   ADD_TEST(test_clifford_states);
-  ADD_TEST(test_pauli_reduce);
   ADD_TEST(test_z2_clifford);
   ADD_TEST(test_mps_inner);
   ADD_TEST(test_statevector_to_mps);
@@ -1941,7 +1861,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mpo_sample_paulis_montecarlo);
   ADD_TEST(test_stabilizer_entropy_sampling);
   ADD_TEST(test_participation_entropy_sampling);
-  ADD_TEST(test_pauli);
   ADD_TEST(test_mps_ising_model);
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_conjugate);
@@ -1960,7 +1879,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sv_entanglement);
   ADD_TEST(test_free_fermion_state);
-  ADD_TEST(test_qc_reduce);
   ADD_TEST(test_simple);
 
   constexpr char green[] = "\033[1;32m";

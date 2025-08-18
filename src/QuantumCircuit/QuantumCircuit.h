@@ -30,6 +30,7 @@ class QuantumCircuit {
     };
 
     CircuitDAG to_dag() const;
+    QuantumCircuit to_canonical_form() const;
 
     uint32_t get_num_qubits() const {
       return num_qubits;
@@ -86,11 +87,14 @@ class QuantumCircuit {
       Measurement m(qubits, pauli, outcome);
       add_measurement(m);
     }
+
+    void mzr(uint32_t q) { add_measurement({q}); }
     void add_weak_measurement(const WeakMeasurement& m);
     void add_weak_measurement(const Qubits& qubits, double beta, std::optional<PauliString> pauli=std::nullopt, std::optional<bool> outcome=std::nullopt) {
       WeakMeasurement m(qubits, beta, pauli, outcome);
       add_weak_measurement(m);
     }
+    void wmzr(uint32_t q, double beta) { add_weak_measurement({q}, beta); }
 
     void add_gate(const std::string& name, const Qubits& qubits);
     void add_gate(const std::shared_ptr<Gate> &gate);
@@ -191,12 +195,12 @@ class QuantumCircuit {
 template <>
 struct fmt::formatter<QuantumCircuit> {
   template <typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+  constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-    auto format(const QuantumCircuit& qc, FormatContext& ctx) {
-      return format_to(ctx.out(), "{}", qc.to_string());
-    }
+  auto format(const QuantumCircuit& qc, FormatContext& ctx) {
+    return format_to(ctx.out(), "{}", qc.to_string());
+  }
 };
 
 

@@ -2,47 +2,15 @@
 #include "Clifford.hpp"
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <set>
+#include <queue>
 
 std::string QuantumCircuit::to_string() const {
 	std::string s = "";
 	for (auto const &inst : instructions) {
-		s += std::visit(quantumcircuit_utils::overloaded {
-			[](std::shared_ptr<Gate> gate) -> std::string {
-				std::string gate_str = gate->label() + " ";
-				for (auto const &q : gate->qubits) {
-					gate_str += fmt::format("{} ", q);
-				}
-
-				return gate_str;
-			},
-			[](const Measurement& m) -> std::string {
-        if (m.is_basis()) {
-          return fmt::format("mzr {}{}", m.qubits[0], m.is_forced() ? fmt::format(" -> {}", m.get_outcome()) : "");
-        }
-				std::string meas_str = fmt::format("measure({}) ", m.get_pauli());
-				for (auto const &q : m.qubits) {
-					meas_str += fmt::format("{} ", q);
-				}
-
-        if (m.outcome) {
-          meas_str += fmt::format("-> {}", m.outcome.value());
-        }
-				return meas_str;
-			},
-			[](const WeakMeasurement& m) -> std::string {
-				std::string meas_str = fmt::format("weak_measure({}, {:.5f}) ", m.get_pauli(), m.beta);
-				for (auto const &q : m.qubits) {
-					meas_str += fmt::format("{} ", q);
-				}
-
-        if (m.outcome) {
-          meas_str += fmt::format("-> {}", m.outcome.value());
-        }
-				return meas_str;
-			}
-		}, inst) + "\n";
+    s += fmt::format("{}\n", inst);
 	}
 
 	return s;
@@ -98,7 +66,123 @@ bool QuantumCircuit::is_unitary() const {
 }
 
 CircuitDAG QuantumCircuit::to_dag() const {
-  return CircuitDAG();
+  CircuitDAG dag(length());
+
+  std::vector<std::queue<size_t>> covers(num_qubits);
+  std::vector<Qubits> supports(length());
+
+  for (size_t i = 0; i < length(); i++) {
+    const Instruction& inst = instructions[i];
+    dag.set_val(i, copy_instruction(inst));
+
+    supports[i] = get_instruction_support(inst);
+    for (uint32_t q : supports[i]) {
+      covers[q].push(i);
+    }
+  }
+
+  for (size_t i = 0; i < length(); i++) {
+    for (uint32_t q : supports[i]) {
+      covers[q].pop();
+      if (covers[q].size() > 0) {
+        size_t j = covers[q].front();
+
+        if (j != i) {
+          dag.add_edge(i, j);
+        }
+      }
+    }
+  }
+
+  return dag;
+}
+
+QuantumCircuit QuantumCircuit::to_canonical_form() const {
+  // Construct DAG and reversed DAG
+  CircuitDAG dag = to_dag();
+  DirectedGraph<int> reversed_dag(length());
+  for (size_t i = 0; i < length(); i++) {
+    for (const auto& j : dag.edges_of(i)) {
+      reversed_dag.add_edge(j, i);
+    }
+  }
+
+  // Construct first layer
+  std::set<size_t> current_layer;
+  for (size_t i = 0; i < length(); i++) {
+    if (reversed_dag.degree(i) == 0) {
+      current_layer.insert(i);
+    }
+  }
+
+  std::vector<std::set<size_t>> layers;
+  layers.push_back(current_layer);
+  std::set<size_t> visited = current_layer;
+
+  // Construct subsequent layers
+  bool keep_going = true;
+  while (keep_going) {
+    std::set<size_t> next_layer;
+    for (size_t i : current_layer) {
+      for (size_t j : dag.edges_of(i)) {
+        next_layer.insert(j);
+      }
+    }
+
+    std::vector<size_t> to_remove;
+    for (size_t j : next_layer) {
+      for (size_t k : reversed_dag.edges_of(j)) {
+        if (!visited.contains(k)) {
+          to_remove.push_back(j);
+          continue;
+        }
+      }
+    }
+
+    for (size_t j : to_remove) {
+      next_layer.erase(j);
+    }
+
+    if (next_layer.size() > 0) {
+      layers.push_back(next_layer);
+      current_layer = next_layer;
+      visited.insert(current_layer.begin(), current_layer.end());
+    } else {
+      keep_going = false;
+    }
+  }
+
+  for (const auto& layer : layers) {
+    std::cout << fmt::format("layer = {}\n", layer);
+  }
+
+  // Construct reduced circuit, with instructions ordered from left to right
+  QuantumCircuit circuit(num_qubits);
+  size_t offset = 0;
+  for (const auto& layer : layers) {
+    std::vector<size_t> layer_(layer.begin(), layer.end());
+    std::vector<uint32_t> first_qubits(layer_.size());
+    for (size_t i = 0; i < layer_.size(); i++) {
+      QubitInterval interval = to_interval(get_instruction_support(dag.get_val(i + offset)));
+      if (!interval) {
+        throw std::runtime_error("Encountered a 0-qubit instruction in circuit.");
+      }
+
+      first_qubits[i] = interval->first;
+    }
+
+    std::vector<uint32_t> args = argsort(first_qubits);
+    std::cout << fmt::format("layer_ = {}, first_qubits = {}, args = {}\n", layer_, first_qubits, args);
+    
+    for (size_t i = 0; i < args.size(); i++) {
+      Instruction inst = copy_instruction(dag.get_val(args[i] + offset));
+      circuit.add_instruction(inst);
+    }
+
+    offset += layer.size();
+  }
+
+  return circuit;
 }
 
 void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {
@@ -136,27 +220,14 @@ Qubits QuantumCircuit::get_support() const {
   std::set<uint32_t> support;
 
   for (auto const& inst : instructions) {
-		std::visit(quantumcircuit_utils::overloaded {
-      [&](const std::shared_ptr<Gate> gate) { 
-        for (const uint32_t q : gate->qubits) {
-          support.insert(q);
-        }
-      },
-      [&](const Measurement& m) { 
-        for (const uint32_t q : m.qubits) {
-          support.insert(q);
-        }
-      },
-      [&](const WeakMeasurement& m) {
-        for (const uint32_t q : m.qubits) {
-          support.insert(q);
-        }
-      }
-    }, inst);
+    Qubits qubits = get_instruction_support(inst);
+    for (uint32_t q : qubits) {
+      support.insert(q);
+    }
   }
 
   Qubits support_(support.begin(), support.end());
-
+  std::sort(support_.begin(), support_.end());
   return support_;
 }
 
@@ -381,19 +452,11 @@ std::vector<QuantumCircuit> QuantumCircuit::split_into_unitary_components() cons
     return components;
   }
 
-  auto is_unitary = [](const Instruction& inst) {
-    return std::visit(quantumcircuit_utils::overloaded {
-      [](std::shared_ptr<Gate> gate) { return true; },
-      [](const Measurement& m) { return false; },
-      [](const WeakMeasurement& m) { return false; }
-    }, inst);
-  };
-
-  bool on_unitary_section = is_unitary(instructions[0]);
+  bool on_unitary_section = instruction_is_unitary(instructions[0]);
   QuantumCircuit qc(num_qubits);
   for (const auto& inst : instructions) {
     if (on_unitary_section) {
-      if (is_unitary(inst)) {
+      if (instruction_is_unitary(inst)) {
         qc.add_instruction(inst);
       } else {
         components.push_back(qc);
@@ -402,7 +465,7 @@ std::vector<QuantumCircuit> QuantumCircuit::split_into_unitary_components() cons
         on_unitary_section = false;
       }
     } else {
-      if (is_unitary(inst)) {
+      if (instruction_is_unitary(inst)) {
         components.push_back(qc);
         qc = QuantumCircuit(num_qubits);
         qc.add_instruction(inst);
