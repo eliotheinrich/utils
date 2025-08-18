@@ -225,7 +225,7 @@ class Graph {
       vals[u] = val;
     }
 
-    V get_val(uint32_t u) const { 
+    const V& get_val(uint32_t u) const { 
       if (u >= num_vertices) {
         throw std::runtime_error(fmt::format("Invalid vertex {} for graph with {} vertices.", u, num_vertices));
       }
@@ -451,7 +451,6 @@ class Graph {
     }
 
     std::pair<bool, std::vector<uint32_t>> path(uint32_t s, uint32_t t) const requires (std::is_integral_v<T>) {
-      std::cout << to_string() << "\n";
       std::vector<uint32_t> stack;
       stack.push_back(s);
 
@@ -460,7 +459,6 @@ class Graph {
 
       while (!stack.empty()) {
         uint32_t v = *(stack.end()-1);
-        std::cout << fmt::format("v = {}\n", v);
         stack.pop_back();
         if (visited.count(v)) {
           continue;
@@ -468,7 +466,6 @@ class Graph {
 
         visited.insert(v);
         for (auto const &w : edges_of(v)) {
-          std::cout << fmt::format("neighbor = {}\n", w);
           if (edge_weight(v, w) > 0) {
             if (!visited.count(w)) {
               parent.emplace(w, v);
@@ -508,8 +505,6 @@ class Graph {
         g.add_edge(i, t, INT_MAX);
       }
 
-      std::cout << "g = " << g.to_string() << "\n";
-
       T flow = g.max_flow(s, t);
 
       return flow;
@@ -519,8 +514,8 @@ class Graph {
       Graph residual_graph(*this);
 
       for (uint32_t i = 0; i < num_vertices; i++) {
-        for (auto const &[w, _] : residual_graph.edges[i]) {
-          residual_graph.add_edge(i, w, 0);
+        for (auto const &w : residual_graph.edges_of(i)) {
+          residual_graph.add_edge(w, i, 0);
         }
       }
 

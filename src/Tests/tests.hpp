@@ -24,12 +24,12 @@
 template <>
 struct fmt::formatter<std::complex<double>> {
   template <typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+  constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-    auto format(const std::complex<double>& c, FormatContext& ctx) {
-      return format_to(ctx.out(), "{} + {}i", c.real(), c.imag());
-    }
+  auto format(const std::complex<double>& c, FormatContext& ctx) {
+    return format_to(ctx.out(), "{} + {}i", c.real(), c.imag());
+  }
 };
 
 template <typename T, typename V>

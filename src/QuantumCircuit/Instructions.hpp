@@ -658,6 +658,55 @@ struct WeakMeasurement {
 
 using Instruction = std::variant<std::shared_ptr<Gate>, Measurement, WeakMeasurement>;
 
+template <>
+struct fmt::formatter<Instruction> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const Instruction& inst, FormatContext& ctx) const {
+    auto inst_to_string = [](const Instruction& inst) {
+		  return std::visit(quantumcircuit_utils::overloaded {
+          [](std::shared_ptr<Gate> gate) -> std::string {
+            std::string gate_str = gate->label() + " ";
+            for (auto const &q : gate->qubits) {
+              gate_str += fmt::format("{} ", q);
+            }
+
+            return gate_str;
+          },
+          [](const Measurement& m) -> std::string {
+            if (m.is_basis()) {
+              return fmt::format("mzr {}{}", m.qubits[0], m.is_forced() ? fmt::format(" -> {}", m.get_outcome()) : "");
+            }
+            std::string meas_str = fmt::format("measure({}) ", m.get_pauli());
+            for (auto const &q : m.qubits) {
+              meas_str += fmt::format("{} ", q);
+            }
+
+            if (m.outcome) {
+              meas_str += fmt::format("-> {}", m.outcome.value());
+            }
+            return meas_str;
+          },
+          [](const WeakMeasurement& m) -> std::string {
+            std::string meas_str = fmt::format("weak_measure({}, {:.5f}) ", m.get_pauli(), m.beta);
+            for (auto const &q : m.qubits) {
+              meas_str += fmt::format("{} ", q);
+            }
+
+            if (m.outcome) {
+              meas_str += fmt::format("-> {}", m.outcome.value());
+            }
+            return meas_str;
+          }
+      }, inst);
+    };
+
+    return fmt::format_to(ctx.out(), "{}", inst_to_string(inst));
+  }
+};
+
 static Instruction copy_instruction(const Instruction& inst) {
   return std::visit(quantumcircuit_utils::overloaded {
     [](std::shared_ptr<Gate> gate) {
@@ -671,3 +720,7 @@ static Instruction copy_instruction(const Instruction& inst) {
     }
   }, inst);
 }
+
+Qubits get_instruction_support(const Instruction& inst);
+
+bool instruction_is_unitary(const Instruction& inst);

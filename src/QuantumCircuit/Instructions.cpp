@@ -85,3 +85,25 @@ bool WeakMeasurement::get_outcome() const {
   // is_forced() MUST be true, otherwise this will throw an exception
   return outcome.value();
 }
+
+Qubits get_instruction_support(const Instruction& inst) {
+	return std::visit(quantumcircuit_utils::overloaded {
+    [](const std::shared_ptr<Gate> gate) { 
+      return gate->qubits;
+    },
+    [](const Measurement& m) { 
+      return m.qubits;
+    },
+    [](const WeakMeasurement& m) {
+      return m.qubits;
+    }
+  }, inst);
+}
+
+bool instruction_is_unitary(const Instruction& inst) {
+  return std::visit(quantumcircuit_utils::overloaded {
+    [](std::shared_ptr<Gate> gate) { return true; },
+    [](const Measurement& m) { return false; },
+    [](const WeakMeasurement& m) { return false; }
+  }, inst);
+}

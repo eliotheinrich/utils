@@ -475,7 +475,9 @@ class MatrixProductState : public MagicQuantumState {
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 		virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) override;
 		virtual void evolve(const QuantumCircuit& circuit) override { 
-			QuantumState::evolve(circuit); 
+      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      std::cout << fmt::format("Simplifying. circuit.length() = {}, simplified.length() = {}\n", circuit.length(), simple.length());
+			QuantumState::evolve(simple); 
 		}
 
 		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
