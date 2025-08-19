@@ -562,7 +562,7 @@ class Graph {
         stack.pop_back();
         if (!visited.count(v)) {
           visited.insert(v);
-          for (auto const &[w, _] : edges[v]) {
+          for (auto const &w : edges_of(v)) {
             stack.push_back(w);
           }
         }
@@ -645,7 +645,7 @@ class Graph {
       return max_cluster_size;
     }
 
-    double local_clustering_coefficient(uint32_t i) const requires (std::is_arithmetic_v<T>) {
+    double local_clustering_coefficient(uint32_t i) const requires (std::is_arithmetic_v<T> || std::is_void_v<T>) {
       uint32_t ki = degree(i);
       if (ki == 0 || ki == 1) {
         return 0.;
@@ -654,11 +654,15 @@ class Graph {
       uint32_t c = 0;
       for (uint32_t j = 0; j < num_vertices; j++) {
         for (uint32_t k = 0; k < num_vertices; k++) {
-          std::optional<T> c1 = adjacency_matrix(i, j);
-          std::optional<T> c2 = adjacency_matrix(j, k);
-          std::optional<T> c3 = adjacency_matrix(k, i);
-          if (c1 && c2 && c3) {
-            c += c1.value() * c2.value() * c3.value();
+          if constexpr (std::is_void_v<T>) {
+            c += adjacency_matrix(i, j)*adjacency_matrix(j, k)*adjacency_matrix(k, i);
+          } else {
+            std::optional<T> c1 = adjacency_matrix(i, j);
+            std::optional<T> c2 = adjacency_matrix(j, k);
+            std::optional<T> c3 = adjacency_matrix(k, i);
+            if (c1 && c2 && c3) {
+              c += c1.value() * c2.value() * c3.value();
+            }
           }
         }
       }
@@ -666,7 +670,7 @@ class Graph {
       return c/(ki*(ki - 1));
     }
       
-    double global_clustering_coefficient() const requires (std::is_arithmetic_v<T>) {
+    double global_clustering_coefficient() const requires (std::is_arithmetic_v<T> || std::is_void_v<T>) {
       double c = 0.;
       for (uint32_t i = 0; i < num_vertices; i++) {
         c += local_clustering_coefficient(i);

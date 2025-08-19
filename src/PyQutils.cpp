@@ -1,5 +1,7 @@
 #include <PyQutils.hpp>
 
+#include "Logger.hpp"
+
 using PyMutationFunc = std::function<PauliString(PauliString)>;
 inline PauliMutationFunc convert_from_pyfunc(PyMutationFunc func) {
   return [func](PauliString& p) { p = func(p); };
@@ -10,6 +12,11 @@ inline std::vector<dataframe::byte_t> concat_bytes(const std::vector<dataframe::
 }
 
 NB_MODULE(qutils_bindings, m) {
+  m.def("log_info", &Logger::log_info);
+  m.def("log_warning", &Logger::log_warning);
+  m.def("log_info", &Logger::log_error);
+  m.def("read_log", &Logger::read_log);
+
   m.def("seed_rng", &Random::seed_rng);
 
   nanobind::class_<BitString>(m, "BitString")

@@ -45,11 +45,11 @@ class QuantumGraphState : public CliffordState {
 
   public:
     uint32_t num_qubits;
-    Graph<> graph;
+    UndirectedGraph<int> graph;
 
     QuantumGraphState()=default;
     QuantumGraphState(uint32_t num_qubits);
-    QuantumGraphState(Graph<> &graph);
+    QuantumGraphState(UndirectedGraph<int> &graph);
 
     QuantumCHPState to_chp() const;
     Statevector to_statevector() const;
@@ -76,7 +76,7 @@ class QuantumGraphState : public CliffordState {
 
     uint32_t distance(const QuantumGraphState& other) const;
 
-    static double graph_state_entanglement(const Qubits &qubits, Graph<> &graph);
+    static double graph_state_entanglement(const Qubits &qubits, UndirectedGraph<int> &graph);
     virtual double entanglement(const QubitSupport &support, uint32_t index) override;
 
     virtual double sparsity() const override;

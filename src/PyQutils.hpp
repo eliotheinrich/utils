@@ -27,6 +27,19 @@
 
 using namespace nanobind::literals;
 
+
+template <typename T>
+concept HasZeroArgInit = requires(T& x) {
+    { x.init() } -> std::same_as<void>;
+};
+
+template <typename T>
+void maybe_zero_arg_init(T &self) {
+  if constexpr (HasZeroArgInit<T>) {
+    self.init();
+  }
+}
+
 #define EXPORT_SIMULATOR(A)                                                               \
   nanobind::class_<A>(m, #A)                                                              \
     .def(nanobind::init<dataframe::ExperimentParams&, uint32_t>())                        \
@@ -39,6 +52,7 @@ using namespace nanobind::literals;
           A& self,                                                                        \
           const std::optional<nanobind::bytes>& data = std::nullopt) {                    \
           std::optional<std::vector<dataframe::byte_t>> _data;                            \
+      maybe_zero_arg_init(self);                                                          \
       if (data.has_value()) {                                                             \
         _data = convert_bytes(data.value());                                              \
       } else {                                                                            \

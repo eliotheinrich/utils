@@ -1329,6 +1329,7 @@ class MatrixProductStateImpl {
     }
 
     void evolve(const Eigen::Matrix2cd& gate, uint32_t q) {
+      Logger::log_info(fmt::format("MPS.evolve({})", q));
       auto i = external_indices[q];
       auto ip = prime(i);
       ITensor tensor = matrix_to_tensor(gate, {ip}, {i});
@@ -1340,6 +1341,7 @@ class MatrixProductStateImpl {
     }
 
     void evolve(const Eigen::Matrix4cd& gate, uint32_t q1_, uint32_t q2_) {
+      Logger::log_info(fmt::format("MPS.evolve({}, {})", q1_, q2_));
       uint32_t q1 = std::min(q1_, q2_);
       uint32_t q2 = std::max(q1_, q2_);
 
@@ -1398,6 +1400,7 @@ class MatrixProductStateImpl {
 
       uint32_t qmin = std::ranges::min(qubits);
       uint32_t qmax = qmin + qubits.size();
+      Logger::log_info(fmt::format("MPS.evolve({}, {})", qmin, qmax));
       orthogonalize(qmin, qmax);
 
       std::vector<uint32_t> inds(num_qubits);
