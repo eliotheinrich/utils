@@ -46,6 +46,10 @@ class QuantumState : public EntanglementEntropyState, public std::enable_shared_
   protected:
     uint32_t num_qubits;
 
+    static bool get_dir() {
+      return randf() < 0.5;
+    }
+
 	public:
 		uint32_t basis;
 
@@ -305,14 +309,16 @@ class DensityMatrix : public MagicQuantumState {
 		virtual void evolve_diagonal(const Eigen::VectorXcd& gate) override;
 
 		virtual void evolve(const QuantumCircuit& circuit) override { 
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
 			QuantumState::evolve(simple); 
 		}
 
 		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
       if (simple.is_unitary() && qubits.size() < 4) {
@@ -388,14 +394,16 @@ class Statevector : public MagicQuantumState {
 		virtual void evolve_diagonal(const Eigen::VectorXcd &gate) override;
 
 		virtual void evolve(const QuantumCircuit& circuit) override { 
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
 			QuantumState::evolve(simple); 
 		}
 
 		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
       if (simple.is_unitary() && qubits.size() < 4) {
@@ -490,14 +498,16 @@ class MatrixProductState : public MagicQuantumState {
 		virtual void evolve(const Eigen::Matrix2cd& gate, uint32_t qubit) override;
 		virtual void evolve(const Eigen::MatrixXcd& gate, const Qubits& qubits) override;
 		virtual void evolve(const QuantumCircuit& circuit) override { 
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
       QuantumState::evolve(simple);
 		}
 
 		virtual void evolve(const QuantumCircuit& circuit, const Qubits& qubits) override {
-      QuantumCircuit simple = circuit.simplify().to_canonical_form();
+      bool dir = get_dir();
+      QuantumCircuit simple = circuit.simplify(dir);
       Logger::log_info(fmt::format("Simplified circuit from length {} to {}", circuit.length(), simple.length()));
 
       if (simple.is_unitary() && qubits.size() < 4) {

@@ -1286,8 +1286,9 @@ class MatrixProductStateImpl {
       }
 
       // TODO can this be removed?
+      constexpr double MASK_MIN = 1e-14;
       theta = apply(theta, [](Cplx c) { 
-        double mask = std::abs(c) >= 1e-14;
+        double mask = std::abs(c) >= MASK_MIN;
         return Cplx(c.real() * mask, c.imag() * mask);
       });
 
@@ -1503,7 +1504,7 @@ class MatrixProductStateImpl {
           tensors[i] = U * S;
 
           left = commonIndex(V, S);
-          internal_indices[i] = left; //commonIndex(S, V);
+          internal_indices[i] = left; 
         }
 
         tensors[q2 - 1] = c;
@@ -1540,7 +1541,7 @@ class MatrixProductStateImpl {
           tensors[i] = V * S;
 
           right = commonIndex(U, S);
-          internal_indices[i-1] = right; //commonIndex(S, U);
+          internal_indices[i-1] = right; 
         }
 
         tensors[q1] = c;
@@ -1694,28 +1695,7 @@ class MatrixProductStateImpl {
     }
 
     void apply_measure(const MeasurementResult& result, const Qubits& qubits) {
-      auto [q1, q2] = support_range(qubits).value();
-
-      // TODO revisit this logic
       evolve(result.proj, qubits);
-      if (q1 < num_qubits - 1) {
-        svd_bond(q1);
-      }
-      set_left_ortho_lim(q1);
-      set_right_ortho_lim(q2-1);
-      //if (qubits.size() == 1) {
-      //  const Eigen::Matrix2cd id = Eigen::Matrix2cd::Identity();
-      //  if (q1 == 0) { // PI
-      //    auto proj_ = Eigen::kroneckerProduct(id, result.proj);
-      //    evolve(proj_, {q1, q1 + 1});
-      //  } else { // IP
-      //    auto proj_ = Eigen::kroneckerProduct(result.proj, id);
-      //    evolve(proj_, {q1 - 1, q1});
-      //  }
-      //} else {
-      //  evolve(result.proj, qubits);
-      //}
-
       assert_state_valid(fmt::format("Error after applying measurement on {}.", qubits));
     }
 
@@ -1738,8 +1718,9 @@ class MatrixProductStateImpl {
       }
 
       QuantumState::check_forced_measure(b, prob_zero);
-      auto proj = b ? proj1 : proj0;
-      //auto proj = b ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
+      auto proj = b ? proj1 / std::sqrt(1.0 - prob_zero) : proj0 / std::sqrt(prob_zero);
+
+      Logger::log_info(fmt::format("Measuring {} on {}. Obtained p0 = {}, outcome = {}\n", pauli, qubits, prob_zero, b));
 
       return MeasurementResult(proj, prob_zero, b);
     }
@@ -1775,6 +1756,8 @@ class MatrixProductStateImpl {
       double norm = std::sqrt(std::abs(expectation(P, qubits)));
 
       proj = proj / norm;
+
+      Logger::log_info(fmt::format("Weak measuring {} on {} with beta = {}. Obtained prob_zero = {}, norm = {}, outcome = {}\n", pauli, qubits, m.beta, prob_zero, norm, b));
 
       return MeasurementResult(proj, prob_zero, b);
     }
@@ -1856,7 +1839,7 @@ class MatrixProductStateImpl {
     void state_checks(const std::string& error_message) const {
       // Orthonormal
       if (!check_orthonormality()) {
-        throw std::runtime_error(fmt::format("{}\nError in orthogonality: \n{}\n", error_message, print_orthogonal_sites()));
+        Logger::log_error(fmt::format("{}\nError in orthogonality: \n{}\n", error_message, print_orthogonal_sites()));
       }
     }
 

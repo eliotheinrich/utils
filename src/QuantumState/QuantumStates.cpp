@@ -146,8 +146,6 @@ double estimate_mutual_renyi_entropy(size_t index, const std::vector<double>& sa
     }
     return p/N;
   } else {
-    for (size_t i = 0; i < N; i++) {
-      return estimate_renyi_entropy(index, samplesA, 2) + estimate_renyi_entropy(index, samplesB, 2) - estimate_renyi_entropy(index, samplesAB, 2);
-    }
+    return estimate_renyi_entropy(index, samplesA, 2) + estimate_renyi_entropy(index, samplesB, 2) - estimate_renyi_entropy(index, samplesAB, 2);
   }
 }

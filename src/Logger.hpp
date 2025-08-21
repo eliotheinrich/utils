@@ -7,6 +7,25 @@
 #include <cstdlib>
 #include <sstream>
 
+#include <cstdint>
+#include <string_view>
+#include <string>
+
+constexpr uint32_t fnv1a(std::string_view s) {
+    uint32_t h = 2166136261u;
+    for (char c : s)
+        h = (h ^ uint32_t(c)) * 16777619u;
+    return h;
+}
+
+// ------------------------------------------------------------------
+// This captures the call-site through default arguments:
+struct LogSite {
+    uint32_t id;
+
+    constexpr LogSite(const char* file = __builtin_FILE(), unsigned line   = __builtin_LINE()) : id(fnv1a(file) ^ line) {}
+};
+
 class Logger {
   public:
       enum Level { INFO, WARNING, ERROR };
@@ -19,21 +38,21 @@ class Logger {
       Logger(const Logger&) = delete;
       Logger& operator=(const Logger&) = delete;
 
-      static void log_info(const std::string& message) {
+      static void log_info(const std::string& message, LogSite site={}) {
         if (get_instance().logging_level >= Logger::logging_info) {
-          log(Level::INFO, message);
+          log(Level::INFO, "[" + std::to_string(site.id) + "] " + std::string(message));
         }
       }
 
-      static void log_warning(const std::string& message) {
+      static void log_warning(const std::string& message, LogSite site={}) {
         if (get_instance().logging_level >= Logger::logging_warnings) {
-          log(Level::WARNING, message);
+          log(Level::WARNING, "[" + std::to_string(site.id) + "] " + std::string(message));
         }
       }
 
-      static void log_error(const std::string& message) {
+      static void log_error(const std::string& message, LogSite site={}) {
         if (get_instance().logging_level >= Logger::logging_errors) {
-          log(Level::ERROR, message);
+          log(Level::ERROR, "[" + std::to_string(site.id) + "] " + std::string(message));
         }
       }
 

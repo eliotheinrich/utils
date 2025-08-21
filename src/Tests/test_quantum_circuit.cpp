@@ -59,10 +59,12 @@ QuantumCircuit random_unitary_circuit(size_t nqb, size_t depth, const std::vecto
 bool test_qc_canonical() {
   constexpr size_t nqb = 6;
 
-  QuantumCircuit qc = random_unitary_circuit(nqb, 10, {2});
-  QuantumCircuit canon = qc.to_canonical_form();
-
-  ASSERT(qc.to_matrix().isApprox(canon.to_matrix()));
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 10, {2});
+    CircuitDAG dag = qc.to_dag();
+    QuantumCircuit canon = QuantumCircuit::to_circuit(dag, nqb, randf() < 0.5);
+    ASSERT(qc.to_matrix().isApprox(canon.to_matrix()));
+  }
 
   return true;
 }
@@ -92,12 +94,28 @@ bool test_pauli_reduce() {
   return true;
 }
 
+bool test_dag_to_circuit() {
+  constexpr size_t nqb = 6;
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 10, {1, 2, 3});
+
+    CircuitDAG dag = qc.to_dag();
+    QuantumCircuit left = QuantumCircuit::to_circuit_left_to_right(dag, nqb);
+    QuantumCircuit right = QuantumCircuit::to_circuit_right_to_left(dag, nqb);
+    ASSERT(qc.to_matrix().isApprox(left.to_matrix()));
+    ASSERT(qc.to_matrix().isApprox(right.to_matrix()));
+  }
+}
+
 bool test_qc_simplify() {
   constexpr size_t nqb = 6;
-  QuantumCircuit qc = random_unitary_circuit(nqb, 10, {1, 2});
-  QuantumCircuit simple = qc.simplify();
 
-  ASSERT(qc.to_matrix().isApprox(simple.to_matrix()));
+  for (size_t i = 0; i < 20; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 20, {1, 2});
+    QuantumCircuit simple = qc.simplify(randf() < 0.5);
+
+    ASSERT(qc.to_matrix().isApprox(simple.to_matrix()));
+  }
 
   return true;
 }
@@ -189,7 +207,9 @@ int main(int argc, char *argv[]) {
       test_names.insert(argv[i]);
     }
   }
-  Random::seed_rng(314);
+  int i = randi();
+  std::cout << fmt::format("Seeding {}\n", i);
+  Random::seed_rng(i);
 
   ADD_TEST(test_circuit_dag);
   ADD_TEST(test_qc_reduce);
