@@ -1168,37 +1168,6 @@ bool test_mps_concatenate() {
   return true;
 }
 
-bool test_mps_reflection_symmetry() {
-  //constexpr size_t nqb = 8;
-
-  //MatrixProductState mps(nqb, 1u << nqb);
-
-  //Qubits qubits(nqb/2);
-  //std::iota(qubits.begin(), qubits.end(), 0);
-
-  //Qubits qubitsr(nqb/2);
-  //std::iota(qubitsr.begin(), qubitsr.end(), nqb/2);
-  //std::reverse(qubitsr.begin(), qubitsr.end());
-
-  //std::cout << fmt::format("qubits = {}, qubitsr = {}\n", qubits, qubitsr);
-
-  //for (size_t i = 0; i < 10; i++) {
-  //  Eigen::MatrixXcd U = haar_unitary(nqb/2);
-  //  mps.evolve(U, qubits);
-  //  mps.evolve(U, qubitsr);
-
-  //  state.evolve(qc_clean.adjoint())
-  //  Qubits left = {0};
-  //  Qubits right = {nqb - 1};
-
-  //  double s1 = mps.entanglement(left, 2);
-  //  double s2 = mps.entanglement(right, 2);
-  //  std::cout << fmt::format("Entanglement = {}, {}\n", s1, s2);
-  //}
-
-  return true;
-}
-
 bool test_mps_many_qubit_gate() {
   constexpr size_t nqb = 8;
 
@@ -1628,6 +1597,44 @@ bool test_sv_entanglement() {
   return true;
 }
 
+bool test_dag_density_matrix() {
+  constexpr size_t nqb = 6;
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc(nqb);
+    for (size_t d = 0; d < 10; d++) {
+      // Unitary layer
+      for (size_t j = 0; j < nqb; j++) {
+        uint32_t n = randi(1, 3);
+        uint32_t q = randi(0, nqb - n + 1);
+        Qubits qubits(n);
+        std::iota(qubits.begin(), qubits.end(), q);
+        qc.add_gate(haar_unitary(n), qubits);
+      }
+
+      // Measurement layer
+      for (size_t j = 0; j < nqb; j++) {
+        uint32_t n = randi(1, 3);
+        uint32_t q = randi(0, nqb - n + 1);
+        Qubits qubits(n);
+        std::iota(qubits.begin(), qubits.end(), q);
+        qc.add_measurement(Measurement(qubits, PauliString::randh(n)));
+      }
+    }
+
+    QuantumCircuit simple = qc.simplify();
+    DensityMatrix rho1(nqb);
+    DensityMatrix rho2(nqb);
+
+    rho1.evolve(qc);
+    rho2.evolve(simple);
+
+    std::cout << "rho1 = \n" << rho1.to_string() << "\n";
+    std::cout << "rho2 = \n" << rho2.to_string() << "\n";
+  }
+
+  return true;
+}
+
 
 // Functions for generating matchgates
 static constexpr std::complex<double> imag_unit = {0.0, 1.0};
@@ -1865,7 +1872,6 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_mps_random_clifford);
   ADD_TEST(test_mps_conjugate);
   ADD_TEST(test_mps_concatenate);
-  ADD_TEST(test_mps_reflection_symmetry);
   ADD_TEST(test_mps_many_qubit_gate);
   ADD_TEST(test_mps_trace_conserved);
   ADD_TEST(test_serialize);
@@ -1878,6 +1884,7 @@ int main(int argc, char *argv[]) {
   ADD_TEST(test_partial_distributions);
   ADD_TEST(test_bitstring_expectation);
   ADD_TEST(test_sv_entanglement);
+  ADD_TEST(test_dag_density_matrix);
   ADD_TEST(test_free_fermion_state);
   ADD_TEST(test_simple);
 

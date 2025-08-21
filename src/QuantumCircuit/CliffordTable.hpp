@@ -77,7 +77,14 @@ class CliffordTable {
         qc.apply(qubits, args...);
       } else if constexpr (std::is_same_v<CircuitType, Eigen::MatrixXcd>) {
         Eigen::MatrixXcd matrix = circuits[r];
-        (args.evolve(matrix, qubits), ...);
+
+        ([&] {
+         if constexpr (std::is_same_v<std::decay_t<Args>, QuantumCircuit>) {
+           args.add_gate(matrix, qubits);
+         } else {
+           args.evolve(matrix, qubits);
+         }
+        }(), ...);
       }
     } 
 };

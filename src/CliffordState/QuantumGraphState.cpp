@@ -92,14 +92,14 @@ const uint32_t QuantumGraphState::CZ_LOOKUP[24][24][2][3] =
 
 #include <iostream>
 QuantumGraphState::QuantumGraphState(uint32_t num_qubits) : CliffordState(num_qubits), num_qubits(num_qubits) {
-  graph = Graph<>();
+  graph = UndirectedGraph<int>();
   for (uint32_t i = 0; i < num_qubits; i++) {
     graph.add_vertex(HGATE);
   }
 }
 
-QuantumGraphState::QuantumGraphState(Graph<> &graph) : CliffordState(graph.num_vertices) {
-  this->graph = Graph<>(graph);
+QuantumGraphState::QuantumGraphState(UndirectedGraph<int> &graph) : CliffordState(graph.num_vertices) {
+  this->graph = UndirectedGraph<int>(graph);
 }
 
 QuantumCHPState QuantumGraphState::to_chp() const {
@@ -444,7 +444,7 @@ uint32_t QuantumGraphState::distance(const QuantumGraphState& other) const {
   return s;
 }
 
-double QuantumGraphState::graph_state_entanglement(const Qubits& qubits, Graph<>& graph) {
+double QuantumGraphState::graph_state_entanglement(const Qubits& qubits, UndirectedGraph<int>& graph) {
   auto bipartite_graph = graph.partition(qubits);
   int s = 2*bipartite_graph.num_vertices;
   for (uint32_t i = 0; i < bipartite_graph.num_vertices; i++) {
@@ -564,11 +564,11 @@ double QuantumGraphState::sparsity() const {
 }
 
 template <>
-struct glz::meta<Graph<>> {
+struct glz::meta<UndirectedGraph<int>> {
   static constexpr auto value = glz::object(
-    "num_vertices", &Graph<>::num_vertices,
-    "vals", &Graph<>::vals,
-    "edges", &Graph<>::edges
+    "num_vertices", &UndirectedGraph<int>::num_vertices,
+    "vals", &UndirectedGraph<int>::vals,
+    "edges", &UndirectedGraph<int>::edges
   );
 };
 

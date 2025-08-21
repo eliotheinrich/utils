@@ -2,21 +2,6 @@
 
 #include "QuantumCircuit.h"
 
-template <typename T, typename... QuantumStates>
-size_t get_num_qubits(const T& first, const QuantumStates&... args) {
-  size_t num_qubits = first.get_num_qubits();
-
-  if constexpr (sizeof...(args) == 0) {
-    return num_qubits;
-  } else {
-    if (num_qubits != get_num_qubits(args...)) {
-      throw std::runtime_error("Error; inappropriate states passed to get_num_qubits. Number of qubits do not match.");
-    }
-
-    return num_qubits;
-  }
-}
-
 Qubits random_qubits(size_t num_qubits, size_t k) {
   std::minstd_rand rng(randi());
   Qubits qubits(num_qubits);
@@ -58,11 +43,14 @@ bool test_circuit_dag() {
   return true;
 }
 
-QuantumCircuit random_unitary_circuit(size_t nqb, size_t depth) {
+QuantumCircuit random_unitary_circuit(size_t nqb, size_t depth, const std::vector<size_t>& gate_sizes) {
   QuantumCircuit qc(nqb);
   for (size_t i = 0; i < depth; i++) {
-    size_t q = randi(0, nqb-1);
-    qc.add_gate(haar_unitary(2), {q, q+1});
+    size_t r = gate_sizes[randi(0, gate_sizes.size())];
+    size_t q = randi(0, nqb - r + 1);
+    Qubits qubits(r);
+    std::iota(qubits.begin(), qubits.end(), q);
+    qc.add_gate(haar_unitary(r), qubits);
   }
 
   return qc;
@@ -70,28 +58,13 @@ QuantumCircuit random_unitary_circuit(size_t nqb, size_t depth) {
 
 bool test_qc_canonical() {
   constexpr size_t nqb = 6;
-  //QuantumCircuit qc(nqb);
-  //qc.add_gate(haar_unitary(2), {4, 5});
-  //qc.add_gate(haar_unitary(2), {0, 1});
-  //qc.add_gate(haar_unitary(2), {2, 3});
-  //qc.mzr(5);
-  //qc.mzr(0);
-  //qc.add_gate(haar_unitary(2), {3, 4});
-  //qc.add_gate(haar_unitary(2), {1, 2});
-  //qc.add_gate(haar_unitary(2), {2, 3});
-  //qc.add_gate(haar_unitary(2), {0, 1});
-  //qc.add_gate(haar_unitary(2), {4, 5});
-  //qc.mzr(3);
-  //qc.mzr(1);
 
-  //QuantumCircuit canon = qc.to_canonical_form();
-  //std::cout << canon << "\n";
-
-  QuantumCircuit qc = random_unitary_circuit(nqb, 10);
-  QuantumCircuit canon = qc.to_canonical_form();
-  std::cout << qc << "\n";
-  std::cout << canon << "\n";
-
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 10, {2});
+    CircuitDAG dag = qc.to_dag();
+    QuantumCircuit canon = QuantumCircuit::to_circuit(dag, nqb, randf() < 0.5);
+    ASSERT(qc.to_matrix().isApprox(canon.to_matrix()));
+  }
 
   return true;
 }
@@ -116,6 +89,32 @@ bool test_pauli_reduce() {
 
     ASSERT(p1_ == PauliString::basis(nqb, "X", 0, false) && p2_ == PauliString::basis(nqb, "Z", 0, false),
         fmt::format("p1 = {} and p2 = {}\nreduced to {} and {}.", p1, p2, p1_, p2_));
+  }
+
+  return true;
+}
+
+bool test_dag_to_circuit() {
+  constexpr size_t nqb = 6;
+  for (size_t i = 0; i < 10; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 10, {1, 2, 3});
+
+    CircuitDAG dag = qc.to_dag();
+    QuantumCircuit left = QuantumCircuit::to_circuit_left_to_right(dag, nqb);
+    QuantumCircuit right = QuantumCircuit::to_circuit_right_to_left(dag, nqb);
+    ASSERT(qc.to_matrix().isApprox(left.to_matrix()));
+    ASSERT(qc.to_matrix().isApprox(right.to_matrix()));
+  }
+}
+
+bool test_qc_simplify() {
+  constexpr size_t nqb = 6;
+
+  for (size_t i = 0; i < 20; i++) {
+    QuantumCircuit qc = random_unitary_circuit(nqb, 20, {1, 2});
+    QuantumCircuit simple = qc.simplify(randf() < 0.5);
+
+    ASSERT(qc.to_matrix().isApprox(simple.to_matrix()));
   }
 
   return true;
@@ -208,11 +207,15 @@ int main(int argc, char *argv[]) {
       test_names.insert(argv[i]);
     }
   }
+  int i = randi();
+  std::cout << fmt::format("Seeding {}\n", i);
+  Random::seed_rng(i);
 
   ADD_TEST(test_circuit_dag);
   ADD_TEST(test_qc_reduce);
   ADD_TEST(test_pauli_reduce);
   ADD_TEST(test_qc_canonical);
+  ADD_TEST(test_qc_simplify);
   ADD_TEST(test_pauli);
 
   constexpr char green[] = "\033[1;32m";

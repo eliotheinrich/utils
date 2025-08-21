@@ -664,7 +664,11 @@ struct fmt::formatter<Instruction> {
   constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
+<<<<<<< HEAD
   auto format(const Instruction& inst, FormatContext& ctx) {
+=======
+  auto format(const Instruction& inst, FormatContext& ctx) const {
+>>>>>>> 6b07f5e7d21389994b8543b916912c4ab3e5cadf
     auto inst_to_string = [](const Instruction& inst) {
 		  return std::visit(quantumcircuit_utils::overloaded {
           [](std::shared_ptr<Gate> gate) -> std::string {

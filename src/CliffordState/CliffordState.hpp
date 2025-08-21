@@ -252,8 +252,6 @@ class CliffordState : public QuantumState {
       return b;
     }
 
-    virtual std::string to_string() const=0;
-
     virtual double sparsity() const=0;
 
     virtual bool measure(const Measurement& m) override {
@@ -280,7 +278,7 @@ class CliffordState : public QuantumState {
     }
 
     // TODO there is a bug in the sign of expectations. Fix it.
-    virtual std::complex<double> expectation(const PauliString& pauli) const {
+    virtual std::complex<double> expectation(const PauliString& pauli) const override {
       QuantumCircuit qc(num_qubits);
       Qubits qubits(num_qubits);
       std::iota(qubits.begin(), qubits.end(), 0);
@@ -301,7 +299,7 @@ class CliffordState : public QuantumState {
     }
 
     // TEST THIS
-    virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const {
+    virtual std::vector<BitAmplitudes> sample_bitstrings(const std::vector<QubitSupport>& supports, size_t num_samples) const override {
       if (num_qubits > 15) {
         throw std::runtime_error("Cannot sample bitstrings for Clifford state with n > 15 qubits.");
       }
@@ -328,7 +326,7 @@ class CliffordState : public QuantumState {
       return samples;
     }
 
-		virtual std::vector<double> probabilities() const {
+		virtual std::vector<double> probabilities() const override {
       if (num_qubits > 15) {
         throw std::runtime_error("Cannot generate probabilities for Clifford state with n > 15 qubits.");
       }

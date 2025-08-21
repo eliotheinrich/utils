@@ -97,16 +97,33 @@ CircuitDAG QuantumCircuit::to_dag() const {
   return dag;
 }
 
+<<<<<<< HEAD
 QuantumCircuit QuantumCircuit::to_canonical_form() const {
   // Construct DAG and reversed DAG
   CircuitDAG dag = to_dag();
   DirectedGraph<int> reversed_dag(length());
   for (size_t i = 0; i < length(); i++) {
+=======
+using TreeEntry = std::pair<size_t, uint32_t>;
+
+// Comparator: sort pairs <nodeIndex, leftmostQubit>
+struct PairCmp {
+  bool operator()(auto const& a, auto const& b) const {
+    if (a.second != b.second) return a.second < b.second;
+    return a.first < b.first;
+  }
+};
+
+DirectedGraph<int> make_reversed_dag(const CircuitDAG& dag) {
+  DirectedGraph<int> reversed_dag(dag.num_vertices);
+  for (size_t i = 0; i < dag.num_vertices; i++) {
+>>>>>>> 6b07f5e7d21389994b8543b916912c4ab3e5cadf
     for (const auto& j : dag.edges_of(i)) {
       reversed_dag.add_edge(j, i);
     }
   }
 
+<<<<<<< HEAD
   // Construct first layer
   std::set<size_t> current_layer;
   for (size_t i = 0; i < length(); i++) {
@@ -183,6 +200,247 @@ QuantumCircuit QuantumCircuit::to_canonical_form() const {
   }
 
   return circuit;
+=======
+  return reversed_dag;
+}
+
+QuantumCircuit QuantumCircuit::to_circuit(const CircuitDAG& dag, uint32_t num_qubits, bool ltr) {
+  if (ltr) {
+    return to_circuit_left_to_right(dag, num_qubits);
+  } else {
+    return to_circuit_right_to_left(dag, num_qubits);
+  }
+}
+
+QuantumCircuit QuantumCircuit::to_circuit_left_to_right(const CircuitDAG& dag, uint32_t num_qubits) {
+  auto reversed_dag = make_reversed_dag(dag);
+
+  // Hold a pair of the DAG index and the leftmost qubit
+  std::set<TreeEntry, PairCmp> leafs;
+  for (size_t i = 0; i < dag.num_vertices; i++) {
+    if (reversed_dag.degree(i) == 0) {
+      const Instruction& inst = dag.get_val(i);
+      uint32_t q = std::ranges::min(get_instruction_support(inst));
+      leafs.emplace(i, q);
+    }
+  }
+
+  QuantumCircuit circuit(num_qubits);
+  size_t i = 0;
+  int pos = 0;
+  std::set<size_t> visited;
+  bool first = true;
+  while (!leafs.empty()) {
+    auto it = leafs.begin();
+    if (!first) {
+      TreeEntry key = {SIZE_MAX, pos};
+      auto it = leafs.lower_bound(key);
+
+      uint32_t best = UINT32_MAX;
+
+      auto try_pick = [&](auto iter) {
+        int q = iter->second;
+        uint32_t d = (q > pos ? q - pos : pos - q);
+        if (d < best) {
+          best = d;
+          it = iter;
+        }
+      };
+
+      if (it != leafs.end()) {
+        try_pick(it);
+      } 
+      if (it != leafs.begin()) {
+        try_pick(std::prev(it));
+      }
+    }
+
+    first = false;
+
+    std::tie(i, pos) = *it;
+
+    visited.insert(i);
+    circuit.add_instruction(copy_instruction(dag.get_val(i)));
+
+    std::set<size_t> new_leafs;
+    for (size_t j : dag.edges_of(i)) {
+      bool include = true;
+      for (size_t k : reversed_dag.edges_of(j)) {
+        if (!visited.contains(k)) {
+          include = false;
+          break;
+        }
+      }
+
+      if (include) {
+        new_leafs.insert(j);
+      }
+    }
+
+    leafs.erase(it);
+
+    for (size_t j : new_leafs) {
+      const Instruction& inst = dag.get_val(j);
+      uint32_t q = std::ranges::min(get_instruction_support(inst));
+      leafs.emplace(j, q);
+    }
+  }
+
+  return circuit;
+}
+
+QuantumCircuit QuantumCircuit::to_circuit_right_to_left(const CircuitDAG& dag, uint32_t num_qubits) {
+  auto reversed_dag = make_reversed_dag(dag);
+
+  // Hold a pair of the DAG index and the leftmost qubit
+  std::set<TreeEntry, PairCmp> leafs;
+  for (size_t i = 0; i < dag.num_vertices; i++) {
+    if (reversed_dag.degree(i) == 0) {
+      const Instruction& inst = dag.get_val(i);
+      uint32_t q = std::ranges::max(get_instruction_support(inst));
+      leafs.emplace(i, q);
+    }
+  }
+
+  QuantumCircuit circuit(num_qubits);
+  size_t i = 0;
+  int pos = num_qubits;
+  std::set<size_t> visited;
+  bool first = true;
+  while (!leafs.empty()) {
+    auto it = leafs.begin();
+    if (!first) {
+      TreeEntry key = {SIZE_MAX, pos};
+      auto it = leafs.upper_bound(key);
+
+      uint32_t best = UINT32_MAX;
+
+      auto try_pick = [&](auto iter) {
+        int q = iter->second;
+        uint32_t d = (q > pos ? q - pos : pos - q);
+        if (d < best) {
+          best = d;
+          it = iter;
+        }
+      };
+
+      if (it != leafs.end()) {
+        try_pick(it);
+      } 
+      if (it != leafs.begin()) {
+        try_pick(std::prev(it));
+      }
+    }
+
+    first = false;
+
+    std::tie(i, pos) = *it;
+
+    visited.insert(i);
+    circuit.add_instruction(copy_instruction(dag.get_val(i)));
+
+    std::set<size_t> new_leafs;
+    for (size_t j : dag.edges_of(i)) {
+      bool include = true;
+      for (size_t k : reversed_dag.edges_of(j)) {
+        if (!visited.contains(k)) {
+          include = false;
+          break;
+        }
+      }
+
+      if (include) {
+        new_leafs.insert(j);
+      }
+    }
+
+    leafs.erase(it);
+
+    for (size_t j : new_leafs) {
+      const Instruction& inst = dag.get_val(j);
+      uint32_t q = std::ranges::max(get_instruction_support(inst));
+      leafs.emplace(j, q);
+    }
+  }
+
+  return circuit;
+}
+
+std::optional<std::pair<size_t, size_t>> find_mergeable(const CircuitDAG& dag, const auto& reversed_dag) {
+  for (size_t i = 0; i < dag.num_vertices; i++) {
+    const Instruction& inst1 = dag.get_val(i);
+    if (!instruction_is_unitary(inst1)) {
+      continue;
+    }
+    for (size_t j : dag.edges_of(i)) {
+      const Instruction& inst2 = dag.get_val(j);
+      if (!instruction_is_unitary(inst2)) {
+        continue;
+      }
+
+      Qubits s1 = get_instruction_support(inst1);
+      Qubits s2 = get_instruction_support(inst2);
+
+      if (reversed_dag.degree(j) == 1 && std::includes(s1.begin(), s1.end(), s2.begin(), s2.end())) {
+        return std::make_pair(i, j);
+      } else if (dag.degree(i) == 1 && std::includes(s2.begin(), s2.end(), s1.begin(), s1.end())) {
+        return std::make_pair(i, j);
+      }
+    }
+  }
+
+  return std::nullopt;
+}
+
+QuantumCircuit QuantumCircuit::simplify(bool ltr) const {
+  CircuitDAG dag = to_dag();
+  auto reversed_dag = make_reversed_dag(dag);
+
+  bool merged_any = true;
+
+  while (merged_any) {
+    merged_any = false;
+
+    auto merged_pair = find_mergeable(dag, reversed_dag);
+    if (!merged_pair) {
+      break;
+    }
+
+    merged_any = true;
+    auto [i, j] = merged_pair.value();
+    const Instruction& inst1 = dag.get_val(i);
+    const Instruction& inst2 = dag.get_val(j);
+    QuantumCircuit qc(num_qubits);
+    qc.add_instruction(inst1);
+    qc.add_instruction(inst2);
+
+    auto [qc_, support_] = qc.reduce();
+    Instruction combined = std::make_shared<MatrixGate>(qc_.to_matrix(), support_);
+
+    dag.set_val(i, combined);
+
+    std::vector<size_t> edges(dag.edges_of(j).begin(), dag.edges_of(j).end());
+    std::vector<size_t> reversed_edges(reversed_dag.edges_of(j).begin(), reversed_dag.edges_of(j).end());
+
+    for (size_t k : edges) {
+      dag.add_edge(i, k);
+      reversed_dag.add_edge(k, i);
+    }
+    for (size_t k : reversed_edges) {
+      if (k == i) {
+        continue;
+      }
+
+      dag.add_edge(k, i);
+      reversed_dag.add_edge(i, k);
+    }
+
+    dag.remove_vertex(j);
+    reversed_dag.remove_vertex(j);
+  }
+
+  return to_circuit(dag, num_qubits, ltr);
+>>>>>>> 6b07f5e7d21389994b8543b916912c4ab3e5cadf
 }
 
 void QuantumCircuit::apply_qubit_map(const Qubits& qubits) {

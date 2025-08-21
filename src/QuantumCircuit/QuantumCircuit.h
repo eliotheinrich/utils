@@ -30,7 +30,14 @@ class QuantumCircuit {
     };
 
     CircuitDAG to_dag() const;
+<<<<<<< HEAD
     QuantumCircuit to_canonical_form() const;
+=======
+    static QuantumCircuit to_circuit(const CircuitDAG& dag, uint32_t num_qubits, bool ltr);
+    static QuantumCircuit to_circuit_left_to_right(const CircuitDAG& dag, uint32_t num_qubits);
+    static QuantumCircuit to_circuit_right_to_left(const CircuitDAG& dag, uint32_t num_qubits);
+    QuantumCircuit simplify(bool ltr) const;
+>>>>>>> 6b07f5e7d21389994b8543b916912c4ab3e5cadf
 
     uint32_t get_num_qubits() const {
       return num_qubits;

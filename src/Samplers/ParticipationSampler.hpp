@@ -192,6 +192,9 @@ class MPSParticipationSampler : public ParticipationSampler {
         if (sample_participation_entropy_mutual) {
           for (size_t i = 0; i < renyi_indices.size(); i++) {
             double L = estimate_mutual_renyi_entropy(renyi_indices[i], amplitudes[0], amplitudes[1], amplitudes[2], 2);
+            dataframe::utils::emplace(samples, "mutual1", estimate_renyi_entropy(renyi_indices[i], amplitudes[0], 2));
+            dataframe::utils::emplace(samples, "mutual2", estimate_renyi_entropy(renyi_indices[i], amplitudes[1], 2));
+            dataframe::utils::emplace(samples, "mutual3", estimate_renyi_entropy(renyi_indices[i], amplitudes[2], 2));
             dataframe::utils::emplace(samples, PARTICIPATION_ENTROPY_MUTUAL(renyi_indices[i]), L);
           }
         }

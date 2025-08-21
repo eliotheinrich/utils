@@ -189,8 +189,8 @@ class QuantumCHPState : public CliffordState {
       tableau.set_z(i, j, v);
     }
 
-    std::vector<dataframe::byte_t> serialize() const;
-    void deserialize(const std::vector<dataframe::byte_t>& bytes);
+    virtual std::vector<dataframe::byte_t> serialize() const override;
+    virtual void deserialize(const std::vector<dataframe::byte_t>& bytes) override;
 
     Texture get_texture(Color x_color, Color z_color, Color y_color) {
       Texture texture(num_qubits, num_qubits);
