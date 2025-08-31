@@ -7,9 +7,9 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "qutils"
+name = "utils"
 version = "1.0.0"
-description = "Tools for managing my quantum simulations."
+description = "Collection of assorted stuff"
 requires-python = ">=3.10"
 authors = [
 	{ name = "Eliot Heinrich", email = "heinriea@bc.edu" },
@@ -21,7 +21,8 @@ build-dir = "build/{wheel_tag}"
 wheel.py-api = "cp312"
 
 [tool.scikit-build.cmake.define]
-BUILDING_PYQUTILS = "On"
+BUILDING_PYUTILS = "On"
+CMAKE_BUILD_TYPE = "Release"
 
 [tool.cibuildwheel]
 build-verbosity = 1

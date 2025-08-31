@@ -40,12 +40,18 @@ else()
     list(APPEND EXTERNALS dataframe)
 endif()
 
-FetchContent_Declare(
-  glaze
-  GIT_REPOSITORY https://github.com/stephenberry/glaze.git
-  GIT_TAG cc4ce0efe5133c23ec55f07d9e753f7dd1abb0b8
-)
-list(APPEND EXTERNALS glaze)
+if (DEFINED QUTILS_SOURCE)
+    set(qutils_SOURCE_DIR ${QUTILS_SOURCE})
+    add_subdirectory(${QUTILS_SOURCE} "qutils_src")
+else()
+    FetchContent_Declare(
+        qutils 
+        GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
+        GIT_TAG main
+        GIT_SHALLOW TRUE
+    )
+    list(APPEND EXTERNALS qutils)
+endif()
 
 FetchContent_Declare(
     eigen
@@ -68,6 +74,7 @@ FetchContent_MakeAvailable(${EXTERNALS})
 
 include_directories(
     ${dataframe_SOURCE_DIR}/src
+    ${qutils_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src
     ${glaze_SOURCE_DIR}/include
@@ -75,9 +82,6 @@ include_directories(
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumCircuit)
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/QuantumState)
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/CliffordState)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
 if (DEFINED BUILD_GLFW)
   add_compile_definitions(BUILD_GLFW)
@@ -85,7 +89,7 @@ if (DEFINED BUILD_GLFW)
   add_subdirectory(${DISPLAY_DIR})
 endif()
 
-if (BUILDING_PYQUTILS)
+if (BUILDING_PYUTILS)
   find_package(Python 3.10 
     REQUIRED COMPONENTS Interpreter Development.Module
     OPTIONAL_COMPONENTS Development.SABIModule
@@ -100,22 +104,22 @@ if (BUILDING_PYQUTILS)
   find_package(nanobind CONFIG REQUIRED)
 
   nanobind_add_module(
-    qutils_bindings
+    utils_bindings
     STABLE_ABI
     NB_STATIC
-    src/PyQutils.hpp
-    src/PyQutils.cpp
+    src/PyUtils.hpp
+    src/PyUtils.cpp
   )
 
-  set(qutils_libs clifford_state linear_code dataframe)
+  set(utils_libs clifford_state linear_code dataframe)
   if (DEFINED BUILD_GLFW)
-    list(APPEND qutils_libs simulator_display)
+    list(APPEND utils_libs simulator_display)
   endif()
 
-  target_link_libraries(qutils_bindings PUBLIC ${qutils_libs})
+  target_link_libraries(utils_bindings PUBLIC ${utils_libs})
 
   install(
-    TARGETS qutils_bindings
-    LIBRARY DESTINATION qutils
+    TARGETS utils_bindings
+    LIBRARY DESTINATION utils # TODO rename something less generic
   )
 endif()

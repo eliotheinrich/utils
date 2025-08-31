@@ -96,7 +96,6 @@ class GenericMagicSampler : public StabilizerEntropySampler {
     }
 
     void add_stabilizer_entropy_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
-      std::cout << "Calling add_stabilizer_entropy_samples\n";
       auto compute_sre_montecarlo = [&](std::shared_ptr<MagicQuantumState> state, const std::vector<size_t>& indices, const std::vector<PauliAmplitudes>& pauli_samples) {
         std::vector<double> amplitudes = normalize_pauli_samples(extract_amplitudes(pauli_samples)[0], state->get_num_qubits(), state->purity());
 
@@ -190,7 +189,6 @@ class GenericMagicSampler : public StabilizerEntropySampler {
     }
 
     void add_stabilizer_entropy_mutual_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
-      std::cout << "Calling add_stabilizer_entropy_mutual_samples\n";
       size_t num_qubits = state->get_num_qubits();
       if (stabilizer_entropy_mutual_subsystem_size > num_qubits/2) {
         throw std::runtime_error(fmt::format("stabilizer_entropy_mutual_subsystem_size = {}, but num_qubits = {}", stabilizer_entropy_mutual_subsystem_size, num_qubits));
@@ -224,7 +222,6 @@ class GenericMagicSampler : public StabilizerEntropySampler {
     }
     
     void add_stabilizer_entropy_bipartite_samples(dataframe::SampleMap& samples, const std::shared_ptr<MagicQuantumState>& state) {
-      std::cout << "Calling add_stabilizer_entropy_bipartite_samples\n";
       std::vector<double> mmi_samples;
 
       if (sre_method == sre_method_t::Exhaustive) {
@@ -297,7 +294,7 @@ class MPSMagicSampler : public StabilizerEntropySampler {
 
         size_t num_qubits = state_->get_num_qubits();
         if (sample_stabilizer_entropy) {
-          std::vector<double> amplitudes_ = normalize_pauli_samples(amplitudes[0], num_qubits, state_->purity());
+          std::vector<double> amplitudes_ = normalize_pauli_samples(amplitudes[0], num_qubits, state->purity());
 
           std::vector<double> stabilizer_renyi_entropy;
           for (auto index : renyi_indices) {

@@ -1,4 +1,4 @@
-from qutils.qutils_bindings import QUTILS_BUILT_WITH_GLFW
+from utils.utils_bindings import QUTILS_BUILT_WITH_GLFW
 
 if QUTILS_BUILT_WITH_GLFW:
     class GLFW:
