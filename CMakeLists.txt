@@ -46,7 +46,7 @@ if (DEFINED QUTILS_SOURCE)
 else()
     FetchContent_Declare(
         qutils 
-        GIT_REPOSITORY https://github.com/eliotheinrich/dataframe
+        GIT_REPOSITORY https://github.com/eliotheinrich/qutils
         GIT_TAG main
         GIT_SHALLOW TRUE
     )
@@ -82,7 +82,6 @@ include_directories(
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
 if (DEFINED BUILD_GLFW)
   add_compile_definitions(BUILD_GLFW)
   set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)

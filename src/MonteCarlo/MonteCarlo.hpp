@@ -56,6 +56,8 @@ class MonteCarloSimulator : public Simulator {
   // Most basic Monte-Carlo model to be simulated must have some notion of energy
   // as well as a mutation data structure. Specifics must be supplied by child classes.
   public:
+    MonteCarloSimulator()=default;
+
     MonteCarloSimulator(dataframe::ExperimentParams &params, uint32_t num_threads) : Simulator(params), num_threads(num_threads) {
       final_temperature = dataframe::utils::get<double>(params, "temperature");
       temperature = final_temperature;

@@ -80,6 +80,8 @@ class Texture {
 
 class Simulator {
   public:
+    Simulator()=default;
+
     Simulator(dataframe::ExperimentParams &params) {}
 
     virtual ~Simulator()=default;
@@ -92,7 +94,7 @@ class Simulator {
       timesteps(num_steps);
     }
 
-    virtual dataframe::SampleMap take_samples() {
+    virtual dataframe::SampleMap take_samples() const {
       return dataframe::SampleMap();
     }
 
