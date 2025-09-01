@@ -1,6 +1,8 @@
 #include <PyUtils.hpp>
 #include <PyQutils.hpp>
 
+#include "Display.h"
+
 NB_MODULE(utils_bindings, m) {
   nanobind::class_<EntropySampler>(m, "EntropySampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
@@ -151,7 +153,6 @@ NB_MODULE(utils_bindings, m) {
     .def("generator_locality", &GeneratorMatrix::generator_locality);
 
 #ifdef BUILD_GLFW
-#include "Display.h"
   constexpr int BUILT_WITH_GLFW = 1;
   nanobind::class_<FrameData>(m, "FrameData")
     .def(nanobind::init<int, std::vector<int>>())
@@ -169,5 +170,5 @@ NB_MODULE(utils_bindings, m) {
 #else
   constexpr int BUILT_WITH_GLFW = 0;
 #endif
-  m.attr("QUTILS_BUILT_WITH_GLFW") = BUILT_WITH_GLFW;
+  m.attr("UTILS_BUILT_WITH_GLFW") = BUILT_WITH_GLFW;
 }
