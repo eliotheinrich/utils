@@ -6,6 +6,7 @@
 #include <Frame.h>
 
 #include <Simulator.hpp>
+#include "Random.hpp"
 
 enum BoundaryCondition { Periodic, Open };
 

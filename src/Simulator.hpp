@@ -5,8 +5,6 @@
 
 #include <Frame.h>
 
-#include "Random.hpp"
-
 struct Color {
   float r;
   float g;

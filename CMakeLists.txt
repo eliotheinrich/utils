@@ -74,19 +74,19 @@ FetchContent_MakeAvailable(${EXTERNALS})
 
 include_directories(
     ${dataframe_SOURCE_DIR}/src
-    ${qutils_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src
     ${glaze_SOURCE_DIR}/include
 )
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 if (DEFINED BUILD_GLFW)
   add_compile_definitions(BUILD_GLFW)
   set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
   add_subdirectory(${DISPLAY_DIR})
 endif()
+
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 
 if (BUILDING_PYUTILS)
   find_package(Python 3.10 

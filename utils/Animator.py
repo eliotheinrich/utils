@@ -1,6 +1,6 @@
-from utils.utils_bindings import QUTILS_BUILT_WITH_GLFW
+from utils.utils_bindings import UTILS_BUILT_WITH_GLFW
 
-if QUTILS_BUILT_WITH_GLFW:
+if UTILS_BUILT_WITH_GLFW:
     class GLFW:
         KEY_SPACE = 32
         KEY_APOSTROPHE = 39  # '
@@ -123,7 +123,7 @@ if QUTILS_BUILT_WITH_GLFW:
         KEY_RIGHT_SUPER = 347
         KEY_MENU = 348
 
-    from qutils.qutils_bindings import GLFWAnimator
+    from utils.utils_bindings import GLFWAnimator
     class SimulatorAnimator:
         def __init__(self, simulator, background_color=None, fps=60, steps_per_frame=1):
             self.simulator = simulator
