@@ -1,5 +1,5 @@
-#include <PyUtils.hpp>
-#include <PyQutils.hpp>
+#include "PyUtils.hpp"
+#include "Python/PyQutils.hpp"
 
 #include "Display.h"
 
