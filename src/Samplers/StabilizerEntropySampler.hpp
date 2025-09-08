@@ -59,7 +59,7 @@ class StabilizerEntropySampler {
 class GenericMagicSampler : public StabilizerEntropySampler {
   public:
     enum sre_method_t {
-      MonteCarlo, Exhaustive, Exact
+      MonteCarlo, Exhaustive, Exact, Virtual
     };
 
     sre_method_t parse_sre_method(const std::string& s) {
@@ -69,6 +69,8 @@ class GenericMagicSampler : public StabilizerEntropySampler {
         return sre_method_t::Exhaustive;
       } else if (s == "exact") {
         return sre_method_t::Exact;
+      } else if (s == "virtual") {
+        return sre_method_t::Virtual;
       } else {
         throw std::runtime_error(fmt::format("Stabilizer renyi entropy method \"{}\" not found.", s));
       }
@@ -139,6 +141,9 @@ class GenericMagicSampler : public StabilizerEntropySampler {
         std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
       } else if (sre_method == sre_method_t::Exact) {
         auto pauli_samples = state->sample_paulis_exact({}, sre_num_samples, prob);
+        std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
+      } else if (sre_method == sre_method_t::Virtual) {
+        auto pauli_samples = state->sample_paulis({}, sre_num_samples);
         std::tie(amplitudes, stabilizer_renyi_entropy) = compute_sre_montecarlo(state, renyi_indices, pauli_samples);
       }
 
@@ -216,6 +221,8 @@ class GenericMagicSampler : public StabilizerEntropySampler {
         } else {
           mmi_sample = state->magic_mutual_information_exact(qubitsA, qubitsB, sre_num_samples);
         }
+      } else if (sre_method == sre_method_t::Virtual) {
+        mmi_sample = state->magic_mutual_information(qubitsA, qubitsB, sre_num_samples);
       }
 
       dataframe::utils::emplace(samples, STABILIZER_ENTROPY_MUTUAL, mmi_sample);
@@ -244,6 +251,8 @@ class GenericMagicSampler : public StabilizerEntropySampler {
         } else {
           mmi_samples = state->bipartite_magic_mutual_information_exact(sre_num_samples);
         }
+      } else if (sre_method == sre_method_t::Virtual) {
+        mmi_samples = state->bipartite_magic_mutual_information(sre_num_samples);
       }
 
       dataframe::utils::emplace(samples, STABILIZER_ENTROPY_BIPARTITE, mmi_samples);
