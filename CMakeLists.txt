@@ -74,6 +74,7 @@ FetchContent_MakeAvailable(${EXTERNALS})
 
 include_directories(
     ${dataframe_SOURCE_DIR}/src
+    ${qutils_SOURCE_DIR}/src
     ${eigen_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/src
     ${glaze_SOURCE_DIR}/include
