@@ -27,8 +27,8 @@ class BinaryMatrix : public BinaryMatrixBase {
     BinaryMatrix(const std::vector<BitString>& data, size_t num_cols) : BinaryMatrix(data) {
       this->num_cols = num_cols;
 
-      if ((num_words() - 1)*BitString::binary_word_size() > num_cols || num_cols > num_words()*BitString::binary_word_size()) {
-        std::cout << "num_words() = " << num_words() << ", binary_word_size() = " << BitString::binary_word_size() << ", num_cols = " << num_cols << ", data.size() = " << data.size() << "\n";
+      if ((num_words() - 1)*binary_word_size() > num_cols || num_cols > num_words()*binary_word_size()) {
+        std::cout << "num_words() = " << num_words() << ", binary_word_size() = " << binary_word_size() << ", num_cols = " << num_cols << ", data.size() = " << data.size() << "\n";
         throw std::invalid_argument("Provided number of columns is not valid for the data.");
       }
     }
@@ -73,7 +73,7 @@ class BinaryMatrix : public BinaryMatrixBase {
     }
 
     virtual void append_row(const std::vector<bool>& row) override {
-      size_t row_num_words = row.size() / BitString::binary_word_size() + 1;
+      size_t row_num_words = row.size() / binary_word_size() + 1;
       if (row_num_words != num_words()) {
         throw std::invalid_argument("Invalid row length.");
       }
@@ -81,8 +81,8 @@ class BinaryMatrix : public BinaryMatrixBase {
       std::vector<binary_word> row_words(row_num_words);
 
       for (size_t i = 0; i < row.size(); i++) {
-        size_t word_ind = i / BitString::binary_word_size();
-        size_t bit_ind = i % BitString::binary_word_size();
+        size_t word_ind = i / binary_word_size();
+        size_t bit_ind = i % binary_word_size();
         row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
       }
 
@@ -105,7 +105,7 @@ class BinaryMatrix : public BinaryMatrixBase {
     }
 
     virtual void set_row(size_t r, const std::vector<bool>& row) override {
-      size_t row_num_words = row.size() / BitString::binary_word_size() + 1;
+      size_t row_num_words = row.size() / binary_word_size() + 1;
       if (row_num_words != num_words()) {
         throw std::invalid_argument("Invalid row length.");
       }
@@ -113,8 +113,8 @@ class BinaryMatrix : public BinaryMatrixBase {
       std::vector<binary_word> row_words(row_num_words);
 
       for (size_t i = 0; i < row.size(); i++) {
-        size_t word_ind = i / BitString::binary_word_size();
-        size_t bit_ind = i % BitString::binary_word_size();
+        size_t word_ind = i / binary_word_size();
+        size_t bit_ind = i % binary_word_size();
         row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
       }
 
@@ -180,7 +180,7 @@ class BinaryMatrix : public BinaryMatrixBase {
 
   protected:
     size_t num_words() const {
-      return num_cols / BitString::binary_word_size() + 1;
+      return num_cols / binary_word_size() + 1;
     }
 
     static size_t extract_num_cols(const std::vector<BitString>& data) {
