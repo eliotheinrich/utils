@@ -1,7 +1,7 @@
 #pragma once
 
 #include "FreeFermion.h"
-#include <Frame.h>
+#include <dataframe/Frame.h>
 
 class FreeFermionSampler {
   private:

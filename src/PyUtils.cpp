@@ -4,13 +4,13 @@
 #include "Display.h"
 
 NB_MODULE(utils_bindings, m) {
-  nanobind::class_<EntropySampler>(m, "EntropySampler")
+  nanobind::class_<EntanglementSampler>(m, "EntanglementSampler")
     .def(nanobind::init<dataframe::ExperimentParams&>())
     .def_static("create_and_emplace", [](dataframe::ExperimentParams& params) {
-      auto sampler = std::make_shared<EntropySampler>(params);
+      auto sampler = std::make_shared<EntanglementSampler>(params);
       return std::make_pair(sampler, params);
     })
-    .def("take_samples", [](EntropySampler& sampler, std::shared_ptr<EntanglementEntropyState> state) {
+    .def("take_samples", [](EntanglementSampler& sampler, std::shared_ptr<EntanglementEntropyState> state) {
       dataframe::SampleMap samples;
       sampler.add_samples(samples, state);
       return samples;

@@ -2,7 +2,7 @@
 
 #include "EntanglementEntropyState.hpp"
 
-#include <Frame.h>
+#include <dataframe/Frame.h>
 
 #include <cstdint>
 #include <sstream>
@@ -11,9 +11,9 @@
 #include <assert.h>
 #include <memory>
 
-class EntropySampler {
+class EntanglementSampler {
   public:
-    EntropySampler(dataframe::ExperimentParams &params) {  
+    EntanglementSampler(dataframe::ExperimentParams &params) {  
       renyi_indices = parse_renyi_indices(dataframe::utils::get<std::string>(params, "renyi_indices", "2"));
 
       system_size = dataframe::utils::get<int>(params, "system_size");
@@ -54,7 +54,7 @@ class EntropySampler {
       pbc = dataframe::utils::get<int>(params, "pbc", spatially_average);
     }
 
-    ~EntropySampler()=default;
+    ~EntanglementSampler()=default;
 
     void add_entanglement_samples(dataframe::SampleMap &samples, uint32_t index, std::shared_ptr<EntanglementEntropyState> state) const {
       std::vector<double> entanglement_samples;

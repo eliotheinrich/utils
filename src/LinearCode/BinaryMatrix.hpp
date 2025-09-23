@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BinaryMatrixBase.hpp"
-#include "QuantumCircuit.h"
-#include "Random.hpp"
+#include <qutils/QuantumCircuit.h>
+#include <Random.hpp>
 
 #include <fmt/format.h>
 

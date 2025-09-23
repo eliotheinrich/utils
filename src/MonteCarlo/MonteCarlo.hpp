@@ -3,11 +3,11 @@
 #include <cmath>
 #include <map>
 #include <string>
-#include <Frame.h>
+#include <dataframe/Frame.h>
 
 #include <Simulator.hpp>
-#include <Random.hpp>
-#include <Support.hpp>
+#include <qutils/Random.hpp>
+#include <qutils/Support.hpp>
 
 enum BoundaryCondition { Periodic, Open };
 

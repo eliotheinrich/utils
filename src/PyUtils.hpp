@@ -4,7 +4,7 @@
 #include "Simulator.hpp"
 #include "Samplers.h"
 
-#include <PyDataFrame.hpp>
+#include <dataframe/PyDataFrame.hpp>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/tuple.h>

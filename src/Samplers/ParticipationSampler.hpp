@@ -1,6 +1,6 @@
 #pragma once 
 
-#include "Frame.h"
+#include <dataframe/Frame.h>
 #include "StabilizerEntropySampler.hpp" // for parse_renyi_indices
 #include <QuantumState.h>
 #include <CliffordState.h>

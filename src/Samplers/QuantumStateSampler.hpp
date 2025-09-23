@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Frame.h>
-#include "QuantumState.h"
-#include "QuantumCircuit.h"
+#include <dataframe/Frame.h>
+#include <qutils/QuantumState.h>
+#include <qutils/QuantumCircuit.h>
 
 #include <iostream>
 #include <string>
