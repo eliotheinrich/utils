@@ -21,8 +21,8 @@ build-dir = "build/{wheel_tag}"
 wheel.py-api = "cp312"
 
 [tool.scikit-build.cmake.define]
-BUILDING_PYUTILS = "On"
-CMAKE_BUILD_TYPE = "Release"
+UTILS_BUILD_PYTHON="On"
+CMAKE_BUILD_TYPE="Release"
 
 [tool.cibuildwheel]
 build-verbosity = 1

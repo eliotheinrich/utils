@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BinaryMatrixBase.hpp"
-#include <qutils/QuantumCircuit.h>
 #include <Random.hpp>
 
 #include <fmt/format.h>
@@ -17,7 +16,7 @@ class BinaryMatrix : public BinaryMatrixBase {
     BinaryMatrix(const std::vector<BitString>& data) : BinaryMatrixBase(data.size(), BinaryMatrix::extract_num_cols(data)), data(data) {
       if (num_rows != 0) {
         for (size_t i = 1; i < num_rows; i++) {
-          if (data[i].num_bits != num_cols) {
+          if (data[i].get_num_bits() != num_cols) {
             throw std::invalid_argument("Provided data is ragged!");
           }
         }
@@ -72,31 +71,12 @@ class BinaryMatrix : public BinaryMatrixBase {
       data[r2] = data[r1] ^ data[r2];
     }
 
-    virtual void append_row(const std::vector<bool>& row) override {
-      size_t row_num_words = row.size() / binary_word_size() + 1;
-      if (row_num_words != num_words()) {
-        throw std::invalid_argument("Invalid row length.");
-      }
-
-      std::vector<binary_word> row_words(row_num_words);
-
-      for (size_t i = 0; i < row.size(); i++) {
-        size_t word_ind = i / binary_word_size();
-        size_t bit_ind = i % binary_word_size();
-        row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
-      }
-
-      num_rows++;
-      BitString bits = BitString(num_cols);
-      for (size_t i = 0; i < row.size(); i++) {
-        bits[i] = row_words[i];
-      }
-      data.push_back(bits);
+    virtual BitString row(size_t r) const override {
+      return data[r];
     }
 
-    void append_row(const BitString& row) {
-      size_t row_num_bits = row.num_bits;
-      if (row_num_bits != num_cols) {
+    virtual void append_row(const BitString& row) override {
+      if (row.get_num_bits() != num_cols) {
         throw std::invalid_argument("Invalid row length.");
       }
 
@@ -104,26 +84,12 @@ class BinaryMatrix : public BinaryMatrixBase {
       data.push_back(row);
     }
 
-    virtual void set_row(size_t r, const std::vector<bool>& row) override {
-      size_t row_num_words = row.size() / binary_word_size() + 1;
-      if (row_num_words != num_words()) {
+    virtual void set_row(size_t r, const BitString& row) override {
+      if (row.get_num_bits() != num_cols) {
         throw std::invalid_argument("Invalid row length.");
       }
 
-      std::vector<binary_word> row_words(row_num_words);
-
-      for (size_t i = 0; i < row.size(); i++) {
-        size_t word_ind = i / binary_word_size();
-        size_t bit_ind = i % binary_word_size();
-        row_words[word_ind] = (row_words[word_ind] & ~(1u << bit_ind)) | (row[i] << bit_ind);
-      }
-
-      BitString bits = BitString(num_cols);
-      for (size_t i = 0; i < row.size(); i++) {
-        bits[i] = row_words[i];
-      }
-
-      data[r] = bits;
+      data[r] = row;
     }
 
     virtual void remove_row(size_t r) override {
@@ -155,7 +121,7 @@ class BinaryMatrix : public BinaryMatrixBase {
       return std::make_unique<BinaryMatrix>(data);
     }
 
-    BinaryMatrix multiply(const BinaryMatrix& other) const {
+    BinaryMatrix mmultiply(const BinaryMatrix& other) const {
       if (num_cols != other.num_rows) {
         throw std::invalid_argument("BinaryMatrix dimension mismatch.");
       }
@@ -175,10 +141,92 @@ class BinaryMatrix : public BinaryMatrixBase {
       return A;
     }
 
-    std::vector<BitString> data;
+    struct BitRef {
 
+      BitRef(BitString& row, size_t i) : row_(row), i_(i) {}
+      BitRef& operator=(bool v) { 
+        row_.set(i_, v); 
+        return *this; 
+
+      }
+      operator bool() const { 
+        return row_.get(i_); 
+      }
+      private:
+        BitString& row_;
+        size_t i_;
+    };
+
+    struct RowRef {
+      RowRef(BitString* row) : row_(row) {}
+
+      // Bit proxy
+      struct BitRef {
+        BitRef(BitString* row, size_t i) : row_(row), i_(i) {}
+        BitRef& operator=(bool v) {
+          row_->set(i_, v);
+          return *this;
+        }
+        operator bool() const {
+          return row_->get(i_);
+        }
+        private:
+        BitString* row_;
+        size_t i_;
+      };
+
+      // Access individual bits
+      BitRef operator[](size_t i) { return BitRef(row_, i); }
+
+      // Assign another row proxy (bit-by-bit copy)
+      RowRef& operator=(const RowRef& other) {
+        if (row_ == other.row_) return *this;  // self-assign
+        for (size_t i = 0; i < other.row_->size(); ++i)
+          (*this)[i] = (*other.row_)[i];
+        return *this;
+      }
+
+      private:
+      BitString* row_;
+    };
+
+    struct ConstRowRef {
+      ConstRowRef(const BitString* row) : row_(row) {}
+
+      struct BitRef {
+        BitRef(const BitString* row, size_t i) : row_(row), i_(i) {}
+
+        // Only allow reading, no assignment
+        operator bool() const {
+          return row_->get(i_);
+        }
+
+        private:
+        const BitString* row_;
+        size_t i_;
+      };
+
+      BitRef operator[](size_t i) const { return BitRef(row_, i); }
+
+      private:
+        const BitString* row_;
+    };
+
+    RowRef operator[](size_t r) { 
+      return RowRef(&data[r]); 
+    }
+
+    const ConstRowRef operator[](size_t r) const { 
+      return ConstRowRef(&data[r]); 
+    }
+
+    const std::vector<BitString>& get_data() const { 
+      return data; 
+    }
 
   protected:
+    std::vector<BitString> data;
+
     size_t num_words() const {
       return num_cols / binary_word_size() + 1;
     }
@@ -188,7 +236,7 @@ class BinaryMatrix : public BinaryMatrixBase {
       if (num_rows == 0) {
         return 0;
       } else {
-        return data[0].num_bits;
+        return data[0].get_num_bits();
       }
     }
 };

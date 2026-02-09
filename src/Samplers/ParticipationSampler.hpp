@@ -225,20 +225,12 @@ class CHPParticipationSampler : public ParticipationSampler {
 
         if (sample_participation_entropy) {
           for (size_t i = 0; i < renyi_indices.size(); i++) {
-            if (renyi_indices[i] != 2) {
-              throw std::runtime_error("Have not yet implemented n != 2 index for participation entropy for CHP states.");
-            }
-
             dataframe::utils::emplace(samples, PARTICIPATION_ENTROPY(renyi_indices[i]), pe);
           }
         }
 
         if (sample_participation_entropy_mutual) {
           for (size_t i = 0; i < renyi_indices.size(); i++) {
-            if (renyi_indices[i] != 2) {
-              throw std::runtime_error("Have not yet implemented n != 2 index for participation entropy for CHP states.");
-            }
-
             Qubits A = to_qubits(std::make_pair(0, num_qubits/2));
             Qubits B = to_qubits(std::make_pair(num_qubits/2, num_qubits));
             dataframe::utils::emplace(samples, PARTICIPATION_ENTROPY_MUTUAL(renyi_indices[i]), state->partial_xrank(A) + state->partial_xrank(B) - pe);
@@ -247,10 +239,6 @@ class CHPParticipationSampler : public ParticipationSampler {
 
         if (sample_participation_entropy_bipartite) {
           for (size_t i = 0; i < renyi_indices.size(); i++) {
-            if (renyi_indices[i] != 2) {
-              throw std::runtime_error("Have not yet implemented n != 2 index for participation entropy for CHP states.");
-            }
-
             size_t N = num_qubits/2 - 1;
             auto supports = get_bipartite_supports(num_qubits);
             std::vector<double> W(N);

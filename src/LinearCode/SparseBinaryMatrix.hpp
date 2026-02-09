@@ -9,9 +9,6 @@
 #include <fmt/format.h>
 
 class SparseBinaryMatrix : public BinaryMatrixBase {
-  private:
-    std::vector<std::set<size_t>> inds;
-
   public:
     SparseBinaryMatrix(size_t num_rows, size_t num_cols) : BinaryMatrixBase(num_rows, num_cols) {
       inds = std::vector<std::set<size_t>>(num_rows);
@@ -68,8 +65,8 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
       inds[r2] = diff;
     }
 
-    virtual void append_row(const std::vector<bool>& row) override {
-      if (row.size() != num_cols) {
+    virtual void append_row(const BitString& row) override {
+      if (row.get_num_bits() != num_cols) {
         throw std::invalid_argument("Invalid row length.");
       }
 
@@ -85,8 +82,8 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
       num_rows++;
     }
 
-    virtual void set_row(size_t r, const std::vector<bool>& row) override {
-      if (row.size() != num_cols) {
+    virtual void set_row(size_t r, const BitString& row) override {
+      if (row.get_num_bits() != num_cols) {
         throw std::invalid_argument("Invalid row length.");
       }
 
@@ -144,4 +141,73 @@ class SparseBinaryMatrix : public BinaryMatrixBase {
 
       return A;
     }
+
+    struct BitRef {
+      BitRef(std::set<size_t>& row, size_t i) : row_(row), i_(i) {}
+
+      BitRef& operator=(bool v) {
+        if(v) {
+          row_.insert(i_);
+        } else {
+          row_.erase(i_);
+        }
+
+        return *this;
+      }
+
+      operator bool() const { 
+        return row_.count(i_) != 0; 
+      }
+
+      private:
+        std::set<size_t>& row_;
+        size_t i_;
+    };
+
+    struct RowRef {
+      RowRef(std::set<size_t>& row) : row_(row) {}
+
+      BitRef operator[](size_t i) { 
+        return BitRef(row_, i); 
+      }
+
+      private:
+        std::set<size_t>& row_;
+    };
+
+    RowRef operator[](size_t r) { 
+      return RowRef(inds[r]); 
+    }
+
+    // Const proxy for a single bit
+    struct ConstBitRef {
+      ConstBitRef(const std::set<size_t>& row, size_t i) : row_(row), i_(i) {}
+
+      operator bool() const {
+        return row_.count(i_) != 0;
+      }
+
+      private:
+        const std::set<size_t>& row_;
+        size_t i_;
+    };
+
+    // Const proxy for a row
+    struct ConstRowRef {
+      ConstRowRef(const std::set<size_t>& row) : row_(row) {}
+
+      ConstBitRef operator[](size_t i) const {
+        return ConstBitRef(row_, i);
+      }
+
+      private:
+        const std::set<size_t>& row_;
+    };
+
+    const ConstRowRef operator[](size_t r) const { 
+      return ConstRowRef(inds[r]);
+    }
+
+  protected:
+    std::vector<std::set<size_t>> inds;
 };

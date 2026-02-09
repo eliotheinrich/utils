@@ -9,15 +9,22 @@
 #include <memory>
 #include <random>
 
+#include <qutils/QuantumCircuit.h>
 #include <fmt/format.h>
 
 class BinaryMatrixBase {
   public:
-    uint32_t num_rows;
-    uint32_t num_cols;
     BinaryMatrixBase(uint32_t num_rows, uint32_t num_cols) : num_rows(num_rows), num_cols(num_cols) {}
 
     virtual ~BinaryMatrixBase()=default;
+
+    uint32_t get_num_rows() const {
+      return num_rows;
+    }
+
+    uint32_t get_num_cols() const {
+      return num_cols;
+    }
 
     virtual std::string to_string() const {
       std::string s;
@@ -83,8 +90,8 @@ class BinaryMatrixBase {
 
     virtual std::unique_ptr<BinaryMatrixBase> slice(size_t r1, size_t r2, size_t c1, size_t c2) const=0;
 
-    virtual std::vector<bool> get_row(size_t r) const {
-      std::vector<bool> row(num_cols);
+    virtual BitString row(size_t r) const {
+      BitString row(num_cols);
       for (size_t i = 0; i < num_cols; i++) {
         row[i] = get(r, i);
       }
@@ -92,8 +99,8 @@ class BinaryMatrixBase {
       return row;
     }
 
-    virtual std::vector<bool> get_col(size_t c) const {
-      std::vector<bool> col(num_rows);
+    virtual BitString col(size_t c) const {
+      BitString col(num_rows);
       for (size_t i = 0; i < num_rows; i++) {
         col[i] = get(i, c);
       }
@@ -131,8 +138,8 @@ class BinaryMatrixBase {
       return partial_rank(sites, inplace);
     }
 
-    virtual std::vector<bool> multiply(const std::vector<bool>& v) const {
-      std::vector<bool> result(num_rows);
+    virtual BitString multiply(const BitString& v) const {
+      BitString result(num_rows);
 
       if (v.size() != num_cols) {
         throw std::invalid_argument("Dimension mismatch in BinaryMatrix multiply.");
@@ -148,12 +155,12 @@ class BinaryMatrixBase {
       return result;
     }
 
-    std::vector<bool> solve_linear_system(const std::vector<bool>& v) {
+    BitString solve_linear_system(const BitString& v) {
       std::unique_ptr<BinaryMatrixBase> copy = clone();
       copy->append_col(v);
       copy->rref();
 
-      std::vector<bool> solution(num_rows);
+      BitString solution(num_rows);
       for (size_t i = 0; i < num_rows; i++) {
         for (size_t j = 0; j < num_cols; j++) {
           if (copy->get(i, j)) {
@@ -166,13 +173,13 @@ class BinaryMatrixBase {
       return solution;
     }
 
-    bool in_col_space(const std::vector<bool>& v) const {
+    bool in_col_space(const BitString& v) const {
       std::unique_ptr<BinaryMatrixBase> copy = clone();
       copy->transpose();
       return copy->in_row_space(v);
     }
 
-    bool in_row_space(const std::vector<bool>& v) const {
+    bool in_row_space(const BitString& v) const {
       std::unique_ptr<BinaryMatrixBase> copy = clone();
       uint32_t r1 = copy->rank();
       copy->append_row(v);
@@ -191,12 +198,12 @@ class BinaryMatrixBase {
 
     virtual void add_rows(size_t r1, size_t r2)=0;
 
-    virtual void append_row(const std::vector<bool>& row)=0;
+    virtual void append_row(const BitString& row)=0;
 
-    virtual void set_row(size_t r, const std::vector<bool>& row)=0;
+    virtual void set_row(size_t r, const BitString& row)=0;
 
-    virtual void append_col(const std::vector<bool>& col) {
-      if (col.size() != num_rows) {
+    virtual void append_col(const BitString& col) {
+      if (col.get_num_bits() != num_rows) {
         throw std::invalid_argument("Invalid column length.");
       }
       
@@ -219,4 +226,8 @@ class BinaryMatrixBase {
     }
 
     virtual std::unique_ptr<BinaryMatrixBase> clone() const=0;
+
+  protected:
+    uint32_t num_rows;
+    uint32_t num_cols;
 };

@@ -13,6 +13,10 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # ------ Fetching externals ------ #
 # -------------------------------- #
 
+option(UTILS_BUILD_TESTS "Build utils tests" ON)
+option(UTILS_BUILD_PYTHON "Build Python bindings" OFF)
+option(UTILS_BUILD_GLFW "Build GLFW components" OFF)
+
 find_package(dataframe REQUIRED)
 find_package(qutils REQUIRED)
 find_package(fmt REQUIRED)
@@ -25,7 +29,11 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/src
 )
 
-if (DEFINED BUILD_GLFW)
+if (UTILS_BUILD_TESTS)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/src/Tests)
+endif()
+
+if (UTILS_BUILD_GLFW)
   add_compile_definitions(BUILD_GLFW)
   set(DISPLAY_DIR ${PROJECT_SOURCE_DIR}/src/SimulatorDisplay)
   add_subdirectory(${DISPLAY_DIR})
@@ -34,7 +42,7 @@ endif()
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/LinearCode)
 add_subdirectory(${PROJECT_SOURCE_DIR}/src/MonteCarlo)
 
-if (BUILDING_PYUTILS)
+if (UTILS_BUILD_PYTHON)
   find_package(Python 3.10 
     REQUIRED COMPONENTS Interpreter Development.Module
     OPTIONAL_COMPONENTS Development.SABIModule
@@ -57,7 +65,7 @@ if (BUILDING_PYUTILS)
   )
 
   set(utils_libs dataframe::dataframe linear_code qutils::clifford_state fmt::fmt)
-  if (DEFINED BUILD_GLFW)
+  if (UTILS_BUILD_GLFW)
     list(APPEND utils_libs simulator_display)
   endif()
 

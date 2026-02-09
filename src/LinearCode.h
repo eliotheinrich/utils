@@ -4,3 +4,4 @@
 #include "LinearCode/BinaryMatrix.hpp"
 #include "LinearCode/SparseBinaryMatrix.hpp"
 #include "LinearCode/LinearCode.h"
+#include "LinearCode/BeliefPropagation.hpp"

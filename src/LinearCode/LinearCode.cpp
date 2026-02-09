@@ -3,42 +3,84 @@
 
 ParityCheckMatrix::ParityCheckMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 
-ParityCheckMatrix::ParityCheckMatrix(const BinaryMatrix& other) : ParityCheckMatrix(other.num_rows, other.num_cols) {
-  data = other.data;
+ParityCheckMatrix::ParityCheckMatrix(const BinaryMatrix& other) : ParityCheckMatrix(other.get_num_rows(), other.get_num_cols()) {
+  data = other.get_data();
 }
 
 GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
-  ParityCheckMatrix workspace;
-  if (inplace) {
-    workspace = *this;
-  } else {
-    workspace = ParityCheckMatrix(*this);
+  // 1. Workspace copy
+  ParityCheckMatrix Hsys = inplace ? *this : ParityCheckMatrix(*this);
+
+  const size_t m = Hsys.get_num_rows();
+  const size_t n = Hsys.get_num_cols();
+  const size_t k = n - m;
+
+  // 2. Bring H to systematic form [A | I_m]
+  //    This MUST include column permutations
+  std::vector<size_t> col_perm(n);
+  std::iota(col_perm.begin(), col_perm.end(), 0);
+
+  size_t pivot_col = 0;
+  for (size_t r = 0; r < m; ++r) {
+    // Find a pivot in row r
+    size_t c = pivot_col;
+    while (c < n && Hsys.get(r, c) == 0) ++c;
+    if (c == n) {
+      throw std::runtime_error("ParityCheckMatrix is rank-deficient");
+    }
+
+    // Swap columns so pivot moves to the right block
+    size_t target_col = k + r;
+    if (c != target_col) {
+      Hsys.transpose();
+      Hsys.swap_rows(c, target_col);
+      Hsys.transpose();
+      std::swap(col_perm[c], col_perm[target_col]);
+    }
+
+    // Eliminate other 1s in this column
+    for (size_t rr = 0; rr < m; ++rr) {
+      if (rr != r && Hsys.get(rr, target_col)) {
+        Hsys.add_rows(rr, r);
+      }
+    }
+
+    ++pivot_col;
   }
 
-  // Put parity check matrix in canonical form
-  workspace.reduce();
-  size_t n = workspace.num_cols;
-  size_t m = workspace.num_rows;
-  size_t k = n - m;
+  // 3. Extract A from [A | I]
+  //    A is m × k
+  std::unique_ptr<BinaryMatrixBase> A_ptr =
+    Hsys.slice(0, m, 0, k);
+  auto* A = dynamic_cast<BinaryMatrix*>(A_ptr.get());
+  if (!A) {
+    throw std::runtime_error("Failed to extract A block");
+  }
 
-  std::vector<size_t> sites(m);
-  std::iota(sites.begin(), sites.end(), k);
-  workspace.partial_rref(sites);
+  // 4. Build G = [I_k | A^T]
+  GeneratorMatrix G(k, n);
 
-  std::unique_ptr<BinaryMatrixBase> A_ptr = workspace.slice(0, m, 0, k);
-  BinaryMatrix* A = dynamic_cast<BinaryMatrix*>(A_ptr.get());
-
-  GeneratorMatrix G(n, k);
-  for (size_t i = 0; i < k; i++) {
+  // I_k
+  for (size_t i = 0; i < k; ++i)
     G.set(i, i, 1);
+
+  // A^T
+  for (size_t i = 0; i < k; ++i) {
+    for (size_t j = 0; j < m; ++j) {
+      G.set(i, k + j, A->get(j, i));
+    }
   }
 
-  for (size_t i = k; i < n; i++) {
-    G.data[i] = A->data[i - k];
+  // 5. Undo column permutation
+  GeneratorMatrix G_out(k, n);
+  for (size_t j = 0; j < n; ++j) {
+    size_t orig_col = col_perm[j];
+    for (size_t i = 0; i < k; ++i) {
+      G_out.set(i, orig_col, G.get(i, j));
+    }
   }
 
-  G.transpose();
-  return G;
+  return G_out;
 }
 
 size_t ParityCheckMatrix::degree(size_t c) const {
@@ -98,9 +140,9 @@ bool ParityCheckMatrix::congruent(const GeneratorMatrix& G) const {
   GeneratorMatrix copy(G);
   copy.transpose();
 
-  auto K = multiply(copy);
-  for (size_t r = 0; r < K.num_rows; r++) {
-    for (size_t c = 0; c < K.num_cols; c++) {
+  auto K = mmultiply(copy);
+  for (size_t r = 0; r < K.get_num_rows(); r++) {
+    for (size_t c = 0; c < K.get_num_cols(); c++) {
       if (K.get(r, c)) {
         return false;
       }
@@ -135,12 +177,12 @@ void ParityCheckMatrix::reduce() {
   }
 }
 
-bool ParityCheckMatrix::is_in_space(const std::vector<bool>& v) const {
-  std::vector<bool> parity = BinaryMatrixBase::multiply(v);
+bool ParityCheckMatrix::is_in_space(const BitString& v) const {
+  BitString parity = multiply(v);
   
   int pc = 0;
-  for (auto b : parity) {
-    pc = (pc + int(b)) % 2;
+  for (size_t i = 0; i < parity.get_num_bits(); ++i) {
+    pc = (pc + int(parity[i])) % 2;
   }
 
   return !bool(pc);
@@ -150,8 +192,8 @@ bool ParityCheckMatrix::is_in_space(const std::vector<bool>& v) const {
 
 GeneratorMatrix::GeneratorMatrix(size_t num_rows, size_t num_cols) : BinaryMatrix(num_rows, num_cols) { }
 
-GeneratorMatrix::GeneratorMatrix(const BinaryMatrix& other) : GeneratorMatrix(other.num_rows, other.num_cols) {
-  data = other.data;
+GeneratorMatrix::GeneratorMatrix(const BinaryMatrix& other) : GeneratorMatrix(other.get_num_rows(), other.get_num_cols()) {
+  data = other.get_data();
 }
 
 ParityCheckMatrix GeneratorMatrix::to_parity_check_matrix(bool inplace) {
@@ -170,8 +212,9 @@ ParityCheckMatrix GeneratorMatrix::to_parity_check_matrix(bool inplace) {
   BinaryMatrix* At = dynamic_cast<BinaryMatrix*>(A.release());
 
   BinaryMatrix I = BinaryMatrix::identity(num_cols - num_rows);
+  const std::vector<BitString>& I_data = I.get_data();
   for (size_t i = 0; i < num_cols - num_rows; i++) {
-    At->append_row(I.data[i]);
+    At->append_row(I_data[i]);
   }
 
   At->transpose();
@@ -238,9 +281,9 @@ bool GeneratorMatrix::congruent(const ParityCheckMatrix& H) const {
   GeneratorMatrix copy(*this);
   copy.transpose();
 
-  auto K = H.multiply(copy);
-  for (size_t r = 0; r < K.num_rows; r++) {
-    for (size_t c = 0; c < K.num_cols; c++) {
+  auto K = H.mmultiply(copy);
+  for (size_t r = 0; r < K.get_num_rows(); r++) {
+    for (size_t c = 0; c < K.get_num_cols(); c++) {
       if (K.get(r, c)) {
         return false;
       }
