@@ -57,10 +57,16 @@ class BinaryMatrix : public BinaryMatrixBase {
     }
 
     virtual bool get(size_t i, size_t j) const override {
+      if (i >= num_rows || j >= num_cols) {
+        throw std::runtime_error(fmt::format("Cannot get({}, {}) for BinaryMatrix of size {}x{}", i, j, num_rows, num_cols));
+      }
       return data[i].get(j);
     }
 
     virtual void set(size_t i, size_t j, bool v) override {
+      if (i >= num_rows || j >= num_cols) {
+        throw std::runtime_error(fmt::format("Cannot set({}, {}) for BinaryMatrix of size {}x{}", i, j, num_rows, num_cols));
+      }
       data[i].set(j, v);
     }
 
