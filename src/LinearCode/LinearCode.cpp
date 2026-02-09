@@ -16,26 +16,21 @@ GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
   const size_t k = n - m;
 
   // 2. Bring H to systematic form [A | I_m]
-  //    This MUST include column permutations
   std::vector<size_t> col_perm(n);
   std::iota(col_perm.begin(), col_perm.end(), 0);
 
-  size_t pivot_col = 0;
   for (size_t r = 0; r < m; ++r) {
-    // Find a pivot in row r
-    size_t c = pivot_col;
-    while (c < n && Hsys.get(r, c) == 0) ++c;
-    if (c == n) {
+    // Find pivot in row r
+    size_t pivot_col = r;  // start searching from current row index
+    while (pivot_col < n && Hsys.get(r, pivot_col) == 0) ++pivot_col;
+    if (pivot_col == n)
       throw std::runtime_error("ParityCheckMatrix is rank-deficient");
-    }
 
-    // Swap columns so pivot moves to the right block
     size_t target_col = k + r;
-    if (c != target_col) {
-      Hsys.transpose();
-      Hsys.swap_rows(c, target_col);
-      Hsys.transpose();
-      std::swap(col_perm[c], col_perm[target_col]);
+    if (pivot_col != target_col) {
+      // Swap columns in Hsys
+      Hsys.swap_cols(pivot_col, target_col);
+      std::swap(col_perm[pivot_col], col_perm[target_col]);
     }
 
     // Eliminate other 1s in this column
@@ -44,31 +39,19 @@ GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
         Hsys.add_rows(rr, r);
       }
     }
-
-    ++pivot_col;
   }
 
-  // 3. Extract A from [A | I]
-  //    A is m × k
-  std::unique_ptr<BinaryMatrixBase> A_ptr =
-    Hsys.slice(0, m, 0, k);
-  auto* A = dynamic_cast<BinaryMatrix*>(A_ptr.get());
-  if (!A) {
-    throw std::runtime_error("Failed to extract A block");
-  }
+  // 3. Extract A block (m x k)
+  auto A_ptr = Hsys.slice(0, m, 0, k);
+  BinaryMatrixBase* A = A_ptr.get();  // work via base class
+  if (!A) throw std::runtime_error("Failed to extract A block");
 
   // 4. Build G = [I_k | A^T]
   GeneratorMatrix G(k, n);
-
-  // I_k
-  for (size_t i = 0; i < k; ++i)
-    G.set(i, i, 1);
-
-  // A^T
   for (size_t i = 0; i < k; ++i) {
-    for (size_t j = 0; j < m; ++j) {
-      G.set(i, k + j, A->get(j, i));
-    }
+    G.set(i, i, 1);  // identity
+    for (size_t j = 0; j < m; ++j)
+      G.set(i, k + j, A->get(j, i));  // transpose A
   }
 
   // 5. Undo column permutation
@@ -80,6 +63,7 @@ GeneratorMatrix ParityCheckMatrix::to_generator_matrix(bool inplace) {
     }
   }
 
+  G_out.rref();
   return G_out;
 }
 

@@ -31,9 +31,9 @@ TannerGraph make_tanner_graph(const ParityCheckMatrix& matrix) {
   return graph;
 }
 
-
 std::optional<BitString> belief_propagation(const ParityCheckMatrix& matrix, const BitString& syndrome, const std::vector<double>& error_probs, size_t num_iterations, std::vector<double>& probs) {
   TannerGraph graph = make_tanner_graph(matrix);
+  std::cout << fmt::format("has cycle: {}\n", graph.has_cycle());
 
   size_t num_checks = matrix.get_num_rows();
   size_t num_variables = matrix.get_num_cols();
@@ -101,7 +101,7 @@ std::optional<BitString> belief_propagation(const ParityCheckMatrix& matrix, con
 
     probs = llr_ap;
     for (size_t i = 0; i < num_variables; ++i) {
-      probs[i] = exp(probs[i]);
+      probs[i] = 1.0/(1.0 + exp(probs[i]));
     }
 
     BitString estimated_error(num_variables);
@@ -113,7 +113,7 @@ std::optional<BitString> belief_propagation(const ParityCheckMatrix& matrix, con
 
     BitString estimated_syndrome = matrix.BinaryMatrixBase::multiply(estimated_error);
 
-    std::cout << fmt::format("On iteration {}, probs = {::.2f}, estimated_error = {}, estimated_syndrome = {}\n", t, llr_ap, estimated_error, estimated_syndrome);
+    std::cout << fmt::format("On iteration {}, probs = {::.2f}, estimated_error = {}, estimated_syndrome = {}\n", t, probs, estimated_error, estimated_syndrome);
 
     if (estimated_syndrome == syndrome) {
       return estimated_error;

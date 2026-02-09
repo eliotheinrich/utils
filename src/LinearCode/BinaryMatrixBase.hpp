@@ -141,7 +141,7 @@ class BinaryMatrixBase {
     virtual BitString multiply(const BitString& v) const {
       BitString result(num_rows);
 
-      if (v.size() != num_cols) {
+      if (v.get_num_bits() != num_cols) {
         throw std::invalid_argument("Dimension mismatch in BinaryMatrix multiply.");
       }
 
@@ -195,6 +195,14 @@ class BinaryMatrixBase {
     virtual void set(size_t i, size_t j, bool v)=0;
 
     virtual void swap_rows(size_t r1, size_t r2)=0;
+
+    virtual void swap_cols(size_t c1, size_t c2) {
+      for (size_t r = 0; r < num_rows; ++r) {
+        bool v1 = get(r, c1);
+        set(r, c1, get(r, c2));
+        set(r, c2, v1);
+      }
+    }
 
     virtual void add_rows(size_t r1, size_t r2)=0;
 

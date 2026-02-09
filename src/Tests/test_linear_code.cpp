@@ -10,7 +10,6 @@ ParityCheckMatrix hamming_code() {
 }
 
 BitString random_codeword(const GeneratorMatrix& G) {
-  std::cout << "G = \n" << G.to_string() << "\n";
   size_t num_generators = G.get_num_rows();
   size_t num_bits = G.get_num_cols();
   BitString u = BitString::random(num_generators);
@@ -24,7 +23,6 @@ BitString random_codeword(const GeneratorMatrix& G) {
     }
     x[j] = acc;
   }
-  std::cout << fmt::format("x = {}\n", x);
 
   return x;
 }
@@ -78,6 +76,10 @@ bool test_generator_parity_roundtrip() {
     }
   }
 
+  std::cout << fmt::format("H = \n{}\nH2 = \n{}\nG = \n{}\n", H.to_string(), H2.to_string(), G.to_string());
+
+  ASSERT(H.congruent(G));
+
   return true;
 }
 
@@ -101,9 +103,7 @@ bool test_tanner_graph() {
 
 bool test_belief_propagation() {
   ParityCheckMatrix H = hamming_code();
-  std::cout << "Generating G\n";
   GeneratorMatrix G = H.to_generator_matrix();
-  std::cout << "Generated G\n";
   size_t num_bits = H.get_num_cols();
   size_t num_checks = H.get_num_rows();
 
@@ -112,7 +112,10 @@ bool test_belief_propagation() {
 
   for (size_t i = 0; i < 100; ++i) {
     BitString message = random_codeword(G);
-    std::cout << fmt::format("Initial syndrome: {}\n", H.BinaryMatrixBase::multiply(message));
+    BitString initial_syndrome = H.multiply(message);
+    for (size_t k = 0; k < initial_syndrome.get_num_bits(); ++k) {
+      ASSERT(!initial_syndrome[k]);
+    } 
 
     // Introduce some errors
     BitString transmitted = message;
